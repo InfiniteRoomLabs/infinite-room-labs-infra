@@ -1,0 +1,10 @@
+id,type,title,url,accessed,notes
+S-001,registry,Cloudflare Provider - cloudflare_zone resource,https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/zone,2026-02-12,Resource schema for zone creation including name_servers output
+S-002,registry,Cloudflare Provider - cloudflare_zone data source,https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/data-sources/zone,2026-02-12,Data source for looking up existing zones by name filter
+S-003,registry,Porkbun Provider - porkbun_domain_nameservers resource,https://registry.terraform.io/providers/jianyuan/porkbun/0.2.1/docs/resources/domain_nameservers,2026-02-12,Resource for updating domain nameservers at registrar
+S-004,registry,Porkbun Provider - overview,https://registry.terraform.io/providers/jianyuan/porkbun/0.2.1/docs,2026-02-12,Provider auth config (api_key + secret_key)
+S-005,docs,Terragrunt State Backend documentation,https://terragrunt.gruntwork.io/docs/features/state-backend/,2026-02-12,Remote state configuration options including TFC generate approach
+S-006,docs,Gruntwork TFC Integration Guide,https://docs.gruntwork.io/2.0/docs/library/guides/integrate-tfc/,2026-02-12,TFC execution mode caveats with Terragrunt
+S-007,repo,Terragrunt Infrastructure Live Example,https://github.com/gruntwork-io/terragrunt-infrastructure-live-example,2026-02-12,Reference implementation for directory hierarchy and variable inheritance
+S-008,docs,Gruntwork Recommended Folder Structure,https://docs.gruntwork.io/2.0/docs/overview/concepts/infrastructure-live/,2026-02-12,Best practices for environment/provider/resource-group layout
+S-009,docs,TFC Workspace Variables,https://developer.hashicorp.com/terraform/cloud-docs/workspaces/variables,2026-02-12,Variable set management for provider credentials
