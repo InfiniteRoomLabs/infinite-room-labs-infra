@@ -1,0 +1,10 @@
+{
+  "feature_number": "001",
+  "slug": "001-porkbun-cloudflare-domain-onboarding",
+  "friendly_name": "Porkbun-to-Cloudflare Domain Onboarding",
+  "mission": "software-dev",
+  "source_description": "Let's get this party started and let's start by making it so that any of my domains on porkbun that we list in a variable somewhere are configured to have accounts in cloudflare and the nameservers are set up to match. Let's do this with terraform and terragrunt. You have access to scoop if you need to install either of those",
+  "created_at": "2026-02-12T18:00:00Z",
+  "target_branch": "main",
+  "vcs": "git"
+}
