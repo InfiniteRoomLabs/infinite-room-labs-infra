@@ -1,13 +1,14 @@
 ---
 work_package_id: WP02
 title: TFC Workspace Bootstrap and Environment Configs
-lane: planned
+lane: "done"
 dependencies: [WP01]
 subtasks: [T011, T002, T003, T018]
 phase: foundation
 assignee: ''
-agent: ''
-review_status: ''
+agent: "claude"
+review_status: "approved"
+reviewed_by: "Wes Gilleland"
 history:
 - date: '2026-02-24'
   action: created
@@ -294,3 +295,4 @@ Depends on WP01 (needs `modules/tfc-workspace/` and `root.hcl` to exist).
 ## Activity Log
 
 - 2026-02-24: WP created by planner
+- 2026-02-24T21:01:19Z – claude – lane=done – Implemented: TFC bootstrap, env configs, .envrc

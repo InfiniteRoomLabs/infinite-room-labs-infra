@@ -31,11 +31,11 @@ This feature scaffolds a greenfield Terragrunt + Terraform project with 3 reusab
 **Estimated prompt size**: ~400 lines
 
 **Included subtasks**:
-- [ ] T001: Create `root.hcl` with TFC `generate` block, provider version constraints, workspace name derivation
-- [ ] T008: Create `modules/tfc-workspace/` (main.tf, variables.tf, outputs.tf) with `tfe_workspace` resource
-- [ ] T009: Create `modules/cloudflare-zone/` (main.tf, variables.tf, outputs.tf) with `cloudflare_zone` for_each
-- [ ] T010: Create `modules/porkbun-nameservers/` (main.tf, variables.tf, outputs.tf) with `porkbun_domain_nameservers` for_each
-- [ ] T016: Add `.gitignore` for Terraform/Terragrunt artifacts (`.terraform/`, `*.tfstate*`, `.terragrunt-cache/`)
+- [x] T001: Create `root.hcl` with TFC `generate` block, provider version constraints, workspace name derivation
+- [x] T008: Create `modules/tfc-workspace/` (main.tf, variables.tf, outputs.tf) with `tfe_workspace` resource
+- [x] T009: Create `modules/cloudflare-zone/` (main.tf, variables.tf, outputs.tf) with `cloudflare_zone` for_each
+- [x] T010: Create `modules/porkbun-nameservers/` (main.tf, variables.tf, outputs.tf) with `porkbun_domain_nameservers` for_each
+- [x] T016: Add `.gitignore` for Terraform/Terragrunt artifacts (`.terraform/`, `*.tfstate*`, `.terragrunt-cache/`)
 
 **Implementation notes**:
 - `root.hcl` derives workspace name from the directory path using `path_relative_to_include()`
@@ -60,10 +60,10 @@ This feature scaffolds a greenfield Terragrunt + Terraform project with 3 reusab
 **Estimated prompt size**: ~350 lines
 
 **Included subtasks**:
-- [ ] T011: Create `environments/global/tfc/workspaces/terragrunt.hcl` (bootstrap with local state, creates all 4 workspaces)
-- [ ] T002: Create `environments/dev/env.hcl` with environment name, placeholder domains list, `cloudflare_account_id` via `get_env()`
-- [ ] T003: Create `environments/prod/env.hcl` (mirror of dev with different domain list)
-- [ ] T018: Create `.envrc` template with required env var placeholders for direnv
+- [x] T011: Create `environments/global/tfc/workspaces/terragrunt.hcl` (bootstrap with local state, creates all 4 workspaces)
+- [x] T002: Create `environments/dev/env.hcl` with environment name, placeholder domains list, `cloudflare_account_id` via `get_env()`
+- [x] T003: Create `environments/prod/env.hcl` (mirror of dev with different domain list)
+- [x] T018: Create `.envrc` template with required env var placeholders for direnv
 
 **Implementation notes**:
 - Bootstrap `terragrunt.hcl` does NOT include `root.hcl` (no TFC backend -- uses local state)
@@ -88,11 +88,11 @@ This feature scaffolds a greenfield Terragrunt + Terraform project with 3 reusab
 **Estimated prompt size**: ~350 lines
 
 **Included subtasks**:
-- [ ] T004: Create `environments/dev/cloudflare/provider.hcl` (Cloudflare provider block)
-- [ ] T005: Create `environments/dev/porkbun/provider.hcl` (Porkbun provider block)
-- [ ] T012: Create `environments/dev/cloudflare/zones/terragrunt.hcl` (includes root, reads env.hcl, sources cloudflare-zone module)
-- [ ] T013: Create `environments/dev/porkbun/nameservers/terragrunt.hcl` (includes root, reads env.hcl, depends on cloudflare zones, sources porkbun-nameservers module)
-- [ ] T017a: Verify `terragrunt run-all validate` passes for dev environment
+- [x] T004: Create `environments/dev/cloudflare/provider.hcl` (Cloudflare provider block)
+- [x] T005: Create `environments/dev/porkbun/provider.hcl` (Porkbun provider block)
+- [x] T012: Create `environments/dev/cloudflare/zones/terragrunt.hcl` (includes root, reads env.hcl, sources cloudflare-zone module)
+- [x] T013: Create `environments/dev/porkbun/nameservers/terragrunt.hcl` (includes root, reads env.hcl, depends on cloudflare zones, sources porkbun-nameservers module)
+- [x] T017a: Verify `terragrunt run-all validate` passes for dev environment
 
 **Implementation notes**:
 - `provider.hcl` files use Terragrunt `generate` to create provider blocks (no credentials in code)
@@ -115,11 +115,11 @@ This feature scaffolds a greenfield Terragrunt + Terraform project with 3 reusab
 **Estimated prompt size**: ~300 lines
 
 **Included subtasks**:
-- [ ] T006: Create `environments/prod/cloudflare/provider.hcl` (Cloudflare provider block)
-- [ ] T007: Create `environments/prod/porkbun/provider.hcl` (Porkbun provider block)
-- [ ] T014: Create `environments/prod/cloudflare/zones/terragrunt.hcl` (mirror of dev zones leaf)
-- [ ] T015: Create `environments/prod/porkbun/nameservers/terragrunt.hcl` (mirror of dev nameservers leaf)
-- [ ] T017b: Verify `terragrunt run-all validate` passes for prod environment
+- [x] T006: Create `environments/prod/cloudflare/provider.hcl` (Cloudflare provider block)
+- [x] T007: Create `environments/prod/porkbun/provider.hcl` (Porkbun provider block)
+- [x] T014: Create `environments/prod/cloudflare/zones/terragrunt.hcl` (mirror of dev zones leaf)
+- [x] T015: Create `environments/prod/porkbun/nameservers/terragrunt.hcl` (mirror of dev nameservers leaf)
+- [x] T017b: Verify `terragrunt run-all validate` passes for prod environment
 
 **Implementation notes**:
 - Structurally identical to WP03, differing only in directory paths and the domain list sourced from `environments/prod/env.hcl`

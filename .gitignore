@@ -11,4 +11,29 @@
 .roo/
 .amazonq/
 .github/copilot/
-.kittify/.dashboard
+.kittify/.dashboard
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terragrunt
+.terragrunt-cache/
+
+# Terragrunt-generated files (recreated on init)
+backend.tf
+providers.tf
+
+# Environment variables (secrets)
+.env
+.env.*
+!.env.example
+!.envrc
