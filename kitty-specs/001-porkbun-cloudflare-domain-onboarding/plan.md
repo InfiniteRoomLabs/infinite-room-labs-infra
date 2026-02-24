@@ -63,7 +63,7 @@ modules/
 │   ├── variables.tf                  # domain-to-nameservers map
 │   └── outputs.tf                    # domain_ns_status map
 └── tfc-workspace/
-    ├── main.tf                       # tfe_workspace + tfe_workspace_settings resources
+    ├── main.tf                       # tfe_workspace resource
     ├── variables.tf                  # org, workspace name, execution mode
     └── outputs.tf                    # workspace_id
 
@@ -218,7 +218,7 @@ All credentials via environment variables, never in code:
 **Purpose**: Update Porkbun domain nameserver delegation to match Cloudflare-assigned nameservers.
 
 **Inputs**:
-- `domain_nameservers` (map(object({ domain = string, nameservers = set(string) })), required) -- Map of domain to its target nameservers
+- `domain_nameservers` (map(object({ nameservers = set(string) })), required) -- Map keyed by domain name to its target nameservers
 
 **Resources**:
 - `porkbun_domain_nameservers.this` (for_each) -- Updates NS records per domain
@@ -263,8 +263,9 @@ All credentials via environment variables, never in code:
 ### Adding a new domain:
 
 1. Add domain string to `environments/{env}/env.hcl` `domains` list
-2. Add corresponding workspace entries if needed in `environments/global/tfc/workspaces/terragrunt.hcl`
-3. Run `terragrunt run-all apply` from the environment directory
+2. Run `terragrunt run-all apply` from the environment directory
+
+No workspace changes needed -- workspaces are per resource group, not per domain. New workspaces are only needed when adding entirely new resource groups.
 
 ### Removing a domain:
 

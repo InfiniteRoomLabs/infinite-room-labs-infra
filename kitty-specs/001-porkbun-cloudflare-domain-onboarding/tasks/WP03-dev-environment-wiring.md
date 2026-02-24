@@ -2,7 +2,7 @@
 work_package_id: WP03
 title: Dev Environment Resource Groups
 lane: planned
-dependencies: []
+dependencies: [WP01, WP02]
 subtasks: [T004, T005, T012, T013, T017a]
 phase: implementation
 assignee: ''

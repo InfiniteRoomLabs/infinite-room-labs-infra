@@ -2,7 +2,7 @@
 work_package_id: WP02
 title: TFC Workspace Bootstrap and Environment Configs
 lane: planned
-dependencies: []
+dependencies: [WP01]
 subtasks: [T011, T002, T003, T018]
 phase: foundation
 assignee: ''
@@ -41,6 +41,8 @@ Depends on WP01 (needs `modules/tfc-workspace/` and `root.hcl` to exist).
 **Why a bootstrap layer**: TFC workspaces must exist before any other resource group can `terragrunt init` (the `cloud {}` block references the workspace by name). Terragrunt does NOT auto-create TFC workspaces (unlike S3 buckets for `remote_state`).
 
 **Why local state**: The bootstrap module creates the TFC workspaces that store state for other modules. It can't store its own state in a workspace that doesn't exist yet -- chicken-and-egg problem. Local state is the pragmatic solution.
+
+**Why inline `generate` instead of `modules/tfc-workspace`**: The `tfc-workspace` module (WP01) creates a single workspace. The bootstrap needs to create 4 workspaces with `for_each`. Rather than complicating the module or calling it 4 times, the bootstrap uses an inline `generate "main"` block with its own `for_each`. The single-workspace module remains available for future use cases (e.g., adding individual workspaces outside the bootstrap).
 
 **Key decisions** (from plan.md):
 - TFC org: `infinite-room-labs`

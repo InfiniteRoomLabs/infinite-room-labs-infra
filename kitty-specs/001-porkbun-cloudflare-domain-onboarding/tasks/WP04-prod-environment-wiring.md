@@ -2,7 +2,7 @@
 work_package_id: WP04
 title: Prod Environment Resource Groups
 lane: planned
-dependencies: []
+dependencies: [WP01, WP02]
 subtasks: [T006, T007, T014, T015, T017b]
 phase: implementation
 assignee: ''

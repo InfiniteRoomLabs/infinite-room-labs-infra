@@ -174,3 +174,10 @@ graph TD
 ```
 
 > WP03 and WP04 (green) can run in parallel after WP02 completes.
+
+## Implicit Coverage Notes
+
+The following requirements are satisfied by Terraform/Terragrunt built-in behavior and require no dedicated tasks:
+
+- **FR-008** (drift detection): `terragrunt plan` automatically detects and reports drift when zones or nameservers are modified outside Terraform. This is core Terraform behavior.
+- **FR-009** (planned destruction with operator approval): Removing a domain from the `domains` list causes `terragrunt plan` to show a destruction plan. `terragrunt apply` requires interactive operator approval before executing destructive changes. This is Terraform's default behavior.
