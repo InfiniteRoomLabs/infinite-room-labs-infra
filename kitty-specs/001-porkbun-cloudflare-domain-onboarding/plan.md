@@ -161,14 +161,12 @@ This is the only resource group that does NOT use TFC remote state.
 
 Apply order enforced by Terragrunt `dependency` blocks:
 
-```
-TFC Workspaces (bootstrap, one-time)
-        │
-        ▼
-Cloudflare Zones (per environment)
-        │
-        ▼
-Porkbun Nameservers (per environment, reads zone outputs)
+```mermaid
+graph TD
+    A["TFC Workspaces<br/>(bootstrap, one-time)"]
+    B["Cloudflare Zones<br/>(per environment)"]
+    C["Porkbun Nameservers<br/>(per environment, reads zone outputs)"]
+    A --> B --> C
 ```
 
 The Porkbun `terragrunt.hcl` declares:
