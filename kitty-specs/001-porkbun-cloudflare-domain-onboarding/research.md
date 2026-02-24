@@ -5,7 +5,7 @@
 - **Feature**: 001-porkbun-cloudflare-domain-onboarding
 - **Date**: 2026-02-12
 - **Researchers**: cloudflare-researcher, porkbun-researcher, terragrunt-researcher
-- **Open Questions**: TFC organization name, TFC execution mode preference, Cloudflare account ID sourcing
+- **Open Questions**: None (all resolved during planning)
 
 ## Decisions & Rationale
 
@@ -71,8 +71,10 @@
 - **Zone pending status**: Cloudflare zones stay `"pending"` until NS records are verified. There may be a delay between Porkbun NS update and Cloudflare verification. This is expected behavior and not a Terraform concern.
 - **TFC workspace creation**: Terragrunt does NOT auto-create TFC workspaces (unlike S3 buckets). Workspaces must be created manually in TFC or via a bootstrap `tfe_workspace` resource before first `terragrunt init`.
 
-## Next Actions
+## Resolved During Planning (2026-02-24)
 
-1. Confirm TFC organization name with user (needed for `root.hcl` configuration).
-2. Confirm Cloudflare account ID sourcing strategy (hardcoded in env vars? data source lookup?).
-3. Proceed to `/spec-kitty.plan` to design the module structure and Terragrunt hierarchy.
+| Question | Resolution |
+|----------|------------|
+| TFC organization name | `infinite-room-labs` |
+| Cloudflare account ID sourcing | Environment variable `CLOUDFLARE_ACCOUNT_ID`, referenced via `get_env()` in Terragrunt |
+| TFC workspace management | Terraform-managed via `modules/tfc-workspace` bootstrap layer with local state |

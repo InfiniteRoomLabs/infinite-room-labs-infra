@@ -31,13 +31,13 @@
 - **Lifecycle Notes**: Defined in Terragrunt `env.hcl` files. Adding/removing domains triggers zone creation/destruction in the corresponding environment only.
 
 ### Entity: Terraform Cloud Workspace
-- **Description**: Remote state container in TFC. One workspace per resource group, named by convention.
+- **Description**: Remote state container in TFC. One workspace per resource group, named by convention. Managed by a bootstrap Terraform module.
 - **Attributes**:
-  - `name` (string) – derived as `{environment}-{provider}-{resource-group}`
-  - `organization` (string) – TFC organization name
-  - `execution_mode` (string) – "local" (state in TFC, execution on operator machine)
+  - `name` (string) -- derived as `{environment}-{provider}-{resource-group}`
+  - `organization` (string) -- TFC organization name (`infinite-room-labs`)
+  - `execution_mode` (string) -- "local" (state in TFC, execution on operator machine)
 - **Identifiers**: `name` (unique within organization)
-- **Lifecycle Notes**: Must be created in TFC before first `terragrunt init`. Not managed by Terraform in this feature (manual or bootstrapped separately).
+- **Lifecycle Notes**: Created by the `modules/tfc-workspace` module, applied from `environments/global/tfc/workspaces/`. Bootstrap layer uses local state. Must be applied before any other resource group.
 
 ## Relationships
 
