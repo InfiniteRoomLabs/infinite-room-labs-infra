@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "project_name": null,
+  "allowlist": {
+    "github_api": true,
+    "digital_ocean_api": true
+  },
+  "settings": {
+    "scrub_output": true,
+    "fail_closed": true,
+    "log_access": true,
+    "log_path": null,
+    "mcp_server": {
+      "host": "127.0.0.1",
+      "port": 9423
+    }
+  }
+}

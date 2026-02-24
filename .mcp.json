@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ccsm": {
+      "command": "ccsm",
+      "args": [
+        "server",
+        "start"
+      ],
+      "env": {}
+    }
+  }
+}
