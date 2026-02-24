@@ -1,31 +1,22 @@
 # Infinite Room Labs Infrastructure
 
-Infrastructure as code for Infinite Room Labs. Uses Terraform + Terragrunt with Terraform Cloud (HCP Terraform) as the remote state backend.
+Infrastructure as code for Infinite Room Labs. This monorepo contains all IaC tooling, organized by tool.
 
-## What It Does
+## Repository Layout
 
-Manages domain onboarding from Porkbun (our registrar) to Cloudflare (our DNS/CDN provider). For each domain you add to an environment's domain list:
+```
+terraform/          Terraform + Terragrunt (domain onboarding, cloud resources)
+.envrc              direnv auto-loader (loads .env)
+.env.example        Credential template
+```
 
-1. A Cloudflare zone is created
-2. Porkbun's nameservers are automatically updated to point to Cloudflare's assigned nameservers
-
-Dev and prod environments are fully isolated -- separate domain lists, separate TFC workspaces, separate state.
-
-## Prerequisites
-
-- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
-- [Terragrunt](https://terragrunt.gruntwork.io/docs/getting-started/install/) >= 0.55
-- [direnv](https://direnv.net/) (optional, for automatic env var loading)
-- A [Terraform Cloud](https://app.terraform.io/) account with an organization named `infinite-room-labs`
-- A Cloudflare account with an API token that has zone management permissions
-- Porkbun API credentials (API key + secret)
+Additional IaC directories (e.g., `ansible/`) will be added as needed. Each has its own internal structure documented below.
 
 ## Setup
 
-### 1. Clone and configure credentials
+### 1. Configure credentials
 
 ```bash
-git clone <repo-url> && cd infinite-room-labs-infra
 cp .env.example .env
 ```
 
@@ -45,113 +36,87 @@ If you use direnv, run `direnv allow` to auto-load the `.env` file. Otherwise, s
 export $(grep -v '^#' .env | xargs)
 ```
 
-### 2. Bootstrap TFC workspaces
+---
 
-This creates the Terraform Cloud workspaces that store state for all other resource groups. It uses local state itself (chicken-and-egg problem).
+## Terraform
+
+All Terraform and Terragrunt configuration lives under `terraform/`. Uses Terraform Cloud (HCP Terraform) as the remote state backend.
+
+### Prerequisites
+
+- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
+- [Terragrunt](https://terragrunt.gruntwork.io/docs/getting-started/install/) >= 0.55
+- A [Terraform Cloud](https://app.terraform.io/) account with org `infinite-room-labs`
+
+### What it manages
+
+**Domain onboarding** (Porkbun to Cloudflare): For each domain in an environment's domain list, the system creates a Cloudflare zone and updates Porkbun nameservers to match. Dev and prod environments are fully isolated.
+
+### Structure
+
+```
+terraform/
+  root.hcl                                  # Global: TFC backend, provider versions
+  modules/
+    cloudflare-zone/                        # Creates Cloudflare zones for a list of domains
+    porkbun-nameservers/                    # Updates Porkbun NS to match Cloudflare
+    tfc-workspace/                          # Creates a single TFC workspace
+  environments/
+    global/tfc/workspaces/                  # Bootstrap: creates all TFC workspaces (local state)
+    dev/
+      env.hcl                               # Dev domain list + account config
+      cloudflare/
+        provider.hcl                        # Cloudflare provider (credentials from env vars)
+        zones/terragrunt.hcl               # Leaf: creates zones for dev domains
+      porkbun/
+        provider.hcl                        # Porkbun provider (credentials from env vars)
+        nameservers/terragrunt.hcl          # Leaf: updates NS for dev domains
+    prod/                                   # Same structure as dev, different domain list
+      ...
+```
+
+### First-time setup
+
+#### 1. Bootstrap TFC workspaces
+
+Creates the Terraform Cloud workspaces that store state for all other resource groups. Uses local state itself (chicken-and-egg problem). Only needed once.
 
 ```bash
-cd environments/global/tfc/workspaces
+cd terraform/environments/global/tfc/workspaces
 terragrunt init
 terragrunt apply
 ```
 
-You only need to do this once, or when adding new resource groups that need their own workspaces.
+#### 2. Apply an environment
 
-### 3. Add your domains
-
-Edit the domain list for your target environment:
+Terragrunt handles ordering automatically (Cloudflare zones first, then Porkbun nameservers):
 
 ```bash
-# For dev domains
-vim environments/dev/env.hcl
-
-# For prod domains
-vim environments/prod/env.hcl
-```
-
-Add domain names to the `domains` list:
-
-```hcl
-domains = [
-  "example.com",
-  "another-domain.dev",
-]
-```
-
-### 4. Apply
-
-From the environment directory, Terragrunt handles the apply order automatically (Cloudflare zones first, then Porkbun nameservers):
-
-```bash
-cd environments/dev
+cd terraform/environments/dev
 terragrunt run-all apply
 ```
 
-After apply completes, verify nameserver delegation is working:
+Verify nameserver delegation:
 
 ```bash
 dig NS example.com
 ```
 
-You should see Cloudflare nameservers (e.g., `anna.ns.cloudflare.com`, `bob.ns.cloudflare.com`). The Cloudflare zone will show as "Pending" until Cloudflare verifies the nameserver change has propagated, which can take a few minutes to 24 hours.
+The Cloudflare zone will show as "Pending" until Cloudflare verifies nameserver propagation (minutes to 24 hours).
 
-## Common Operations
+### Common operations
 
-### Add a new domain
+**Add a domain**: Add the domain name to `terraform/environments/{env}/env.hcl`, then run `terragrunt run-all apply` from the environment directory.
 
-1. Add the domain name to `environments/{env}/env.hcl`
-2. Run `terragrunt run-all apply` from the environment directory
+**Remove a domain**: Remove it from `env.hcl`, run `terragrunt run-all plan` to review the destruction plan, then `terragrunt run-all apply`.
 
-No other changes needed -- no new workspaces, no new config files.
+**Check for drift**: Run `terragrunt run-all plan` from the environment directory.
 
-### Remove a domain
-
-1. Remove the domain from `environments/{env}/env.hcl`
-2. Run `terragrunt run-all plan` to review the destruction plan
-3. Run `terragrunt run-all apply` to execute (requires confirmation)
-
-### Check for drift
+**Apply a single resource group**:
 
 ```bash
-cd environments/dev
-terragrunt run-all plan
-```
-
-This detects if someone manually changed nameservers on Porkbun or modified zones in Cloudflare outside of Terraform.
-
-### Apply a single resource group
-
-If you only want to apply the Cloudflare zones without touching Porkbun nameservers:
-
-```bash
-cd environments/dev/cloudflare/zones
+cd terraform/environments/dev/cloudflare/zones
 terragrunt apply
-```
-
-## Project Structure
-
-```
-root.hcl                                  # Global: TFC backend, provider versions
-.envrc                                    # direnv auto-loader
-.env.example                              # Credential template
-
-modules/
-  cloudflare-zone/                        # Creates Cloudflare zones for a list of domains
-  porkbun-nameservers/                    # Updates Porkbun NS to match Cloudflare
-  tfc-workspace/                          # Creates a single TFC workspace
-
-environments/
-  global/tfc/workspaces/                  # Bootstrap: creates all TFC workspaces (local state)
-  dev/
-    env.hcl                               # Dev domain list + account config
-    cloudflare/
-      provider.hcl                        # Cloudflare provider (credentials from env vars)
-      zones/terragrunt.hcl               # Leaf: creates zones for dev domains
-    porkbun/
-      provider.hcl                        # Porkbun provider (credentials from env vars)
-      nameservers/terragrunt.hcl          # Leaf: updates NS for dev domains
-  prod/                                   # Same structure as dev, different domain list
-    ...
 ```
 
 ### How the pieces connect
@@ -160,42 +125,40 @@ Each leaf `terragrunt.hcl` does three things:
 
 1. **Includes `root.hcl`** -- gets the TFC backend config (workspace name derived from its directory path) and provider version constraints
 2. **Reads `env.hcl`** -- gets the environment's domain list and Cloudflare account ID
-3. **Sources a module** -- points to a reusable module in `modules/` and passes inputs
+3. **Sources a module** -- points to a reusable module in `terraform/modules/` and passes inputs
 
 The Porkbun nameservers leaf additionally declares a `dependency` on the Cloudflare zones leaf in the same environment, reading the `nameservers_map` output to know which nameservers to set for each domain.
 
 ### TFC workspace naming
 
-Workspace names are derived from the directory path: `environments/dev/cloudflare/zones` becomes workspace `dev-cloudflare-zones`. This is handled automatically in `root.hcl`.
-
-Current workspaces:
+Workspace names are derived from the directory path relative to `root.hcl`: `environments/dev/cloudflare/zones` becomes `dev-cloudflare-zones`.
 
 | Workspace | Resource Group |
 |-----------|---------------|
-| `dev-cloudflare-zones` | `environments/dev/cloudflare/zones/` |
-| `dev-porkbun-nameservers` | `environments/dev/porkbun/nameservers/` |
-| `prod-cloudflare-zones` | `environments/prod/cloudflare/zones/` |
-| `prod-porkbun-nameservers` | `environments/prod/porkbun/nameservers/` |
+| `dev-cloudflare-zones` | `terraform/environments/dev/cloudflare/zones/` |
+| `dev-porkbun-nameservers` | `terraform/environments/dev/porkbun/nameservers/` |
+| `prod-cloudflare-zones` | `terraform/environments/prod/cloudflare/zones/` |
+| `prod-porkbun-nameservers` | `terraform/environments/prod/porkbun/nameservers/` |
 
-## Credential Management
+### Credential management
 
-All credentials are sourced from environment variables -- nothing is hardcoded. Both the Cloudflare and Porkbun Terraform providers read their credentials from env vars automatically with zero provider-block configuration.
+All credentials are sourced from environment variables -- nothing is hardcoded. Both providers read their credentials from env vars automatically with zero provider-block configuration.
 
 The `.env` file is gitignored. The `.envrc` file (committed) loads it via direnv. The `.env.example` file (committed) documents which variables are needed.
 
-## Troubleshooting
+### Troubleshooting
 
 **`terragrunt init` fails with "Required token could not be found"**
 Your `TF_TOKEN_app_terraform_io` environment variable isn't set. Check your `.env` file and make sure direnv is active (`direnv allow`).
 
 **`terragrunt validate` fails with "could not read state version outputs: resource not found"**
-The dependency workspace has no state yet. This happens when validating the Porkbun nameservers resource group before the Cloudflare zones have been applied. Apply the Cloudflare zones first, or use `terragrunt run-all` which handles ordering.
+The dependency workspace has no state yet. This happens when validating Porkbun nameservers before Cloudflare zones have been applied. Apply zones first, or use `terragrunt run-all` which handles ordering.
 
 **Cloudflare zone stuck in "Pending" status**
-This is normal. Cloudflare needs to verify that the nameservers at the registrar match. After `terragrunt apply` updates Porkbun, it can take minutes to hours for Cloudflare to confirm. Check back in the Cloudflare dashboard.
+Normal. Cloudflare needs to verify nameservers at the registrar match. Can take minutes to hours.
 
 **`get_env` error for `CLOUDFLARE_ACCOUNT_ID`**
-Your environment variables aren't loaded. Run `direnv allow` or source your `.env` manually.
+Environment variables aren't loaded. Run `direnv allow` or source your `.env` manually.
 
 **Rate limiting on bulk zone creation**
 Reduce Terraform parallelism:

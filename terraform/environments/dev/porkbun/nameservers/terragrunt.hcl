@@ -23,7 +23,7 @@ dependency "cloudflare_zones" {
 }
 
 terraform {
-  source = "${get_repo_root()}/modules//porkbun-nameservers"
+  source = "${get_repo_root()}/terraform/modules//porkbun-nameservers"
 }
 
 inputs = {

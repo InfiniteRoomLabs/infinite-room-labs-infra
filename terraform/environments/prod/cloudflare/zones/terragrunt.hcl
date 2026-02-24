@@ -13,7 +13,7 @@ locals {
 }
 
 terraform {
-  source = "${get_repo_root()}/modules//cloudflare-zone"
+  source = "${get_repo_root()}/terraform/modules//cloudflare-zone"
 }
 
 inputs = {
