@@ -24,11 +24,13 @@ Fill in `.env` with your credentials:
 
 | Variable | Where to get it |
 |----------|----------------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard > My Profile > API Tokens > Create Token > "Edit zone DNS" template |
+| `CLOUDFLARE_BOOTSTRAP_API_TOKEN` | Cloudflare dashboard > My Profile > API Tokens > Create Token > custom token with "API Tokens: Edit" under User permissions |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard > any domain > Overview > right sidebar under "API" |
 | `PORKBUN_API_KEY` | Porkbun > Account > API Access |
 | `PORKBUN_SECRET_KEY` | Porkbun > Account > API Access (generated with the API key) |
 | `TF_TOKEN_app_terraform_io` | Terraform Cloud > User Settings > Tokens > Create an API token |
+
+> **Note:** `CLOUDFLARE_API_TOKEN` is no longer required for setup -- the bootstrap creates it. It can still be set as a fallback.
 
 If you use direnv, run `direnv allow` to auto-load the `.env` file. Otherwise, source it manually:
 
@@ -62,34 +64,52 @@ terraform/
     porkbun-nameservers/                    # Updates Porkbun NS to match Cloudflare
     tfc-workspace/                          # Creates a single TFC workspace
   environments/
-    global/tfc/workspaces/                  # Bootstrap: creates all TFC workspaces (local state)
+    global/
+      tfc/workspaces/                       # Bootstrap: creates all TFC workspaces (local state)
+      cloudflare/tokens/                    # Bootstrap: creates scoped Cloudflare API token (local state)
     dev/
       env.hcl                               # Dev domain list + account config
       cloudflare/
-        provider.hcl                        # Cloudflare provider (credentials from env vars)
+        provider.hcl                        # Cloudflare provider (token from bootstrap or env var)
         zones/terragrunt.hcl               # Leaf: creates zones for dev domains
       porkbun/
         provider.hcl                        # Porkbun provider (credentials from env vars)
         nameservers/terragrunt.hcl          # Leaf: updates NS for dev domains
     prod/                                   # Same structure as dev, different domain list
       ...
+scripts/
+  bootstrap.sh                              # Orchestrates full bootstrap sequence
+  includes/
+    env.sh                                  # Shared env loading and validation helpers
 ```
 
 ### First-time setup
 
-#### 1. Bootstrap TFC workspaces
+#### 1. Bootstrap (TFC workspaces + Cloudflare API token)
 
-Creates the Terraform Cloud workspaces that store state for all other resource groups. Uses local state itself (chicken-and-egg problem). Only needed once.
+The bootstrap script creates Terraform Cloud workspaces and a scoped Cloudflare API token. It uses local state (chicken-and-egg problem with TFC). Only needed once.
 
 ```bash
-cd terraform/environments/global/tfc/workspaces
-terragrunt init
-terragrunt apply
+scripts/bootstrap.sh
 ```
+
+Preview what the bootstrap will do without applying:
+
+```bash
+scripts/bootstrap.sh --plan
+```
+
+Re-run only the Cloudflare token step (e.g., after changing token permissions):
+
+```bash
+scripts/bootstrap.sh --skip-tfc
+```
+
+Run `scripts/bootstrap.sh --help` for all options.
 
 #### 2. Apply an environment
 
-Terragrunt handles ordering automatically (Cloudflare zones first, then Porkbun nameservers):
+Terragrunt handles ordering automatically (Cloudflare zones first, then Porkbun nameservers). The zones layer reads the API token from the bootstrap state automatically.
 
 ```bash
 cd terraform/environments/dev
