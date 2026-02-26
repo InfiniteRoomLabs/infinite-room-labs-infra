@@ -44,8 +44,9 @@ generate "main" {
       perm_zone_write = "e6d2666161e84845a636613608cee8d5"
     }
 
-    resource "cloudflare_api_token" "infra" {
-      name = "infinite-room-labs-infra"
+    resource "cloudflare_account_token" "infra" {
+      account_id = var.account_id
+      name       = "infinite-room-labs-infra"
 
       policies = [
         {
@@ -62,7 +63,7 @@ generate "main" {
     }
 
     output "api_token" {
-      value     = cloudflare_api_token.infra.value
+      value     = cloudflare_account_token.infra.value
       sensitive = true
     }
   EOF
