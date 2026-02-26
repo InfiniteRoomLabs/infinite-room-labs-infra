@@ -35,10 +35,13 @@ generate "main" {
       api_token = var.bootstrap_api_token
     }
 
-    data "cloudflare_api_token_permission_groups" "all" {}
-
+    # Well-known Cloudflare permission group IDs.
+    # The bootstrap token lacks permission to query these dynamically,
+    # so we hardcode the stable UUIDs.
+    # Source: https://gist.github.com/f3l1x/13d3e43933e6d770aabee95410f8ee1d
     locals {
-      permissions = data.cloudflare_api_token_permission_groups.all.permissions
+      perm_zone_read  = "c8fed203ed3043cba015a93ad1616f1f"
+      perm_zone_write = "e6d2666161e84845a636613608cee8d5"
     }
 
     resource "cloudflare_api_token" "infra" {
@@ -48,12 +51,12 @@ generate "main" {
         {
           effect = "allow"
           permission_groups = [
-            { id = local.permissions["Zone Read"] },
-            { id = local.permissions["Zone Write"] },
+            { id = local.perm_zone_read },
+            { id = local.perm_zone_write },
           ]
-          resources = {
-            "com.cloudflare.api.account.$${var.account_id}" = jsonencode("*")
-          }
+          resources = jsonencode({
+            "com.cloudflare.api.account.$${var.account_id}" = "*"
+          })
         }
       ]
     }

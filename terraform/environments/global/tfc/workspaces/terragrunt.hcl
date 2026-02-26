@@ -15,6 +15,8 @@ generate "main" {
       }
     }
 
+    provider "tfe" {}
+
     variable "organization" {
       type = string
     }
@@ -26,9 +28,14 @@ generate "main" {
     }
 
     resource "tfe_workspace" "this" {
+      for_each     = var.workspaces
+      name         = each.key
+      organization = var.organization
+    }
+
+    resource "tfe_workspace_settings" "this" {
       for_each       = var.workspaces
-      name           = each.key
-      organization   = var.organization
+      workspace_id   = tfe_workspace.this[each.key].id
       execution_mode = each.value.execution_mode
     }
 

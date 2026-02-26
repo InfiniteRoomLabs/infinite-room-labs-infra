@@ -88,6 +88,9 @@ require_vars "${REQUIRED_VARS[@]}"
 # ---------------------------------------------------------------------------
 # Step 1: TFC workspaces
 # ---------------------------------------------------------------------------
+# The tfe provider reads TFE_TOKEN, not the CLI credential variable.
+export TFE_TOKEN="${TFE_TOKEN:-$TF_TOKEN_app_terraform_io}"
+
 TFC_DIR="$REPO_ROOT/terraform/environments/global/tfc/workspaces"
 if [[ "$SKIP_TFC" == false ]]; then
   echo "==> Step 1/2: Bootstrapping TFC workspaces"
