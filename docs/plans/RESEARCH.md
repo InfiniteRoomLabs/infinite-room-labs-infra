@@ -1,0 +1,389 @@
+# Infrastructure Research Backlog
+
+> Project-wide research tracker. AI agents: read the instructions below before touching this file.
+
+---
+
+## Agent Instructions
+
+<!-- RESEARCH-PROTOCOL:START — Do not remove this block -->
+
+### When to update this file
+
+- A conversation surfaces an open question about infrastructure, tooling, providers, or architecture -- add it here.
+- An open question in `docs/plans/infrastructure-roadmap.md` needs investigation -- add it here.
+- You complete research on a topic -- update its status, write findings inline (summary) and in `docs/plans/resources/{topic-slug}.md` (detail).
+
+### Scope: project-wide vs feature-scoped
+
+| Scope | Location | Managed by |
+|-------|----------|------------|
+| **Project-wide** (this file) | `docs/plans/RESEARCH.md` | Any agent, any session |
+| **Feature-scoped** | `kitty-specs/{feature}/research.md` | Spec Kitty `/research` command |
+
+Use this file for cross-cutting infrastructure questions (provider free tiers, tool comparisons, architectural trade-offs). Use `kitty-specs/` research for questions specific to a single feature's implementation.
+
+### How to claim a topic
+
+1. Set the topic's `Status` to `in-progress`.
+2. Add your session date under the status.
+3. Do your research (see "How to Run a Research Round" below).
+4. Write findings inline + in `docs/plans/resources/{topic-slug}.md`.
+5. Set `Status` to `done`.
+
+### How to record findings
+
+- **Inline**: Update the topic's `Findings` field with a 3-5 sentence summary and key takeaway.
+- **Detail file**: Create `docs/plans/resources/{topic-slug}.md` with the full write-up (see naming convention below).
+- **Decision**: If the research resolves a decision, fill in the `Decision` field. If not, leave it blank and note what's still unresolved.
+
+<!-- RESEARCH-PROTOCOL:END -->
+
+---
+
+## Output Expectations
+
+Every completed research entry must have:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `Status` | Yes | `open`, `in-progress`, or `done` |
+| `Roadmap link` | Yes | Which phase/component in `infrastructure-roadmap.md` this informs |
+| `Key questions` | Yes | Numbered list of specific things to answer |
+| `Resources` | Yes | Markdown links to official docs, pricing pages, Terraform registry, GitHub repos. Prefer stable URLs (official docs > blog posts). |
+| `Findings` | On completion | 3-5 sentence summary with key numbers/facts. Link to detail file. |
+| `Decision` | If resolved | What we decided and why. Otherwise note what's still open. |
+
+### What goes where
+
+- **Inline in this file**: Summary findings (3-5 sentences), key numbers, the decision.
+- **`docs/plans/resources/{topic-slug}.md`**: Full write-up with all evidence, comparisons, tables, pros/cons. Standard header:
+
+```markdown
+# {Topic Title}
+
+- **Date researched**: YYYY-MM-DD
+- **Roadmap reference**: Phase X / Component Y
+- **Status**: done
+
+## Sources
+
+- [Source 1](url)
+- [Source 2](url)
+
+## Summary
+
+...
+
+## Detailed Findings
+
+...
+```
+
+### Naming convention for resource files
+
+`docs/plans/resources/{topic-slug}.md` -- lowercase, hyphens, no spaces.
+
+Examples:
+- `oracle-cloud-arm.md`
+- `gitlab-vs-gitea.md`
+- `tailscale-free-tier.md`
+
+---
+
+## How to Run a Research Round
+
+### Tools and agents
+
+| Tool | Use for |
+|------|---------|
+| `WebSearch` | Quick lookups -- pricing pages, free tier limits, feature lists, "does X support ARM?" |
+| `WebFetch` | Deep reading of a specific URL -- official docs pages, pricing tables, Terraform provider docs |
+| `Task` (subagent_type: `Explore`) | Searching this repo for related code, existing modules, or config that a research topic connects to |
+| `Task` (subagent_type: `general-purpose`) | Complex multi-step research that requires combining web searches, doc reads, and synthesis |
+
+### Parallel research pattern
+
+For maximum throughput, launch multiple `Task` agents in a single message -- one per research topic. Each agent gets:
+
+1. The topic's key questions (from this file).
+2. The resource links as starting points.
+3. Instructions to return: summary findings, key numbers, recommendation, and list of sources visited.
+
+Example prompt for a research agent:
+
+```
+Research Oracle Cloud ARM free tier for our infrastructure needs.
+
+Key questions:
+1. What are the exact always-free ARM compute limits (OCPUs, RAM, storage)?
+2. Which regions offer the ARM free tier?
+3. What are the known gotchas (account verification, capacity limits, reclamation)?
+4. Does the Terraform OCI provider fully support ARM instance provisioning?
+
+Start with these resources:
+- https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier.htm
+- https://registry.terraform.io/providers/oracle/oci/latest/docs
+
+Return: 3-5 sentence summary, key numbers, gotchas list, recommendation, and all sources visited with URLs.
+```
+
+After agents return, update each topic's `Findings` and `Decision` fields in this file, and create the corresponding `docs/plans/resources/{topic-slug}.md` detail file.
+
+### For deeper feature-scoped research
+
+Use the Spec Kitty research workflow:
+
+```
+/spec-kitty.research
+```
+
+This scaffolds a full research artifact under `kitty-specs/` with evidence logs and source registers. Use this when a topic graduates from "project-wide question" to "we're actually building this feature now."
+
+---
+
+## Research Topics
+
+### R01: Oracle Cloud ARM Free Tier
+
+- **Status**: open
+- **Roadmap link**: Phase 1-3 (Vault, GitLab/Gitea, Jenkins, databases -- all candidate for Oracle ARM hosting)
+- **Key questions**:
+  1. What are the exact always-free ARM compute limits (OCPUs, RAM, boot volume, block storage)?
+  2. Which regions offer ARM free tier availability?
+  3. What are the known gotchas (account verification delays, capacity limits, idle instance reclamation policies)?
+  4. Does the Terraform `oci` provider fully support ARM instance provisioning, VCN setup, and security lists?
+  5. One big VM (4 OCPU / 24 GB) vs multiple smaller VMs -- what does Oracle allow?
+- **Resources**:
+  - [Oracle Cloud Free Tier](https://www.oracle.com/cloud/free/)
+  - [OCI Always Free Resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
+  - [Terraform OCI Provider](https://registry.terraform.io/providers/oracle/oci/latest/docs)
+  - [OCI Ampere A1 Compute](https://docs.oracle.com/en-us/iaas/Content/Compute/References/arm.htm)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R02: GitLab vs Gitea
+
+- **Status**: open
+- **Roadmap link**: Phase 2 (Source Control)
+- **Key questions**:
+  1. GitLab CE minimum resource requirements (CPU, RAM, disk) vs Gitea?
+  2. Which features do we actually need? (repo hosting, CI, container registry, issue tracking, package registry)
+  3. ARM (aarch64) container image availability for both?
+  4. Terraform providers: `gitlabhq/gitlab` vs `go-gitea/gitea` -- maturity, resource coverage?
+  5. Ansible roles: community galaxy roles for each? Quality?
+  6. If Gitea: how well does it integrate with Jenkins, Vault, external container registries?
+- **Resources**:
+  - [GitLab CE System Requirements](https://docs.gitlab.com/ee/install/requirements.html)
+  - [Gitea Installation](https://docs.gitea.com/installation/install-with-docker)
+  - [Terraform GitLab Provider](https://registry.terraform.io/providers/gitlabhq/gitlab/latest/docs)
+  - [Gitea on Docker Hub](https://hub.docker.com/r/gitea/gitea)
+  - [Forgejo](https://forgejo.org/) (Gitea fork -- worth evaluating)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R03: Tailscale Free Tier and IaC
+
+- **Status**: open
+- **Roadmap link**: Phase 1 (Network foundation)
+- **Key questions**:
+  1. Free tier limits -- devices, users, subnet routers, exit nodes?
+  2. Terraform provider capabilities -- can it manage ACLs, auth keys, device approval?
+  3. MagicDNS for internal service discovery -- how does it work, can we use `*.ts.net` names?
+  4. ACL policy syntax -- how granular can we get (per-service, per-port)?
+  5. Ansible integration -- is there an official or community role for node enrollment?
+- **Resources**:
+  - [Tailscale Pricing](https://tailscale.com/pricing)
+  - [Tailscale Terraform Provider](https://registry.terraform.io/providers/tailscale/tailscale/latest/docs)
+  - [Tailscale ACLs](https://tailscale.com/kb/1018/acls)
+  - [Tailscale MagicDNS](https://tailscale.com/kb/1081/magicdns)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R04: HashiCorp Vault on ARM
+
+- **Status**: open
+- **Roadmap link**: Phase 1 (Secrets foundation)
+- **Key questions**:
+  1. Does Vault have official ARM64 binaries/containers?
+  2. Minimum memory/CPU for single-node dev/prod modes?
+  3. Best storage backend for single-node (file, Raft integrated, Consul)?
+  4. Terraform Vault provider -- can it bootstrap policies, auth backends, secret engines?
+  5. Ansible roles -- `ansible-community/vault` or `brianshumate/ansible-vault` -- which is maintained?
+  6. Auto-unseal options without cloud KMS (transit unseal from another Vault, or Shamir with automation)?
+- **Resources**:
+  - [Vault Installation](https://developer.hashicorp.com/vault/install)
+  - [Vault Docker Image](https://hub.docker.com/r/hashicorp/vault)
+  - [Terraform Vault Provider](https://registry.terraform.io/providers/hashicorp/vault/latest/docs)
+  - [Vault Integrated Storage (Raft)](https://developer.hashicorp.com/vault/docs/configuration/storage/raft)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R05: Jenkins on ARM
+
+- **Status**: open
+- **Roadmap link**: Phase 2 (CI/CD)
+- **Key questions**:
+  1. Official Jenkins ARM64 Docker images -- available? Stable?
+  2. Controller + agent architecture on a single ARM host -- feasible?
+  3. Docker-based build agents on ARM -- multi-arch image builds?
+  4. Plugin ecosystem for Vault credential injection, Gitea/GitLab webhooks, container registry push?
+  5. Jenkins Configuration as Code (JCasC) -- can we fully define Jenkins config in this repo?
+  6. Alternatives worth considering? (Woodpecker CI, Drone, Tekton)
+- **Resources**:
+  - [Jenkins Docker Images](https://hub.docker.com/r/jenkins/jenkins)
+  - [Jenkins Configuration as Code](https://www.jenkins.io/projects/jcasc/)
+  - [Jenkins ARM Support](https://www.jenkins.io/blog/2022/12/27/run-jenkins-agent-as-a-service/)
+  - [Woodpecker CI](https://woodpecker-ci.org/) (lightweight alternative)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R06: Container Registries and Pull-Through Caches
+
+- **Status**: open
+- **Roadmap link**: Phase 3 (Registries)
+- **Key questions**:
+  1. Distribution (Docker Registry v2) vs Harbor vs Gitea/GitLab built-in -- resource footprint comparison?
+  2. Pull-through cache configuration for Docker Hub, ghcr.io -- how complex?
+  3. ARM64 support for each option?
+  4. Storage requirements and garbage collection -- how much disk for a small team?
+  5. Auth integration with Vault or OIDC?
+- **Resources**:
+  - [Distribution (CNCF)](https://distribution.github.io/distribution/)
+  - [Harbor](https://goharbor.io/)
+  - [Distribution Pull-Through Cache](https://distribution.github.io/distribution/recipes/mirror/)
+  - [Gitea Container Registry](https://docs.gitea.com/usage/packages/container)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R07: Database Free Tiers vs Self-Hosted
+
+- **Status**: open
+- **Roadmap link**: Phase 3 (Databases)
+- **Key questions**:
+  1. Neon free tier -- storage limit, compute hours, connection limit, branching?
+  2. PlanetScale free tier -- storage, row reads/writes, connections? (Note: PlanetScale killed free tier in 2024 -- verify current state)
+  3. Alternative managed MySQL/MariaDB free tiers?
+  4. Self-hosted on Oracle ARM: Postgres + PgBouncer, MariaDB + ProxySQL -- memory/CPU overhead?
+  5. Vault database secrets engine -- dynamic credential rotation for Postgres and MariaDB?
+  6. Backup strategy for self-hosted DBs?
+- **Resources**:
+  - [Neon Free Tier](https://neon.tech/pricing)
+  - [PlanetScale Pricing](https://planetscale.com/pricing)
+  - [PgBouncer](https://www.pgbouncer.org/)
+  - [ProxySQL](https://proxysql.com/)
+  - [Vault Database Secrets Engine](https://developer.hashicorp.com/vault/docs/secrets/databases)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R08: Cloudflare Pages
+
+- **Status**: open
+- **Roadmap link**: Phase 4 (Web properties)
+- **Key questions**:
+  1. Free tier limits -- builds per month, bandwidth, sites, concurrent builds?
+  2. Integration with Cloudflare DNS (already in use) -- automatic CNAME setup?
+  3. Supported frameworks (Hugo, Astro, Next.js SSG)?
+  4. Terraform Cloudflare provider -- can it manage Pages projects and deployments?
+  5. Custom domain setup -- any quirks with existing zone management?
+- **Resources**:
+  - [Cloudflare Pages](https://pages.cloudflare.com/)
+  - [Cloudflare Pages Limits](https://developers.cloudflare.com/pages/platform/limits/)
+  - [Terraform Cloudflare Provider - Pages](https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/resources/pages_project)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R09: Backup Storage Free Tiers
+
+- **Status**: open
+- **Roadmap link**: Cross-cutting (backup strategy)
+- **Key questions**:
+  1. Backblaze B2 free tier -- storage limit, egress, API calls?
+  2. Cloudflare R2 free tier -- storage, operations, egress (zero egress fees)?
+  3. Oracle Cloud Object Storage free tier -- limits?
+  4. S3-compatible API support for all three (for tool compatibility)?
+  5. Encryption at rest and in transit?
+  6. Which one works best with `restic` or `borgbackup`?
+- **Resources**:
+  - [Backblaze B2 Pricing](https://www.backblaze.com/cloud-storage/pricing)
+  - [Cloudflare R2 Pricing](https://developers.cloudflare.com/r2/pricing/)
+  - [Oracle Object Storage](https://docs.oracle.com/en-us/iaas/Content/Object/Concepts/objectstorageoverview.htm)
+  - [Restic](https://restic.net/)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R10: Transactional Email
+
+- **Status**: open
+- **Roadmap link**: Phase 4 (Email)
+- **Key questions**:
+  1. Resend free tier -- emails/month, domains, API?
+  2. Postmark free tier -- does one still exist?
+  3. AWS SES -- free tier limits (62,000/month from EC2)?
+  4. Which integrates best with Cloudflare DNS (SPF, DKIM, DMARC records)?
+  5. Terraform support for each?
+- **Resources**:
+  - [Resend Pricing](https://resend.com/pricing)
+  - [Postmark Pricing](https://postmarkapp.com/pricing)
+  - [AWS SES Pricing](https://aws.amazon.com/ses/pricing/)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R11: Monitoring and Observability Stack
+
+- **Status**: open
+- **Roadmap link**: Phase 2.5 (Cross-cutting)
+- **Key questions**:
+  1. Grafana Cloud free tier -- metrics series, log volume, trace spans, retention?
+  2. Self-hosted Prometheus + Grafana + Loki on ARM -- resource overhead?
+  3. Alloy (Grafana's new collector) vs Prometheus + node_exporter -- which is lighter?
+  4. Alerting -- Grafana Cloud alerting free tier vs self-hosted Alertmanager?
+  5. Uptime monitoring -- Grafana synthetic monitoring free tier or alternatives (UptimeRobot, Healthchecks.io)?
+- **Resources**:
+  - [Grafana Cloud Free Tier](https://grafana.com/pricing/)
+  - [Grafana Alloy](https://grafana.com/oss/alloy/)
+  - [Prometheus](https://prometheus.io/)
+  - [Loki](https://grafana.com/oss/loki/)
+  - [Healthchecks.io](https://healthchecks.io/)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
+
+---
+
+### R12: Fly.io and Railway Free Tiers
+
+- **Status**: open
+- **Roadmap link**: Phase 2-3 (Container workloads, CI runners)
+- **Key questions**:
+  1. Fly.io free tier -- VMs, memory, bandwidth, regions? (Hobby plan changes in 2024/2025?)
+  2. Railway free tier -- hours/month, memory, storage? (They also changed tiers recently)
+  3. ARM support on either platform?
+  4. Cold start behavior for low-traffic containers?
+  5. Terraform providers for either?
+  6. Are these actually useful for our workloads, or is Oracle ARM better for everything?
+- **Resources**:
+  - [Fly.io Pricing](https://fly.io/pricing/)
+  - [Railway Pricing](https://railway.app/pricing)
+  - [Fly.io Terraform Provider](https://registry.terraform.io/providers/fly-apps/fly/latest/docs)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
