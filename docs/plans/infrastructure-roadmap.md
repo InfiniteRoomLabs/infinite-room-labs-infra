@@ -2,6 +2,13 @@
 
 > Brain dump captured 2026-02-27. Living document — update as things get built.
 
+## Guiding Principles
+
+1. **Everything is IaC.** Every component discussed here gets provisioned, configured, and managed through code in this repo — Terraform for infra, Ansible for config, Dockerfiles for images, Jenkinsfiles for pipelines. If it can't be `terraform apply`'d or `ansible-playbook`'d from scratch, it's not done.
+2. **Free tier first.** Squeeze every free tier across every cloud provider before spending a dollar. Static sites on Cloudflare Pages. VMs on Oracle Cloud free tier. Containers on Fly.io or Railway free tiers. Edge functions where they're free. If a component is low-traffic or doesn't need to be dynamic, it lives on whatever free thing will host it.
+3. **Spread across providers strategically.** Not loyalty to one cloud — use the best free/cheap option per workload. The glue is Tailscale (mesh VPN) and this repo (single source of truth). Provider-specific Terraform modules keep things portable.
+4. **IaC tracks the provider.** Each cloud provider gets its own path under `terraform/environments/{env}/{provider}/` so we always know what lives where and can tear down / recreate per-provider.
+
 ## Current State
 
 - **Terraform + Terragrunt**: Porkbun domain registration and Cloudflare DNS zone onboarding — done locally, may or may not be pushed.
@@ -136,28 +143,75 @@ These apply to **everything** above:
 
 ---
 
-## Rough Priority / Sequencing
+## Hosting Strategy — Free Tier Scavenging
 
-Some of this is parallel, but the dependency chain roughly looks like:
+Spread workloads across providers to maximize free tiers. Everything stitched together via Tailscale.
+
+| Workload | Candidate Provider(s) | Free Tier Notes |
+|---|---|---|
+| **Static sites** (blog, homepage) | Cloudflare Pages, Vercel, Netlify | All offer generous free static hosting + CDN. Already on Cloudflare for DNS so Pages is natural. |
+| **Always-on VMs** (GitLab/Gitea, Vault, Jenkins, databases) | Oracle Cloud (ARM free tier: 4 OCPU / 24 GB RAM), GCP e2-micro, Azure B1s | Oracle's ARM free tier is the big one — enough for multiple containers on one box. |
+| **Container workloads** (lighter services, runners) | Fly.io, Railway | Free tiers for low-usage containers. Good for bursty CI runners or edge-ish services. |
+| **Artifact / registry caches** | Co-locate on the Oracle ARM box or use GitLab's built-in registry | Avoid paying for hosted registries when self-hosted is fine behind Tailscale. |
+| **Databases** | Co-locate on VM initially; Neon (Postgres free tier), PlanetScale (MySQL free tier) as alternatives | Free managed DB tiers are tight on storage but fine for early stage. Self-hosted on the Oracle box gives more room. |
+| **Email** | Cloudflare email routing (current), Resend free tier for transactional | No reason to pay for email yet. |
+| **DNS + CDN** | Cloudflare (free) | Already here. Stay here. |
+
+Each provider gets Terraform modules under `terraform/environments/{env}/{provider}/` — nothing is provisioned by hand.
+
+---
+
+## Priority / Sequencing
+
+Dependency chain with IaC deliverables at each step:
 
 ```
-Tailscale (network foundation)
-  └─→ Vault (secrets foundation)
-        ├─→ GitLab (code home)
-        ├─→ Jenkins + Docker Runner (CI/CD)
-        │     └─→ Container Registries + Artifact Caches
-        ├─→ Databases (Postgres, MariaDB pools)
-        └─→ Ansible roles (configure all of the above)
+Phase 0: Foundation (no cloud dependency)
+  ├─ Push existing Terraform (Porkbun + Cloudflare) to this repo
+  ├─ Scaffold Ansible directory structure
+  └─ Document provider accounts + free tier limits
 
-Web properties (blog, homepage, email) can proceed in parallel — they're Cloudflare-fronted and less coupled.
+Phase 1: Network + Secrets
+  ├─ Tailscale tailnet setup (Terraform provider exists)
+  │     → terraform/modules/tailscale-*
+  │     → ansible/roles/tailscale
+  └─ Vault on Oracle ARM free tier
+        → terraform/environments/prod/oci/vault/
+        → ansible/roles/vault
+
+Phase 2: Source Control + CI/CD
+  ├─ GitLab or Gitea on Oracle ARM (co-locate with Vault)
+  │     → terraform/environments/prod/oci/git/
+  │     → ansible/roles/gitlab (or gitea)
+  ├─ Jenkins controller (same host or second free-tier VM)
+  │     → ansible/roles/jenkins
+  └─ Docker runner config
+        → ansible/roles/docker-host
+
+Phase 3: Registries + Databases
+  ├─ Pull-through cache + private registry (on Oracle box)
+  │     → ansible/roles/registry
+  ├─ Postgres pool (Oracle box or Neon free tier)
+  │     → terraform/modules/database-*
+  └─ MariaDB pool (Oracle box or PlanetScale free tier)
+
+Phase 4: Web Properties (parallel track)
+  ├─ Blog → Cloudflare Pages (Hugo/Astro static)
+  │     → terraform/environments/prod/cloudflare/pages-blog/
+  ├─ Homepage → Cloudflare Pages
+  │     → terraform/environments/prod/cloudflare/pages-homepage/
+  └─ Email scaling as needed
 ```
+
+Web properties can start anytime — they don't depend on the backend infra chain.
 
 ---
 
 ## Open Questions
 
-- **Hosting**: Where does all this run? Single beefy box to start? Multiple VPS? Cloud provider?
-- **GitLab vs Gitea**: GitLab is heavy — is the full GitLab feature set needed, or would something lighter work?
-- **Database hosting**: Co-located with apps or separate dedicated hosts?
-- **Monitoring / observability**: Not mentioned yet but will be needed (Prometheus, Grafana, Loki, etc.).
-- **Backup strategy**: Needs definition for Vault, GitLab, databases.
+- **GitLab vs Gitea**: GitLab is a memory hog (~4 GB minimum). Gitea runs in ~256 MB. Do we need GitLab's built-in CI, registry, and project management, or is Gitea + Jenkins + standalone registry lighter and good enough?
+- **Oracle ARM allocation**: 4 OCPU / 24 GB is a lot — one big VM or split into multiple smaller ones? One box is simpler, multiple is more resilient.
+- **Database managed vs self-hosted**: Neon/PlanetScale free tiers are convenient but limited. Self-hosted on the Oracle box gives more control but more ops burden.
+- **Monitoring / observability**: Not in the brain dump yet but will be needed. Grafana Cloud has a free tier (10k metrics, 50 GB logs). Worth adding as Phase 2.5.
+- **Backup strategy**: Where do backups go? Another free-tier provider's object storage? Backblaze B2 (10 GB free)? Cloudflare R2 (10 GB free)?
+- **Domain for internal services**: `*.internal.infiniteroomlabs.com` split-horizon DNS via Tailscale MagicDNS, or manage it ourselves?
