@@ -387,3 +387,30 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [Fly.io Terraform Provider](https://registry.terraform.io/providers/fly-apps/fly/latest/docs)
 - **Findings**: _Not yet researched._
 - **Decision**: _Pending._
+
+---
+
+### R13: SSO / Identity Provider
+
+- **Status**: open
+- **Roadmap link**: Phase 1.5 (Identity + SSO -- right after Vault, before everything else authenticates)
+- **Key questions**:
+  1. Keycloak vs Authentik vs Authelia vs Kanidm -- resource footprint (RAM, CPU) on ARM?
+  2. Which ones have ARM64 container images?
+  3. Terraform providers -- Keycloak has `mrparkers/keycloak`, Authentik has one too. Maturity? Can they manage realms, clients, roles, mappers as code?
+  4. OIDC client support matrix -- which of our services support OIDC? (Vault, Gitea, GitLab, Jenkins, Grafana, Harbor/Distribution)
+  5. Database requirements -- Keycloak needs Postgres, Authentik needs Postgres + Redis. How does this fit with our DB pool plan?
+  6. Can the full config (realms, clients, roles, groups, users) be defined declaratively and version-controlled?
+  7. Ansible roles available for each? Quality?
+  8. Authelia and Kanidm are lighter but more limited -- is forward-proxy auth (Authelia) enough, or do we need a full IdP with token issuance (Keycloak/Authentik)?
+- **Resources**:
+  - [Keycloak](https://www.keycloak.org/)
+  - [Keycloak Docker](https://quay.io/repository/keycloak/keycloak)
+  - [Terraform Keycloak Provider](https://registry.terraform.io/providers/mrparkers/keycloak/latest/docs)
+  - [Authentik](https://goauthentik.io/)
+  - [Authentik Docker](https://docs.goauthentik.io/docs/install-config/install/docker-compose)
+  - [Terraform Authentik Provider](https://registry.terraform.io/providers/goauthentik/authentik/latest/docs)
+  - [Authelia](https://www.authelia.com/)
+  - [Kanidm](https://kanidm.com/)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._
