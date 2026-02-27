@@ -117,7 +117,21 @@ Current: single `wes@infiniteroomlabs.com` Cloudflare proxy to Gmail.
 - [ ] Evaluate needs — team mailboxes, transactional email (Postmark/SES), mailing lists
 - [ ] Scale email setup as headcount / product needs grow
 
-### 10. Configuration Management — Ansible
+### 11. Identity and Access — SSO / IdP
+
+Centralized authentication and SSO for all internal services. Single source of truth for user identity, OIDC/SAML provider for everything that supports it.
+
+Candidates: Keycloak (prior experience), Authentik, Authelia, Kanidm. Must be free, self-hosted, fully configurable via API/IaC, and run on ARM.
+
+- [ ] Deploy identity provider (co-locate on Oracle ARM or dedicated container)
+- [ ] Configure realms, clients, and roles via Terraform or API
+- [ ] OIDC integration with: Vault, GitLab/Gitea, Jenkins, Grafana, container registry
+- [ ] User provisioning and group management as code
+- [ ] MFA enforcement
+- [ ] Ansible role for deployment and configuration
+- [ ] Expose only over Tailscale (Cloudflare Access for any public-facing login if needed)
+
+### 12. Configuration Management — Ansible
 
 Ansible for post-provisioning application setup. Reusable, modular roles.
 
@@ -140,6 +154,7 @@ These apply to **everything** above:
 | **Templateized everything** | Terraform modules, Ansible roles, Jenkinsfiles, Dockerfiles — all parameterized. No snowflakes. |
 | **Secrets via Vault** | Once Vault is up, nothing stores secrets in env files or CI variables. Everything goes through Vault. |
 | **Tailscale by default** | Internal services bind to Tailscale IPs. Public exposure is explicit and intentional (Cloudflare edge only). |
+| **SSO everywhere** | Every service that supports OIDC/SAML authenticates through the central IdP. No local accounts except break-glass admin. One identity, one login. |
 
 ---
 
@@ -154,6 +169,7 @@ Spread workloads across providers to maximize free tiers. Everything stitched to
 | **Container workloads** (lighter services, runners) | Fly.io, Railway | Free tiers for low-usage containers. Good for bursty CI runners or edge-ish services. |
 | **Artifact / registry caches** | Co-locate on the Oracle ARM box or use GitLab's built-in registry | Avoid paying for hosted registries when self-hosted is fine behind Tailscale. |
 | **Databases** | Co-locate on VM initially; Neon (Postgres free tier), PlanetScale (MySQL free tier) as alternatives | Free managed DB tiers are tight on storage but fine for early stage. Self-hosted on the Oracle box gives more room. |
+| **Identity provider** (Keycloak, Authentik, etc.) | Co-locate on Oracle ARM box | Self-hosted, free. Runs as a container. Needs a Postgres DB (shares the pool). |
 | **Email** | Cloudflare email routing (current), Resend free tier for transactional | No reason to pay for email yet. |
 | **DNS + CDN** | Cloudflare (free) | Already here. Stay here. |
 
@@ -179,12 +195,20 @@ Phase 1: Network + Secrets
         → terraform/environments/prod/oci/vault/
         → ansible/roles/vault
 
+Phase 1.5: Identity + SSO
+  └─ IdP (Keycloak / Authentik / Authelia / Kanidm) on Oracle ARM
+        → ansible/roles/idp
+        → Terraform Keycloak provider (or API-driven config)
+        → OIDC clients for Vault, Git, Jenkins, Grafana, registries
+
 Phase 2: Source Control + CI/CD
   ├─ GitLab or Gitea on Oracle ARM (co-locate with Vault)
   │     → terraform/environments/prod/oci/git/
   │     → ansible/roles/gitlab (or gitea)
+  │     → OIDC auth via IdP
   ├─ Jenkins controller (same host or second free-tier VM)
   │     → ansible/roles/jenkins
+  │     → OIDC auth via IdP
   └─ Docker runner config
         → ansible/roles/docker-host
 
