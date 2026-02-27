@@ -33,3 +33,11 @@ terraform/
 - **Domain lists** are in `terraform/environments/{env}/env.hcl`.
 - **State** is in Terraform Cloud (org: `infinite-room-labs`). Workspace names derived from path relative to `root.hcl`.
 - **Credentials** come from environment variables, never hardcoded. See `.env.example`.
+
+## Research Protocol
+
+- **Project-wide research**: `docs/plans/RESEARCH.md` tracks open technical questions and provider evaluations. Detailed outputs go in `docs/plans/resources/{slug}.md`.
+- **Feature-scoped research**: `kitty-specs/{feature}/research.md` tracks research for a specific Spec Kitty feature.
+- When a conversation surfaces an unresolved technical question (provider limits, tool comparisons, architecture trade-offs), capture it in `docs/plans/RESEARCH.md` as a new open item.
+- Before starting infrastructure work that depends on an open research item, run a research round first. See the agent instructions inside `RESEARCH.md` for the workflow.
+- Reference `docs/plans/infrastructure-roadmap.md` for the master plan and phase sequencing.
