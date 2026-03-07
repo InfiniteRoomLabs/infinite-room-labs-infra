@@ -146,7 +146,7 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ### R01: Oracle Cloud ARM Free Tier
 
-- **Status**: open
+- **Status**: done
 - **Roadmap link**: Phase 1-3 (Vault, GitLab/Gitea, Jenkins, databases -- all candidate for Oracle ARM hosting)
 - **Key questions**:
   1. What are the exact always-free ARM compute limits (OCPUs, RAM, boot volume, block storage)?
@@ -159,8 +159,10 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [OCI Always Free Resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
   - [Terraform OCI Provider](https://registry.terraform.io/providers/oracle/oci/latest/docs)
   - [OCI Ampere A1 Compute](https://docs.oracle.com/en-us/iaas/Content/Compute/References/arm.htm)
-- **Findings**: _Not yet researched._
-- **Decision**: _Pending._
+  - [Full Metal Brackets - OCI Free Tier Breakdown](https://fullmetalbrackets.com/blog/oci-free-tier-breakdown) (Jan 2026)
+  - [Oracle Cloud Free Tier FAQ](https://www.oracle.com/cloud/free/faq)
+- **Findings**: ARM free tier provides 4 OCPUs and 24 GB RAM (VM.Standard.A1.Flex), flexibly split across 1-4 VMs. Also includes 2x AMD micro VMs (1/8 OCPU, 1 GB each). Block storage is 200 GB total (boot + data combined, min 47 GB boot per VM). Object storage is 20 GB. Networking includes 2 VCNs, 1 LB, 1 NLB, and 10 TB/month egress. Critical gotcha: Oracle reclaims idle instances if CPU, network, AND memory all stay below 20% for 7 days. ARM capacity is frequently unavailable in popular regions -- upgrading to Pay As You Go (credit card required) significantly improves availability. OCI also provides 2 free Autonomous Databases (20 GB each), 1 free MySQL HeatWave (50 GB), and built-in Vault (150 secrets, 20 HSM keys). Full detail in `docs/plans/resources/oracle-cloud-arm.md`.
+- **Decision**: Oracle ARM is viable as primary compute for Phases 1-3. Use a single large VM (4 OCPU / 24 GB / 150 GB available block storage after boot) for simplicity. The 200 GB storage limit is the tighter constraint -- not RAM. Upgrade to PAYG to guarantee ARM provisioning. Keep services active to avoid idle reclamation. Consider using OCI's free MySQL HeatWave for Ghost CMS instead of self-hosted Postgres to save RAM. Plan Proxmox migration for when on-prem hardware is available (Phase 5).
 
 ---
 
@@ -351,8 +353,8 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ### R11: Monitoring and Observability Stack
 
-- **Status**: open
-- **Roadmap link**: Phase 2.5 (Cross-cutting)
+- **Status**: done
+- **Roadmap link**: Phase 1.25 (Observability Pipeline -- new phase added by infrastructure expansion design)
 - **Key questions**:
   1. Grafana Cloud free tier -- metrics series, log volume, trace spans, retention?
   2. Self-hosted Prometheus + Grafana + Loki on ARM -- resource overhead?
@@ -365,8 +367,11 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [Prometheus](https://prometheus.io/)
   - [Loki](https://grafana.com/oss/loki/)
   - [Healthchecks.io](https://healthchecks.io/)
-- **Findings**: _Not yet researched._
-- **Decision**: _Pending._
+  - [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)
+  - [Sentry Developer Tier](https://sentry.io/pricing/)
+  - [Netdata](https://www.netdata.cloud/)
+- **Findings**: Resolved via infrastructure expansion design. OTel-centric pipeline with OTel Collector as central hub receiving OTLP from all services. Grafana Cloud free tier (10k metrics, 50 GB logs, 50 GB traces, 14-day retention) as managed backends for Prometheus, Loki, and Tempo. Netdata on every node for system metrics + local dashboards. Sentry free dev tier (5K errors/mo) for error tracking. Self-hosted backends deferred to Phase 5 (Proxmox migration). Architecture serves both IRL internal and Dark Matter multi-tenant use cases.
+- **Decision**: OTel Collector + Grafana Cloud (managed) + Netdata + Sentry free tier. Full design in `docs/plans/2026-03-07-infrastructure-expansion-design.md`. Implementation plan in `docs/plans/2026-03-07-infrastructure-expansion-plan.md`.
 
 ---
 
