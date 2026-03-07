@@ -29,7 +29,7 @@ terraform {
 inputs = {
   domain_nameservers = {
     for domain, nameservers in dependency.cloudflare_zones.outputs.nameservers_map : domain => {
-      nameservers = toset(nameservers)
+      nameservers = nameservers
     }
   }
 }
