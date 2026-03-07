@@ -162,7 +162,7 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [Full Metal Brackets - OCI Free Tier Breakdown](https://fullmetalbrackets.com/blog/oci-free-tier-breakdown) (Jan 2026)
   - [Oracle Cloud Free Tier FAQ](https://www.oracle.com/cloud/free/faq)
 - **Findings**: ARM free tier provides 4 OCPUs and 24 GB RAM (VM.Standard.A1.Flex), flexibly split across 1-4 VMs. Also includes 2x AMD micro VMs (1/8 OCPU, 1 GB each). Block storage is 200 GB total (boot + data combined, min 47 GB boot per VM). Object storage is 20 GB. Networking includes 2 VCNs, 1 LB, 1 NLB, and 10 TB/month egress. Critical gotcha: Oracle reclaims idle instances if CPU, network, AND memory all stay below 20% for 7 days. ARM capacity is frequently unavailable in popular regions -- upgrading to Pay As You Go (credit card required) significantly improves availability. OCI also provides 2 free Autonomous Databases (20 GB each), 1 free MySQL HeatWave (50 GB), and built-in Vault (150 secrets, 20 HSM keys). Full detail in `docs/plans/resources/oracle-cloud-arm.md`.
-- **Decision**: Oracle ARM is viable as primary compute for Phases 1-3. Use a single large VM (4 OCPU / 24 GB / 150 GB available block storage after boot) for simplicity. The 200 GB storage limit is the tighter constraint -- not RAM. Upgrade to PAYG to guarantee ARM provisioning. Keep services active to avoid idle reclamation. Consider using OCI's free MySQL HeatWave for Ghost CMS instead of self-hosted Postgres to save RAM. Plan Proxmox migration for when on-prem hardware is available (Phase 5).
+- **Decision**: Oracle ARM is viable but kept in reserve rather than used as primary compute. Concerns: 200 GB storage limit is tight, idle reclamation risk, ARM capacity shortages in popular regions. Primary compute moved to Hetzner CAX21 (~EUR7.49/mo) after provider comparison. Oracle ARM reserved for Tailscale relay, emergency failover, and potential future expansion. See `docs/plans/resources/provider-comparison.md` for the full evaluation.
 
 ---
 
@@ -375,10 +375,10 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ---
 
-### R12: Fly.io and Railway Free Tiers
+### R12: Compute Provider Comparison (Fly.io, Hetzner, DigitalOcean, AWS, Vercel)
 
-- **Status**: open
-- **Roadmap link**: Phase 2-3 (Container workloads, CI runners)
+- **Status**: done
+- **Roadmap link**: Phase 1-3 (Primary compute for all infrastructure services)
 - **Key questions**:
   1. Fly.io free tier -- VMs, memory, bandwidth, regions? (Hobby plan changes in 2024/2025?)
   2. Railway free tier -- hours/month, memory, storage? (They also changed tiers recently)
@@ -386,12 +386,19 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   4. Cold start behavior for low-traffic containers?
   5. Terraform providers for either?
   6. Are these actually useful for our workloads, or is Oracle ARM better for everything?
+  7. Hetzner ARM (CAX series) pricing and specs?
+  8. DigitalOcean cheapest droplets?
+  9. AWS t4g.small free trial details and hidden costs?
+  10. Vercel Hobby plan restrictions?
 - **Resources**:
-  - [Fly.io Pricing](https://fly.io/pricing/)
-  - [Railway Pricing](https://railway.app/pricing)
-  - [Fly.io Terraform Provider](https://registry.terraform.io/providers/fly-apps/fly/latest/docs)
-- **Findings**: _Not yet researched._
-- **Decision**: _Pending._
+  - [Fly.io Pricing](https://fly.io/docs/about/pricing/)
+  - [Hetzner Cloud](https://www.hetzner.com/cloud/)
+  - [DigitalOcean Droplet Pricing](https://www.digitalocean.com/pricing/droplets)
+  - [AWS EC2 T4g Free Trial](https://aws.amazon.com/ec2/instance-types/t4/)
+  - [Vercel Pricing](https://vercel.com/pricing)
+  - [Hetzner Price Adjustment April 2026](https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/)
+- **Findings**: Fly.io removed free tier for new customers in 2024; now 2-hour trial only. Running our 8-service stack on Fly.io would cost ~$32-35/mo (per-machine billing). Also architecturally mismatched: no host for Netdata, Jenkins Docker-in-Docker is painful, Tailscale conflicts with Fly.io's own private networking. Hetzner CAX21 (4 ARM vCPU, 8 GB RAM, 80 GB NVMe, 20 TB transfer) at ~EUR7.49/mo is the best price/performance for always-on Docker Compose infrastructure. DigitalOcean starts at $4/mo but only 512 MB / 1 vCPU / 10 GB -- not competitive. AWS t4g.small is "free" through Dec 2026 but hidden costs (EBS + IPv4) add ~$6/mo for only 2 GB RAM, and the trial expires. Vercel Hobby is free but non-commercial only -- unusable for a company. Full detail in `docs/plans/resources/provider-comparison.md`.
+- **Decision**: Hetzner CAX21 as primary compute (~EUR7.49/mo). Oracle ARM kept in reserve. Cloudflare Pages for static website hosting (free). Fly.io rejected for infrastructure backbone (cost + architectural mismatch); may revisit for future stateless app deployments.
 
 ---
 

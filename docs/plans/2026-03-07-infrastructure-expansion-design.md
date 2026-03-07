@@ -30,8 +30,10 @@ All new components follow the existing principles: free-tier-first, IaC-managed,
 | Static site generator | Astro | Modern, component-based, Cloudflare Pages integration |
 | Website hosting | Cloudflare Pages | Free, already using Cloudflare for DNS, global CDN |
 | Container orchestration | Docker Compose initially | Sufficient for current scale; K3s when Proxmox arrives |
-| Compute allocation | Portable containers, decide per-service | Flexibility for Proxmox migration |
-| Proxmox role | Future primary compute | Oracle ARM becomes cloud-edge/backup |
+| Primary compute | Hetzner CAX21 (4 ARM vCPU, 8 GB, 80 GB NVMe) | Best price/performance (~EUR7.49/mo); Oracle ARM kept in reserve |
+| Compute allocation | Portable containers on single Hetzner VPS | Docker Compose stacks; portable to Proxmox later |
+| Oracle ARM role | Reserve / failover | Keep provisioned for Tailscale relay, edge, or emergency failover |
+| Proxmox role | Future primary compute | Hetzner becomes cloud-edge/backup when on-prem is ready |
 
 ## Updated Roadmap Phases
 
@@ -57,15 +59,15 @@ Set up managed free tier accounts. Zero infrastructure required.
 - Tailscale tailnet setup (mesh VPN)
   - `terraform/modules/tailscale-*`
   - `ansible/roles/tailscale`
-- Vault on Oracle ARM
-  - `terraform/environments/prod/oci/vault/`
+- Vault on Hetzner ARM VPS
+  - `terraform/environments/prod/hetzner/vault/`
   - `ansible/roles/vault`
 
 ### Phase 1.25: Observability Pipeline (NEW)
 
 Deploy the OTel Collector and Netdata. Backends are Grafana Cloud (managed).
 
-- OTel Collector on Oracle ARM (~100MB RAM)
+- OTel Collector on Hetzner ARM VPS (~100MB RAM)
   - Receives telemetry from all services via OTLP
   - Exports metrics to Grafana Cloud Prometheus (remote write)
   - Exports logs to Grafana Cloud Loki (OTLP exporter)
@@ -92,14 +94,14 @@ Deploy the OTel Collector and Netdata. Backends are Grafana Cloud (managed).
 
 ### Phase 1.5: Identity + SSO (unchanged, now monitored from deploy)
 
-- IdP (Keycloak/Authentik/Authelia/Kanidm) on Oracle ARM
+- IdP (Keycloak/Authentik/Authelia/Kanidm) on Hetzner ARM VPS
   - OIDC clients for Vault, Git, Jenkins, Grafana, registries
   - OTel instrumentation from day one
 
 ### Phase 2: Source Control + CI/CD (unchanged, now monitored)
 
-- Gitea on Oracle ARM (~256MB RAM -- chosen over GitLab for resource efficiency)
-  - `terraform/environments/prod/oci/git/`
+- Gitea on Hetzner ARM VPS (~256MB RAM -- chosen over GitLab for resource efficiency)
+  - `terraform/environments/prod/hetzner/git/`
   - `ansible/roles/gitea`
 - Jenkins controller (~1GB RAM)
   - `ansible/roles/jenkins`
@@ -108,7 +110,7 @@ Deploy the OTel Collector and Netdata. Backends are Grafana Cloud (managed).
 
 ### Phase 2.5: Company Website (NEW)
 
-- Ghost CMS on Oracle ARM (~250MB RAM with SQLite)
+- Ghost CMS on Hetzner ARM VPS (~250MB RAM with SQLite)
   - Docker Compose deployment
   - Admin panel accessible only via Tailscale (not public)
   - Content API exposed for static build
@@ -134,7 +136,7 @@ Build trigger flow:
 
 ### Phase 3: Registries + Databases (unchanged, now monitored)
 
-- Pull-through cache + private registry on Oracle ARM
+- Pull-through cache + private registry on Hetzner ARM VPS
 - Postgres pool (~512MB RAM)
 - MariaDB pool (if needed)
 
@@ -163,13 +165,18 @@ Transition from cloud-only to hybrid cloud + on-prem.
 - Gitea -- benefits from local disk I/O
 - Self-hosted Prometheus + Loki + Tempo -- replaces Grafana Cloud storage
 - Self-hosted Grafana -- replaces Grafana Cloud dashboards
-- Ghost CMS -- frees Oracle ARM capacity
+- Ghost CMS -- frees Hetzner capacity
 
-**Stays on Oracle ARM** (benefits from cloud availability):
+**Stays on Hetzner / cloud** (benefits from cloud availability):
 - Vault -- high uptime requirements, lightweight
 - OTel Collector (edge relay) -- receives data, forwards to Proxmox backends
 - IdP public endpoints -- needs public reachability for SSO
 - Tailscale coordination
+
+**Oracle ARM** (reserve, if provisioned):
+- Tailscale exit node / relay
+- Emergency failover for critical services
+- Lightweight health check / canary endpoints
 
 **Migration procedure:**
 1. Set up Proxmox VMs, join to Tailscale mesh
@@ -178,7 +185,7 @@ Transition from cloud-only to hybrid cloud + on-prem.
 4. Export Grafana Cloud dashboards, import into self-hosted Grafana
 5. Verify data flow end-to-end
 6. Gradually move services (databases, Git, Jenkins) to Proxmox
-7. Oracle ARM becomes cloud edge
+7. Hetzner becomes cloud edge; cancel or downsize if Proxmox covers everything
 
 ## Observability Architecture
 
@@ -235,7 +242,7 @@ Each Dark Matter client gets:
 ### Components
 
 - **Ghost CMS**: Content management, admin panel, Content API
-  - Self-hosted on Oracle ARM (Docker, ~250MB RAM, SQLite)
+  - Self-hosted on Hetzner ARM VPS (Docker, ~250MB RAM, SQLite)
   - Admin accessible only via Tailscale
   - Content API used by Astro at build time
 - **Astro**: Static site generator
@@ -256,7 +263,9 @@ Each Dark Matter client gets:
 5. Deploy to Cloudflare Pages
 6. Live globally
 
-## Oracle ARM Resource Budget (Before Proxmox)
+## Hetzner CAX21 Resource Budget (Before Proxmox)
+
+**Instance**: Hetzner CAX21 -- 4 ARM vCPU, 8 GB RAM, 80 GB NVMe SSD, 20 TB transfer -- ~EUR7.49/mo
 
 | Service | RAM | Phase |
 |---------|-----|-------|
@@ -270,9 +279,19 @@ Each Dark Matter client gets:
 | Postgres | ~512MB | 3 |
 | Docker overhead | ~500MB | all |
 | **Total** | **~3.5GB** | |
-| **Available** | **24GB** | |
+| **Available** | **8GB** | |
+| **Headroom** | **~4.5GB** | |
 
-Plenty of headroom for growth before Proxmox arrives.
+Comfortable headroom for growth. If more storage is needed beyond 80 GB, Hetzner volumes can be attached at EUR0.052/GB/mo (e.g., 100 GB extra = ~EUR5.20/mo).
+
+### Oracle ARM (Reserve)
+
+Oracle Cloud Always Free ARM (4 OCPU, 24 GB, 200 GB) is kept in reserve for:
+- Tailscale exit node / relay (uses almost no resources)
+- Emergency failover if Hetzner has issues
+- Future expansion if workload outgrows a single Hetzner VPS
+
+See `docs/plans/resources/oracle-cloud-arm.md` for full Oracle free tier details.
 
 ## IaC Artifacts Summary
 
