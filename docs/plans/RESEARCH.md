@@ -414,3 +414,28 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [Kanidm](https://kanidm.com/)
 - **Findings**: _Not yet researched._
 - **Decision**: _Pending._
+
+---
+
+### R14: Git DAG — Repo Dependency Graph Engine
+
+- **Status**: open
+- **Roadmap link**: Future / Sister Projects (Git DAG)
+- **Key questions**:
+  1. What git primitives are available for efficiently discovering cross-repo relationships? (`git submodule`, `git worktree list`, subtree metadata, custom conventions?)
+  2. Existing tools in this space — `meta`, `git-subrepo`, `josh`, `gita`, Bazel/Buck repo graphs, Google's `repo` tool — what do they cover and where do they fall short?
+  3. Graph representation — in-memory from git queries on demand, or materialized into a lightweight store (SQLite, flat file, git notes)?
+  4. Efficient change detection — can `git rev-parse` + `git status` across N repos be parallelized cheaply, or does this need a daemon / filesystem watcher?
+  5. API surface — REST? GraphQL? gRPC? What makes sense for a tool that's primarily queried by CI systems and UIs?
+  6. UI framework — lightweight dashboard (Svelte, htmx) or TUI for terminal-native workflows?
+  7. Language choice — Go and Rust both have strong git libraries (`go-git`, `gitoxide`). Which gives better ergonomics for this use case?
+- **Resources**:
+  - [git-submodule](https://git-scm.com/docs/git-submodule)
+  - [git-worktree](https://git-scm.com/docs/git-worktree)
+  - [meta (multi-repo tool)](https://github.com/mateodelnorte/meta)
+  - [josh (git proxy)](https://github.com/josh-project/josh)
+  - [gita (manage multiple repos)](https://github.com/nosarthur/gita)
+  - [go-git](https://github.com/go-git/go-git)
+  - [gitoxide (Rust)](https://github.com/Byron/gitoxide)
+- **Findings**: _Not yet researched._
+- **Decision**: _Pending._

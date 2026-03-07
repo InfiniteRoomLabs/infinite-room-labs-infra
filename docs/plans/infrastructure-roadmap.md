@@ -231,6 +231,30 @@ Web properties can start anytime — they don't depend on the backend infra chai
 
 ---
 
+## Future / Sister Projects
+
+### Git DAG — Dependency Graph as Git State
+
+A standalone project that models a directed acyclic graph (DAG) where **each node is a git repository's state** — its current HEAD, branches, tags, and all of its git-trackable dependencies (worktrees, submodules, subtrees, etc.). Edges represent dependency relationships between repos.
+
+**Core idea**: Git already tracks state efficiently and has rich querying primitives (`rev-parse`, `log --graph`, `diff`, `submodule foreach`, worktree management). Build a system that leverages git as the state engine rather than re-inventing state tracking in a database.
+
+**Components (minimal viable shape)**:
+
+- **Graph engine**: Walks a set of repositories, discovers their git-tracked dependency relationships (submodules, worktrees, any convention-based linkage), and builds/updates a DAG representation.
+- **State snapshots**: Each node stores queryable state — current commit, dirty/clean, branch tracking, dependency versions, divergence from upstream.
+- **Query interface**: "Which repos depend on X?", "What changed since last snapshot?", "Show me the full dependency chain for repo Y." All answerable through git operations, no external DB required.
+- **Management UI**: Visualize the DAG, inspect node state, drill into individual repos. Read-heavy, mostly a lens on top of the graph.
+- **Automation API**: Endpoints for CI/CD or other tools to query the graph, trigger operations across related repos, or react to state changes. Webhooks for "repo X changed, here's everything downstream."
+
+**Non-goals for now**: Prescribing what consumers do with the graph. The project provides the DAG, the state, the queries, and the API surface. What people build on top of it (mono-repo orchestration, multi-repo CI coordination, dependency auditing, release trains) is left as an exercise.
+
+**Key design constraint**: Everything that *can* be answered by git *should* be answered by git. The graph layer adds topology awareness on top of git's per-repo state tracking, not a parallel state store.
+
+**Open questions captured in R14 below.**
+
+---
+
 ## Open Questions
 
 - **GitLab vs Gitea**: GitLab is a memory hog (~4 GB minimum). Gitea runs in ~256 MB. Do we need GitLab's built-in CI, registry, and project management, or is Gitea + Jenkins + standalone registry lighter and good enough?
