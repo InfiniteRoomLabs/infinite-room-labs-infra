@@ -6,6 +6,7 @@ output "project_url" {
 output "subdomain" {
   value       = cloudflare_pages_project.this.subdomain
   description = "The pages.dev subdomain assigned to the project"
+  sensitive   = true
 }
 
 output "custom_domain_statuses" {

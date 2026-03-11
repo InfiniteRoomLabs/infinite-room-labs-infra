@@ -24,14 +24,10 @@ variable "build_output_dir" {
   description = "Output directory of the build (e.g., 'dist')"
 }
 
-variable "repo_owner" {
+variable "root_dir" {
   type        = string
-  description = "GitHub organization or user that owns the repository"
-}
-
-variable "repo_name" {
-  type        = string
-  description = "GitHub repository name"
+  description = "Directory within the repository to use as the root for the build"
+  default     = "/"
 }
 
 variable "custom_domains" {
