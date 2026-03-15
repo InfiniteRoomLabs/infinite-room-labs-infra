@@ -41,6 +41,10 @@ generate "providers" {
           source  = "jianyuan/porkbun"
           version = "~> 0.2"
         }
+        docker = {
+          source  = "docker/docker"
+          version = "~> 0.5"
+        }
       }
     }
   EOF

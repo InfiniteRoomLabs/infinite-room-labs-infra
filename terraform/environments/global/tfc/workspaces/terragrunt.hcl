@@ -52,5 +52,6 @@ inputs = {
     "dev-porkbun-nameservers"  = {}
     "prod-cloudflare-zones"    = {}
     "prod-porkbun-nameservers" = {}
+    "global-dockerhub-repos"   = {}
   }
 }
