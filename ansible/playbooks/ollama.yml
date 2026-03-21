@@ -1,0 +1,61 @@
+---
+# playbooks/ollama.yml
+# =====================
+# Configures Ollama (already installed) to bind to Tailscale
+# interface and pulls specified models.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/ollama.yml
+
+- name: Ollama configuration
+  hosts: homelab
+  become: true
+  tags: [phase5, ollama]
+
+  tasks:
+    - name: Create Ollama systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/ollama.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure Ollama to bind to localhost only
+      ansible.builtin.copy:
+        content: |
+          # Managed by Ansible -- do not edit manually
+          # Binds localhost only. Agents access via SSH tunnel or Tailscale.
+          [Service]
+          Environment="OLLAMA_HOST=127.0.0.1:11434"
+          Environment="OLLAMA_MODELS={{ irl_zfs_mount }}/ollama-models"
+        dest: /etc/systemd/system/ollama.service.d/override.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - reload systemd
+        - restart ollama
+
+    - name: Enable and start Ollama
+      ansible.builtin.systemd:
+        name: ollama
+        state: started
+        enabled: true
+
+    - name: Pull Ollama models (async, may take a while)
+      ansible.builtin.command: "ollama pull {{ item }}"
+      loop: "{{ irl_ollama_models }}"
+      changed_when: true
+      async: 3600
+      poll: 30
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: restart ollama
+      ansible.builtin.systemd:
+        name: ollama
+        state: restarted

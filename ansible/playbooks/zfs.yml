@@ -1,0 +1,90 @@
+---
+# playbooks/zfs.yml
+# ==================
+# Creates ZFS datasets for service data, configures atime=off,
+# schedules scrubs, and sets up sanoid for automated snapshots.
+#
+# IMPORTANT: This playbook does NOT touch existing data or datasets.
+# It only creates new datasets and configures pool-level properties.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/zfs.yml
+
+- name: ZFS datasets and snapshots
+  hosts: homelab
+  become: true
+  tags: [phase1, zfs]
+
+  tasks:
+    # ── Pool-level optimizations ───────────────────────────────────
+    - name: Disable atime on ZFS pool (reduces unnecessary writes)
+      community.general.zfs:
+        name: "{{ irl_zfs_pool }}"
+        state: present
+        extra_zfs_properties:
+          atime: "off"
+
+    # ── Create service datasets ────────────────────────────────────
+    - name: Create ZFS datasets for services
+      community.general.zfs:
+        name: "{{ item.name }}"
+        state: present
+        extra_zfs_properties:
+          mountpoint: "{{ item.mountpoint }}"
+          quota: "{{ item.quota }}"
+          compression: "lz4"
+          atime: "off"
+      loop: "{{ irl_zfs_datasets }}"
+
+    # ── ZFS scrub schedule ─────────────────────────────────────────
+    - name: Schedule weekly ZFS scrub (Sunday 3am)
+      ansible.builtin.cron:
+        name: "ZFS weekly scrub - {{ irl_zfs_pool }}"
+        minute: "0"
+        hour: "3"
+        weekday: "0"
+        job: "/sbin/zpool scrub {{ irl_zfs_pool }}"
+        user: root
+
+    # ── Sanoid snapshot automation ─────────────────────────────────
+    - name: Install sanoid for ZFS snapshot automation
+      ansible.builtin.apt:
+        name: sanoid
+        state: present
+        update_cache: true
+
+    - name: Ensure sanoid config directory exists
+      ansible.builtin.file:
+        path: /etc/sanoid
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy sanoid configuration
+      ansible.builtin.copy:
+        src: ../files/sanoid/sanoid.conf
+        dest: /etc/sanoid/sanoid.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+
+    - name: Enable sanoid timer
+      ansible.builtin.systemd:
+        name: sanoid.timer
+        state: started
+        enabled: true
+
+    # ── Trigger immediate scrub if overdue ─────────────────────────
+    - name: Check last scrub date
+      ansible.builtin.command: "zpool status {{ irl_zfs_pool }}"
+      register: zpool_status
+      changed_when: false
+
+    - name: Start ZFS scrub if overdue (non-blocking)
+      ansible.builtin.command: "zpool scrub {{ irl_zfs_pool }}"
+      when: "'scrub in progress' not in zpool_status.stdout"
+      changed_when: true
+      async: 86400
+      poll: 0

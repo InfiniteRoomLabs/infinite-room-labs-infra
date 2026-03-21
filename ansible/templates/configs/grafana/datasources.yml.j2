@@ -1,0 +1,26 @@
+# Managed by Ansible -- do not edit manually
+# Grafana provisioned datasources
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://irl-prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://irl-loki:3100
+    editable: false
+
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://irl-alertmanager:9093
+    jsonData:
+      implementation: prometheus
+    editable: false

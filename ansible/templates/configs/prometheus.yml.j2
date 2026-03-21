@@ -1,0 +1,50 @@
+# Managed by Ansible -- do not edit manually
+# Prometheus scrape configuration
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - irl-alertmanager:9093
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Host metrics via node_exporter
+  - job_name: "node"
+    static_configs:
+      - targets: ["irl-node-exporter:9100"]
+        labels:
+          host: "{{ irl_tailscale_hostname }}"
+
+  # Docker container metrics via cadvisor
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["irl-cadvisor:8080"]
+        labels:
+          host: "{{ irl_tailscale_hostname }}"
+
+  # Grafana
+  - job_name: "grafana"
+    static_configs:
+      - targets: ["irl-grafana:3000"]
+
+  # Loki
+  - job_name: "loki"
+    static_configs:
+      - targets: ["irl-loki:3100"]
+
+{% if irl_services.gitea is defined %}
+  # Gitea (exposes /metrics by default)
+  - job_name: "gitea"
+    static_configs:
+      - targets: ["irl-gitea:3000"]
+    metrics_path: /metrics
+{% endif %}

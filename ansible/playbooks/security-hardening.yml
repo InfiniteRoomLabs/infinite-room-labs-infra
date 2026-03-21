@@ -1,0 +1,130 @@
+---
+# playbooks/security-hardening.yml
+# ==================================
+# Fixes critical security vulnerabilities found during recon:
+# - Docker TCP socket exposed without TLS (CRITICAL)
+# - No firewall -- INPUT policy ACCEPT (HIGH)
+# - Leftover Kubernetes iptables chains
+# - Hardened SSH configuration
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/security-hardening.yml
+#
+# Dry run:
+#   ./run-ansible.sh playbook playbooks/security-hardening.yml --check --diff
+
+- name: Security hardening
+  hosts: homelab
+  become: true
+  tags: [phase0, security]
+
+  tasks:
+    # ── Docker TCP fix (CRITICAL) ──────────────────────────────────
+    - name: Deploy hardened Docker daemon configuration
+      ansible.builtin.template:
+        src: ../templates/docker-daemon.json.j2
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      notify: restart docker
+
+    - name: Ensure Docker systemd override directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Remove Docker TCP socket from systemd ExecStart
+      ansible.builtin.copy:
+        content: |
+          # Managed by Ansible -- do not edit
+          # Removes any -H tcp:// flags from the Docker daemon
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+        dest: /etc/systemd/system/docker.service.d/override.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      notify:
+        - reload systemd
+        - restart docker
+
+    # ── Firewall (nftables) ────────────────────────────────────────
+    - name: Install nftables
+      ansible.builtin.apt:
+        name: nftables
+        state: present
+        update_cache: true
+
+    - name: Deploy nftables firewall configuration
+      ansible.builtin.template:
+        src: ../templates/nftables.conf.j2
+        dest: /etc/nftables.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+        validate: "nft -c -f %s"
+      notify: reload nftables
+
+    - name: Enable and start nftables
+      ansible.builtin.systemd:
+        name: nftables
+        state: started
+        enabled: true
+
+    # ── Clean dead iptables chains ─────────────────────────────────
+    - name: Check for leftover Kubernetes iptables chains
+      ansible.builtin.command: iptables -L KUBE-SERVICES -n
+      register: kube_chains
+      changed_when: false
+      failed_when: false
+
+    - name: Flush leftover Kubernetes iptables chains
+      ansible.builtin.shell: |
+        for chain in KUBE-SERVICES KUBE-FORWARD KUBE-EXTERNAL-SERVICES \
+                     KUBE-FIREWALL KUBE-KUBELET-CANARY KUBE-PROXY-CANARY \
+                     KUBE-NODEPORTS; do
+          iptables -F "$chain" 2>/dev/null || true
+          iptables -X "$chain" 2>/dev/null || true
+        done
+      when: kube_chains.rc == 0
+      changed_when: true
+
+    # ── SSH hardening ──────────────────────────────────────────────
+    - name: Deploy hardened SSH configuration
+      ansible.builtin.template:
+        src: ../templates/sshd_config.j2
+        dest: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: "0600"
+        backup: true
+        validate: "sshd -t -f %s"
+      notify: reload sshd
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: restart docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+
+    - name: reload nftables
+      ansible.builtin.systemd:
+        name: nftables
+        state: reloaded
+
+    - name: reload sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: reloaded

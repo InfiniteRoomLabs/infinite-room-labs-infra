@@ -1,0 +1,40 @@
+---
+# Encrypted secrets -- encrypt with:
+#   ./run-ansible.sh vault encrypt inventory/group_vars/all/vault.yml
+#
+# Placeholders below. Replace with real values and encrypt before use.
+# All secrets here are written to Kubernetes Secrets in the irl namespace
+# by k8s-secrets.yml before Helm deploys. Helm values reference them via
+# existingSecret -- no plaintext secrets appear in values files.
+
+# PostgreSQL superuser password
+vault_pg_superuser_password: "CHANGEME_encrypt_this_file"
+
+# PostgreSQL per-database passwords
+vault_pg_passwords:
+  gitea: "CHANGEME_encrypt_this_file"
+  plane: "CHANGEME_encrypt_this_file"
+  vault: "CHANGEME_encrypt_this_file"
+  authentik: "CHANGEME_encrypt_this_file"
+  grafana: "CHANGEME_encrypt_this_file"
+
+# Gitea admin password
+vault_gitea_admin_password: "CHANGEME_encrypt_this_file"
+
+# Authentik bootstrap password
+vault_authentik_bootstrap_password: "CHANGEME_encrypt_this_file"
+
+# Authentik secret key (generate with: openssl rand -hex 50)
+vault_authentik_secret_key: "CHANGEME_encrypt_this_file"
+
+# Grafana admin password
+vault_grafana_admin_password: "CHANGEME_encrypt_this_file"
+
+# Plane secret key (for session signing -- must be unique to Plane)
+vault_plane_secret_key: "CHANGEME_encrypt_this_file"
+
+# Plane MinIO credentials (must be unique, not reused from PG)
+vault_plane_minio_password: "CHANGEME_encrypt_this_file"
+
+# Redis password (shared instance used by Authentik, Plane, Gitea)
+vault_redis_password: "CHANGEME_encrypt_this_file"

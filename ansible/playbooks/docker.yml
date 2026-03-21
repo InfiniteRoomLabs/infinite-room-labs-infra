@@ -1,0 +1,52 @@
+---
+# playbooks/docker.yml
+# =====================
+# Configures the Docker daemon for production use and sets up
+# shared networks and a prune cron job.
+#
+# NOTE: Docker is already installed (v29.3.0). This playbook
+# configures it properly -- it does not reinstall.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/docker.yml
+
+- name: Docker daemon configuration
+  hosts: homelab
+  become: true
+  tags: [phase2, docker]
+
+  tasks:
+    # ── Ensure Docker Compose plugin is installed ──────────────────
+    - name: Install Docker Compose plugin
+      ansible.builtin.apt:
+        name: docker-compose-plugin
+        state: present
+        update_cache: true
+
+    # ── Create shared Docker networks ──────────────────────────────
+    - name: Create shared Docker networks
+      community.docker.docker_network:
+        name: "{{ item.name }}"
+        driver: "{{ item.driver }}"
+        internal: "{{ item.internal }}"
+        state: present
+      loop: "{{ irl_docker_networks }}"
+
+    # ── Create compose base directory ──────────────────────────────
+    - name: Create compose base directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    # ── Docker prune cron ──────────────────────────────────────────
+    - name: Schedule weekly Docker prune (Saturday 4am)
+      ansible.builtin.cron:
+        name: "Docker system prune"
+        minute: "0"
+        hour: "4"
+        weekday: "6"
+        job: "/usr/bin/docker system prune -af --filter 'until=168h' > /dev/null 2>&1"
+        user: root

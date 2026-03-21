@@ -1,0 +1,80 @@
+---
+# playbooks/gitea.yml
+# ====================
+# Deploys Gitea as the self-hosted Git platform.
+# Mirrors all IRL GitHub repos after initial setup.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/gitea.yml
+
+- name: Gitea
+  hosts: homelab
+  become: true
+  tags: [phase3, gitea]
+
+  tasks:
+    - name: Create devplatform stack directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/devplatform"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Create Gitea config directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/devplatform/gitea-config"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Deploy Gitea app.ini
+      ansible.builtin.template:
+        src: ../templates/configs/gitea/app.ini.j2
+        dest: "{{ irl_compose_base }}/devplatform/gitea-config/app.ini"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Deploy devplatform stack compose file
+      ansible.builtin.template:
+        src: ../templates/compose/devplatform/docker-compose.yml.j2
+        dest: "{{ irl_compose_base }}/devplatform/docker-compose.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Wait for PostgreSQL to be reachable
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 5433
+        timeout: 60
+
+    - name: Start devplatform stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ irl_compose_base }}/devplatform"
+        state: present
+        pull: "always"
+
+    - name: Wait for Gitea to be ready
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:3000/api/v1/version"
+        status_code: 200
+      register: gitea_health
+      until: gitea_health.status == 200
+      retries: 30
+      delay: 5
+
+    - name: Display Gitea post-deploy instructions
+      ansible.builtin.debug:
+        msg: |
+          Gitea is running at http://127.0.0.1:3000
+          Caddy will proxy it at https://git.{{ irl_public_domain }}
+
+          Next steps:
+          1. Create admin user via the web UI (first registration)
+          2. Configure GitHub mirror for each IRL repo:
+             Settings > Mirror Settings > Mirror from GitHub

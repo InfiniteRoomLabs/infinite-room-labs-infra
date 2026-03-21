@@ -1,0 +1,29 @@
+# Managed by Ansible -- do not edit manually
+# Infinite Room Labs homelab reverse proxy
+#
+# All services are proxied through Caddy on the Tailscale interface.
+# Public services use ACME (Let's Encrypt) for valid TLS.
+# Internal services use Caddy's internal CA (self-signed).
+
+# Global options
+{
+	admin off
+}
+
+{% for svc_name, svc in irl_services.items() %}
+{% set domain = irl_internal_domain if svc.internal else irl_public_domain %}
+# {{ svc_name | capitalize }}{{ " (internal)" if svc.internal else "" }}
+{{ svc.subdomain }}.{{ domain }} {
+{% if svc.internal %}
+	tls internal
+{% endif %}
+	reverse_proxy localhost:{{ svc.port }}
+	log {
+		output file /var/log/caddy/{{ svc_name }}.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}
+
+{% endfor %}

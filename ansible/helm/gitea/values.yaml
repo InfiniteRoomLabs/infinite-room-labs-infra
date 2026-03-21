@@ -1,0 +1,99 @@
+# helm/gitea/values.yaml
+# =======================
+# Gitea official chart values for the IRL homelab.
+# Chart: gitea-charts/gitea
+# Docs: https://gitea.com/gitea/helm-chart
+#
+# Memory limit from irl_mem_limits.gitea: 512m
+# Domain: git.lab.infiniteroomlabs.cloud
+# NodePort 30300 -> Caddy proxies at https://git.lab.infiniteroomlabs.cloud
+
+image:
+  tag: "1.22"
+
+replicaCount: 1
+
+# Admin credentials from Kubernetes Secret (created by k8s-secrets.yml).
+admin:
+  existingSecret: gitea-admin
+
+service:
+  http:
+    type: NodePort
+    port: 3000
+    nodePort: 30300
+  ssh:
+    type: NodePort
+    port: 22
+    nodePort: 30022
+
+# Gitea app.ini configuration
+gitea:
+  config:
+    server:
+      DOMAIN: "git.lab.infiniteroomlabs.cloud"
+      ROOT_URL: "https://git.lab.infiniteroomlabs.cloud"
+      HTTP_PORT: 3000
+      SSH_DOMAIN: "git.lab.infiniteroomlabs.cloud"
+      SSH_PORT: 30022
+      LFS_START_SERVER: true
+    database:
+      DB_TYPE: postgres
+      HOST: "postgresql.irl.svc.cluster.local:5432"
+      NAME: gitea
+      USER: gitea
+      PASSWD:
+        valueFrom:
+          secretKeyRef:
+            name: postgres-gitea
+            key: password
+    cache:
+      ADAPTER: redis
+      HOST: "redis://redis-master.irl.svc.cluster.local:6379/0"
+    session:
+      PROVIDER: redis
+      PROVIDER_CONFIG: "redis://redis-master.irl.svc.cluster.local:6379/1"
+    queue:
+      TYPE: redis
+      CONN_STR: "redis://redis-master.irl.svc.cluster.local:6379/2"
+    lfs:
+      PATH: /data/gitea/lfs
+    security:
+      INSTALL_LOCK: true
+    service:
+      DISABLE_REGISTRATION: false
+      REQUIRE_SIGNIN_VIEW: false
+
+# Resource limits mapped from irl_mem_limits.gitea: 512m
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 10Gi
+
+# LFS on ZFS dataset
+extraVolumes:
+  - name: gitea-lfs
+    persistentVolumeClaim:
+      claimName: gitea-lfs-pvc
+
+extraVolumeMounts:
+  - name: gitea-lfs
+    mountPath: /data/gitea/lfs
+
+# Disable bundled PostgreSQL and Redis -- using dedicated charts.
+postgresql:
+  enabled: false
+
+postgresql-ha:
+  enabled: false
+
+redis-cluster:
+  enabled: false

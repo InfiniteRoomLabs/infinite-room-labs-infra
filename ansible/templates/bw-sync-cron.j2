@@ -1,0 +1,6 @@
+# Managed by Ansible -- do not edit
+# Secrets rotation compliance check (daily 6am)
+0 6 * * * root /usr/local/bin/bw-sync.sh --check-rotation >> /var/log/irl/secrets-rotation.log 2>&1
+
+# Secrets sync to targets (every 4 hours)
+0 */4 * * * root /usr/local/bin/bw-sync.sh --target both --quiet >> /var/log/irl/secrets-sync.log 2>&1

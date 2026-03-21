@@ -1,0 +1,56 @@
+# helm/ollama/values.yaml
+# ========================
+# Ollama Helm chart values for the IRL homelab.
+# Chart: ollama-helm/ollama
+# Repo: https://otwld.github.io/ollama-helm/
+# Docs: https://github.com/otwld/ollama-helm
+#
+# Memory limit from irl_mem_limits.ollama: 8g
+# Models stored on ZFS dataset: irl_zfs_mount/ollama-models
+# Access: ClusterIP only (agents access via kubectl port-forward or Tailscale)
+
+image:
+  tag: "0.4"
+
+# Pull models on startup. Maps to irl_ollama_models: [llama3.2, codellama]
+ollama:
+  models:
+    - llama3.2
+    - codellama
+
+# Resource limits mapped from irl_mem_limits.ollama: 8g
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "8Gi"
+    cpu: "8000m"
+
+# ZFS-backed model storage
+persistentVolume:
+  enabled: true
+  existingClaim: ollama-models-pvc
+
+extraVolumes:
+  - name: ollama-models
+    persistentVolumeClaim:
+      claimName: ollama-models-pvc
+
+extraVolumeMounts:
+  - name: ollama-models
+    mountPath: /root/.ollama/models
+
+# No GPU on HP Z600 -- CPU inference only.
+gpu:
+  enabled: false
+  type: ""
+
+service:
+  type: ClusterIP
+  port: 11434
+
+# Keep the Ollama API internal -- accessed via kubectl port-forward or
+# an MCP server container that exposes it on the Tailscale interface.
+ingress:
+  enabled: false

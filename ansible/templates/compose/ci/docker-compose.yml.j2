@@ -1,0 +1,41 @@
+# Managed by Ansible -- do not edit manually
+# CI stack: Jenkins
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    container_name: irl-jenkins
+    restart: unless-stopped
+    # NOTE: Do NOT run as root. Jenkins LTS runs as uid 1000 by default.
+    # Docker socket access requires the jenkins user to be in the docker
+    # group on the host, or use a socket proxy for defense-in-depth.
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - irl-frontend
+      - irl-backend
+    deploy:
+      resources:
+        limits:
+          memory: {{ irl_mem_limits.jenkins }}
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
+    healthcheck:
+      test: ["CMD", "curl", "-fsSL", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  jenkins_home:
+
+networks:
+  irl-frontend:
+    external: true
+  irl-backend:
+    external: true

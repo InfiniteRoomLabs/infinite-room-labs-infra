@@ -1,0 +1,160 @@
+# helm/monitoring/values.yaml
+# ============================
+# kube-prometheus-stack values for the IRL homelab.
+# Chart: prometheus-community/kube-prometheus-stack
+# Docs: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+#
+# Memory limits from irl_mem_limits:
+#   prometheus: 1g
+#   grafana: 512m
+#   alertmanager: 128m
+#
+# NodePorts:
+#   Grafana:      30001 -> https://grafana.lab.infiniteroomlabs.cloud (Caddy)
+#   Prometheus:   30090 -> https://metrics.internal.lab.infiniteroomlabs.cloud (Caddy, internal only)
+#   Alertmanager: 30093 -> https://alerts.internal.lab.infiniteroomlabs.cloud (Caddy, internal only)
+
+# ── Prometheus ────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    # Retention from host_vars: 30d / 15GB
+    retention: "30d"
+    retentionSize: "15GB"
+
+    # Resource limits mapped from irl_mem_limits.prometheus: 1g
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: zfs-local
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 15Gi
+          selector:
+            matchLabels:
+              app: prometheus
+
+    # Scrape all ServiceMonitors in the cluster regardless of namespace labels.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+  service:
+    type: NodePort
+    nodePort: 30090
+
+# ── Grafana ───────────────────────────────────────────────────────
+grafana:
+  # Admin credentials from Kubernetes Secret (created by k8s-secrets.yml).
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # Resource limits mapped from irl_mem_limits.grafana: 512m
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  service:
+    type: NodePort
+    nodePort: 30001
+
+  persistence:
+    enabled: true
+    storageClassName: zfs-local
+    size: 5Gi
+
+  # Pre-configure Loki datasource (Loki deployed separately via grafana/loki chart).
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.irl.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+
+  # Pre-built dashboards from the existing files/grafana/dashboards/ directory.
+  # These are deployed via ConfigMaps from helm-deploy.yml.
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: irl-homelab
+          orgId: 1
+          folder: "IRL Homelab"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/irl-homelab
+
+  dashboardsConfigMaps:
+    irl-homelab: grafana-dashboards
+
+# ── Alertmanager ──────────────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    # Resource limits mapped from irl_mem_limits.alertmanager: 128m
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "25m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"
+
+  service:
+    type: NodePort
+    nodePort: 30093
+
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "job"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: "null"
+      routes:
+        - match:
+            severity: critical
+          receiver: webhook-agents
+    receivers:
+      - name: "null"
+      - name: webhook-agents
+        webhook_configs:
+          - url: "http://127.0.0.1:9999/alert"
+            send_resolved: true
+
+# ── node_exporter ─────────────────────────────────────────────────
+nodeExporter:
+  enabled: true
+
+# ── kube-state-metrics ────────────────────────────────────────────
+kubeStateMetrics:
+  enabled: true
+
+# ── Disable components not needed on single-node ──────────────────
+kubeControllerManager:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false

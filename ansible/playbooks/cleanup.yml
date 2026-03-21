@@ -1,0 +1,176 @@
+---
+# playbooks/cleanup.yml
+# ======================
+# Removes legacy services, packages, and old compose stacks that are
+# no longer needed. Reclaims RAM and reduces attack surface.
+#
+# Chairman's decisions:
+# - Kill GNOME + xRDP (headless server)
+# - Kill Dataplicity (replace with Tailscale)
+# - Kill Snap (replace with direct installs)
+# - Kill old compose stacks (Traefik, Nextcloud, Pi-hole, etc.)
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/cleanup.yml
+
+- name: Cleanup old services and packages
+  hosts: homelab
+  become: true
+  tags: [phase0, cleanup]
+
+  tasks:
+    # ── Stop and disable unnecessary services ──────────────────────
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Stop and disable unnecessary services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop: "{{ irl_services_to_disable }}"
+      when: "item + '.service' in ansible_facts.services or item in ansible_facts.services"
+      failed_when: false
+
+    # ── Kill Dataplicity ───────────────────────────────────────────
+    - name: Check if Dataplicity supervisor config exists
+      ansible.builtin.stat:
+        path: /etc/supervisor/conf.d
+      register: supervisor_dir
+
+    - name: Stop Dataplicity via supervisor
+      ansible.builtin.command: supervisorctl stop all
+      when: supervisor_dir.stat.exists
+      changed_when: true
+      failed_when: false
+
+    - name: Disable supervisor service
+      ansible.builtin.systemd:
+        name: supervisor
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Lock the dataplicity user account
+      ansible.builtin.user:
+        name: dataplicity
+        password_lock: true
+        shell: /usr/sbin/nologin
+      failed_when: false
+
+    # ── Remove old Docker Compose stacks ───────────────────────────
+    # Docker Compose is not installed in the k3s architecture, so we use
+    # the Docker CLI directly if Docker is present on the server.
+    # The old stacks (Traefik, Nextcloud, etc.) predate our Ansible setup.
+    - name: Check for old compose stacks
+      ansible.builtin.stat:
+        path: "{{ item }}/docker-compose.yml"
+      loop: "{{ irl_old_compose_stacks }}"
+      register: old_stacks
+
+    - name: Check if Docker is installed
+      ansible.builtin.command: which docker
+      register: docker_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Stop old compose stacks (via docker compose if available)
+      ansible.builtin.command: >
+        docker compose -f {{ item.item }}/docker-compose.yml down --remove-orphans
+      loop: "{{ old_stacks.results }}"
+      when:
+        - item.stat.exists
+        - docker_installed.rc == 0
+      failed_when: false
+      changed_when: true
+
+    - name: Remove old compose stack directories
+      ansible.builtin.file:
+        path: "{{ item.item }}"
+        state: absent
+      loop: "{{ old_stacks.results }}"
+      when: item.stat.exists
+      failed_when: false
+
+    # ── Remove packages ────────────────────────────────────────────
+    - name: Remove unnecessary packages
+      ansible.builtin.apt:
+        name: "{{ irl_packages_to_remove }}"
+        state: absent
+        purge: true
+        autoremove: true
+      failed_when: false
+
+    # ── Remove Snap ────────────────────────────────────────────────
+    - name: Check if snap is installed
+      ansible.builtin.command: which snap
+      register: snap_check
+      changed_when: false
+      failed_when: false
+
+    - name: List snap packages
+      ansible.builtin.command: snap list
+      register: snap_list
+      when: snap_check.rc == 0
+      changed_when: false
+      failed_when: false
+
+    - name: Remove non-core snap packages
+      ansible.builtin.command: "snap remove {{ item }}"
+      loop:
+        - go
+        - k9s
+        - powershell-preview
+      when: snap_check.rc == 0
+      changed_when: true
+      failed_when: false
+
+    - name: Remove snapd after snaps are gone
+      ansible.builtin.apt:
+        name: snapd
+        state: absent
+        purge: true
+      when: snap_check.rc == 0
+
+    # ── Remove old Nginx (replaced by Caddy) ──────────────────────
+    - name: Stop and disable Nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove Nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: absent
+        purge: true
+        autoremove: true
+      failed_when: false
+
+    # ── Clean up old root home directory cruft ─────────────────────
+    - name: Remove old installer debs and tarballs from /root
+      ansible.builtin.file:
+        path: "/root/{{ item }}"
+        state: absent
+      loop:
+        - duf_0.8.1_linux_amd64.deb
+        - fahclient_7.6.21_amd64.deb
+        - mydumper_0.12.1-2.focal_amd64.deb
+        - pyload-cli-0.5.0-pip.deb
+        - vagrant_2.2.19_x86_64.deb
+        - code-server-4.9.1-linux-amd64.tar.gz
+        - gdrive-linux-x64
+        - helm-v3.11.0-linux-amd64.tar.gz
+        - xmr-stak-rx-linux-1.0.5.tar.gz
+      failed_when: false
+
+    # ── Reclaim disk space ─────────────────────────────────────────
+    - name: Clean apt cache
+      ansible.builtin.apt:
+        autoclean: true
+
+    - name: Remove orphaned packages
+      ansible.builtin.apt:
+        autoremove: true
+        purge: true

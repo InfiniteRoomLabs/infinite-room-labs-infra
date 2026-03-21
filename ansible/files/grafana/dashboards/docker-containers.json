@@ -1,0 +1,53 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Container CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\"irl-.*\"}[5m]) * 100",
+          "legendFormat": "{{ name }}"
+        }
+      ]
+    },
+    {
+      "title": "Container Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{name=~\"irl-.*\"}",
+          "legendFormat": "{{ name }}"
+        }
+      ]
+    },
+    {
+      "title": "Container Network I/O",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(container_network_receive_bytes_total{name=~\"irl-.*\"}[5m])",
+          "legendFormat": "RX {{ name }}"
+        },
+        {
+          "expr": "rate(container_network_transmit_bytes_total{name=~\"irl-.*\"}[5m])",
+          "legendFormat": "TX {{ name }}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["homelab", "docker"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "Docker Containers",
+  "uid": "irl-docker-containers"
+}

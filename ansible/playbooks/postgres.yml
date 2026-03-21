@@ -1,0 +1,85 @@
+---
+# playbooks/postgres.yml
+# =======================
+# Deploys PostgreSQL 16 as a Docker Compose stack and creates
+# databases for all IRL services.
+#
+# Old PostgreSQL 13 (host-installed) is stopped and disabled.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/postgres.yml
+
+- name: PostgreSQL 16
+  hosts: homelab
+  become: true
+  tags: [phase2, postgres]
+
+  tasks:
+    # ── Stop old PostgreSQL 13 ─────────────────────────────────────
+    - name: Stop and disable host PostgreSQL 13
+      ansible.builtin.systemd:
+        name: postgresql
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    # ── Deploy data stack ──────────────────────────────────────────
+    - name: Create data stack directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/data"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Deploy data stack compose file
+      ansible.builtin.template:
+        src: ../templates/compose/data/docker-compose.yml.j2
+        dest: "{{ irl_compose_base }}/data/docker-compose.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Start data stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ irl_compose_base }}/data"
+        state: present
+        pull: "always"
+      register: data_stack
+
+    # ── Wait for PostgreSQL to be healthy ──────────────────────────
+    - name: Wait for PostgreSQL to accept connections
+      ansible.builtin.command: >
+        docker exec irl-postgres
+        pg_isready -U postgres
+      register: pg_ready
+      until: pg_ready.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    # ── Create databases ───────────────────────────────────────────
+    - name: Create service databases
+      community.postgresql.postgresql_db:
+        name: "{{ item.name }}"
+        state: present
+        login_host: "127.0.0.1"
+        login_port: "5433"
+        login_user: "postgres"
+        login_password: "{{ vault_pg_superuser_password }}"
+      loop: "{{ irl_pg_databases }}"
+
+    - name: Create service database users
+      community.postgresql.postgresql_user:
+        name: "{{ item.name }}"
+        password: "{{ vault_pg_passwords[item.name] }}"
+        db: "{{ item.name }}"
+        priv: "ALL"
+        state: present
+        login_host: "127.0.0.1"
+        login_port: "5433"
+        login_user: "postgres"
+        login_password: "{{ vault_pg_superuser_password }}"
+      loop: "{{ irl_pg_databases }}"
+      no_log: true

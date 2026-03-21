@@ -1,0 +1,62 @@
+---
+# playbooks/authentik.yml
+# ========================
+# Deploys Authentik SSO provider as its own Docker Compose stack.
+# Provides OIDC authentication for Gitea, Plane, Grafana, Vault, Jenkins.
+#
+# Requires: data stack (PostgreSQL + Redis) running on irl-backend network.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/authentik.yml
+
+- name: Authentik SSO
+  hosts: homelab
+  become: true
+  tags: [phase3, authentik]
+
+  tasks:
+    - name: Create Authentik stack directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/authentik"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Deploy Authentik compose file
+      ansible.builtin.template:
+        src: ../templates/compose/authentik/docker-compose.yml.j2
+        dest: "{{ irl_compose_base }}/authentik/docker-compose.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Wait for PostgreSQL to be reachable
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 5433
+        timeout: 60
+
+    - name: Start Authentik stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ irl_compose_base }}/authentik"
+        state: present
+        pull: "always"
+
+    - name: Display Authentik post-deploy instructions
+      ansible.builtin.debug:
+        msg: |
+          Authentik is starting up.
+          Access at https://auth.{{ irl_public_domain }}
+
+          Default admin login:
+          - Username: akadmin
+          - Password: (set via AUTHENTIK_BOOTSTRAP_PASSWORD env var)
+
+          After login, create OIDC providers for:
+          1. Gitea (git.{{ irl_public_domain }})
+          2. Grafana (grafana.{{ irl_public_domain }})
+          3. Vault (vault.{{ irl_public_domain }})
+          4. Jenkins (ci.{{ irl_public_domain }})
+          5. Plane (plane.{{ irl_public_domain }})

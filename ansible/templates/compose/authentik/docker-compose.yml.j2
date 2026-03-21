@@ -1,0 +1,74 @@
+# Managed by Ansible -- do not edit manually
+# Authentik SSO stack
+# Depends on: data stack (PostgreSQL + Redis on irl-backend network)
+
+services:
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.6
+    container_name: irl-authentik-server
+    restart: unless-stopped
+    environment:
+      AUTHENTIK_SECRET_KEY: "{{ vault_authentik_secret_key }}"
+      AUTHENTIK_POSTGRESQL__HOST: "irl-postgres"
+      AUTHENTIK_POSTGRESQL__PORT: "5432"
+      AUTHENTIK_POSTGRESQL__NAME: "authentik"
+      AUTHENTIK_POSTGRESQL__USER: "authentik"
+      AUTHENTIK_POSTGRESQL__PASSWORD: "{{ vault_pg_passwords.authentik }}"
+      AUTHENTIK_REDIS__HOST: "irl-redis"
+      AUTHENTIK_REDIS__PORT: "6379"
+      AUTHENTIK_REDIS__DB: "2"
+      AUTHENTIK_REDIS__PASSWORD: "{{ vault_redis_password }}"
+      AUTHENTIK_BOOTSTRAP_PASSWORD: "{{ vault_authentik_bootstrap_password }}"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9443:9443"
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    networks:
+      - irl-frontend
+      - irl-backend
+    deploy:
+      resources:
+        limits:
+          memory: {{ irl_mem_limits.authentik_server }}
+    command: server
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.6
+    container_name: irl-authentik-worker
+    restart: unless-stopped
+    environment:
+      AUTHENTIK_SECRET_KEY: "{{ vault_authentik_secret_key }}"
+      AUTHENTIK_POSTGRESQL__HOST: "irl-postgres"
+      AUTHENTIK_POSTGRESQL__PORT: "5432"
+      AUTHENTIK_POSTGRESQL__NAME: "authentik"
+      AUTHENTIK_POSTGRESQL__USER: "authentik"
+      AUTHENTIK_POSTGRESQL__PASSWORD: "{{ vault_pg_passwords.authentik }}"
+      AUTHENTIK_REDIS__HOST: "irl-redis"
+      AUTHENTIK_REDIS__PORT: "6379"
+      AUTHENTIK_REDIS__DB: "2"
+      AUTHENTIK_REDIS__PASSWORD: "{{ vault_redis_password }}"
+    networks:
+      - irl-backend
+    deploy:
+      resources:
+        limits:
+          memory: {{ irl_mem_limits.authentik_worker }}
+    command: worker
+
+volumes:
+  authentik_media:
+  authentik_templates:
+
+networks:
+  irl-backend:
+    external: true
+  irl-frontend:
+    external: true

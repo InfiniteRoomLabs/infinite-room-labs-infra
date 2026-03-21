@@ -1,0 +1,46 @@
+; Managed by Ansible -- do not edit manually
+; Gitea application configuration
+
+[server]
+DOMAIN = git.{{ irl_public_domain }}
+ROOT_URL = https://git.{{ irl_public_domain }}/
+HTTP_PORT = 3000
+SSH_DOMAIN = git.{{ irl_public_domain }}
+SSH_PORT = 2222
+LFS_START_SERVER = true
+LFS_JWT_SECRET =
+OFFLINE_MODE = false
+
+; [database] -- configured via GITEA__database__* env vars in compose.
+; Do NOT duplicate here; Gitea env vars take precedence and having two
+; sources of truth causes silent drift.
+
+[repository]
+ROOT = /data/gitea/repositories
+DEFAULT_BRANCH = main
+ENABLE_PUSH_CREATE_USER = true
+
+[lfs]
+PATH = /data/lfs
+
+[service]
+DISABLE_REGISTRATION = true
+REQUIRE_SIGNIN_VIEW = false
+ENABLE_NOTIFY_MAIL = false
+
+[log]
+MODE = console
+LEVEL = info
+
+[metrics]
+ENABLED = true
+
+[mirror]
+DEFAULT_INTERVAL = 8h
+MIN_INTERVAL = 1h
+
+[packages]
+ENABLED = true
+
+[actions]
+ENABLED = false

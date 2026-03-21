@@ -1,0 +1,61 @@
+#!/usr/sbin/nft -f
+# Managed by Ansible -- do not edit manually
+# Infinite Room Labs homelab firewall (nftables)
+#
+# Policy: default deny inbound, allow established, allow specific ports.
+# Tailscale traffic is always allowed (interface-based).
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        # Allow loopback
+        iif "lo" accept
+
+        # Allow established/related connections
+        ct state established,related accept
+
+        # Drop invalid packets
+        ct state invalid drop
+
+        # Allow ICMP (ping, path MTU discovery)
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+
+        # Allow trusted internal interfaces unconditionally
+        iifname "tailscale0" accept
+        iifname "cni0" accept
+        iifname "flannel.1" accept
+
+        # Allow specific TCP ports from any interface
+{% for port in irl_firewall_allowed_tcp_ports %}
+        tcp dport {{ port }} accept
+{% endfor %}
+
+        # Log dropped packets (rate limited)
+        limit rate 5/minute burst 5 packets log prefix "nftables-dropped: " level info
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy accept;
+
+        # Docker manages its own forwarding rules via iptables.
+        # nftables iifname does NOT support wildcards ("docker*" matches
+        # nothing). Setting policy accept and letting Docker's iptables
+        # DOCKER-USER chain handle forwarding is the correct coexistence
+        # pattern. The input chain still default-denies inbound traffic.
+
+        ct state established,related accept
+
+        # Allow Tailscale forwarding if subnet routing is enabled later
+        iifname "tailscale0" accept
+        oifname "tailscale0" accept
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+        # All outbound traffic is allowed
+    }
+}

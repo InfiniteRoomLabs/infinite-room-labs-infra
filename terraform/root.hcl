@@ -45,6 +45,10 @@ generate "providers" {
           source  = "docker/docker"
           version = "~> 0.5"
         }
+        tailscale = {
+          source  = "tailscale/tailscale"
+          version = "~> 0.18"
+        }
       }
     }
   EOF

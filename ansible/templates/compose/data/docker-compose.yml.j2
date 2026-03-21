@@ -1,0 +1,70 @@
+# Managed by Ansible -- do not edit manually
+# Data stack: PostgreSQL 16 + Redis
+
+services:
+  postgres:
+    image: postgres:{{ irl_pg_version }}
+    container_name: irl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: "{{ vault_pg_superuser_password }}"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - irl-backend
+    deploy:
+      resources:
+        limits:
+          memory: {{ irl_mem_limits.postgres }}
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers={{ irl_pg_shared_buffers }}"
+      - "-c"
+      - "effective_cache_size={{ irl_pg_effective_cache_size }}"
+      - "-c"
+      - "work_mem={{ irl_pg_work_mem }}"
+      - "-c"
+      - "maintenance_work_mem={{ irl_pg_maintenance_work_mem }}"
+      - "-c"
+      - "max_connections={{ irl_pg_max_connections }}"
+      - "-c"
+      - "password_encryption=scram-sha-256"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: irl-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - irl-backend
+    deploy:
+      resources:
+        limits:
+          memory: {{ irl_mem_limits.redis }}
+    command: redis-server --requirepass {{ vault_redis_password }} --maxmemory 200mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "{{ vault_redis_password }}", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  irl-backend:
+    external: true

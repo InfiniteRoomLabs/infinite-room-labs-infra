@@ -1,0 +1,49 @@
+# Operator Guide -- Infinite Room Labs Homelab
+
+## Quick Reference
+
+| Task | Command |
+|------|---------|
+| Check all services | `/usr/local/bin/irl-health-check` |
+| View running containers | `docker ps --format 'table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}\t{{ '{{' }}.Ports{{ '}}' }}'` |
+| View compose stack | `cd {{ irl_compose_base }}/{stack} && docker compose ps` |
+| Restart a stack | `cd {{ irl_compose_base }}/{stack} && docker compose restart` |
+| View logs | `cd {{ irl_compose_base }}/{stack} && docker compose logs -f --tail=100` |
+| ZFS pool status | `sudo zpool status {{ irl_zfs_pool }}` |
+| ZFS snapshots | `sudo zfs list -t snapshot` |
+| Firewall rules | `sudo nft list ruleset` |
+| Tailscale status | `tailscale status` |
+
+## Service URLs
+
+{% for svc_name, svc in irl_services.items() %}
+{% if not svc.internal %}
+- **{{ svc_name | capitalize }}**: https://{{ svc.subdomain }}.{{ irl_public_domain }}
+{% endif %}
+{% endfor %}
+
+## SOPs
+
+### Deploy a New Service
+1. Add compose template in `ansible/templates/compose/{stack}/`
+2. Add playbook in `ansible/playbooks/`
+3. Add to `ansible/site.yml`
+4. Run: `./ansible/run-ansible.sh playbook playbooks/{new-service}.yml`
+
+### Restart a Service
+```bash
+cd {{ irl_compose_base }}/{stack}
+sudo docker compose restart {service}
+```
+
+### Check Disk Usage
+```bash
+df -h /
+sudo zfs list
+sudo zpool list
+```
+
+## Emergency Contacts
+
+- **Ansible repo**: laptop `~/projects/infinite-room-labs/infinite-room-labs-infra/ansible/`
+- **All changes go through Ansible** -- do not edit managed files directly

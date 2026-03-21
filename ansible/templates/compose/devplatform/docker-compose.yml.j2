@@ -1,0 +1,43 @@
+# Managed by Ansible -- do not edit manually
+# Dev platform stack: Gitea
+
+services:
+  gitea:
+    image: gitea/gitea:1.22
+    container_name: irl-gitea
+    restart: unless-stopped
+    environment:
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=irl-postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD={{ vault_pg_passwords.gitea }}
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:2222:22"
+    volumes:
+      - gitea_data:/data
+      - ./gitea-config/app.ini:/data/gitea/conf/app.ini:ro
+      - {{ irl_zfs_mount }}/gitea-lfs:/data/lfs
+    networks:
+      - irl-frontend
+      - irl-backend
+    deploy:
+      resources:
+        limits:
+          memory: {{ irl_mem_limits.gitea }}
+    healthcheck:
+      test: ["CMD", "curl", "-fsSL", "http://localhost:3000/api/v1/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  gitea_data:
+
+networks:
+  irl-frontend:
+    external: true
+  irl-backend:
+    external: true

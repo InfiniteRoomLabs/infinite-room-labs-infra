@@ -1,0 +1,42 @@
+# helm/redis/values.yaml
+# =======================
+# Bitnami Redis chart values for the IRL homelab.
+# Chart: bitnami/redis
+# Docs: https://github.com/bitnami/charts/tree/main/bitnami/redis
+#
+# Memory limit from irl_mem_limits.redis: 256m
+# Shared by: Authentik, Plane
+# Secret: redis-auth (created by k8s-secrets.yml)
+
+architecture: standalone
+
+auth:
+  enabled: true
+  existingSecret: redis-auth
+  existingSecretPasswordKey: redis-password
+
+master:
+  # Resource limits mapped from irl_mem_limits.redis: 256m
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+  service:
+    type: ClusterIP
+
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 2Gi
+
+# Disable replicas -- single-node homelab.
+replica:
+  replicaCount: 0
+
+# Disable metrics -- covered by kube-prometheus-stack redis_exporter if needed.
+metrics:
+  enabled: false

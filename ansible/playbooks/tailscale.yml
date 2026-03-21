@@ -1,0 +1,82 @@
+---
+# playbooks/tailscale.yml
+# ========================
+# Installs and configures Tailscale mesh network on the homelab server.
+# After this playbook runs, the server is accessible via Tailscale IP
+# and the inventory should be updated to use it.
+#
+# Prerequisites:
+# - Tailscale account exists
+# - Operator will need to authenticate interactively on first run
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/tailscale.yml
+
+- name: Tailscale mesh network
+  hosts: homelab
+  become: true
+  tags: [phase1, tailscale]
+
+  tasks:
+    # ── Install Tailscale ──────────────────────────────────────────
+    - name: Check if Tailscale is already installed
+      ansible.builtin.command: which tailscale
+      register: tailscale_check
+      changed_when: false
+      failed_when: false
+
+    - name: Add Tailscale GPG key
+      ansible.builtin.apt_key:
+        url: "https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg"
+        keyring: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        state: present
+      when: tailscale_check.rc != 0
+
+    - name: Add Tailscale APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian bookworm main"
+        filename: tailscale
+        state: present
+      when: tailscale_check.rc != 0
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: true
+      when: tailscale_check.rc != 0
+
+    # ── Configure Tailscale ────────────────────────────────────────
+    - name: Enable and start tailscaled
+      ansible.builtin.systemd:
+        name: tailscaled
+        state: started
+        enabled: true
+
+    - name: Check Tailscale status
+      ansible.builtin.command: tailscale status --json
+      register: ts_status
+      changed_when: false
+      failed_when: false
+
+    - name: Bring Tailscale up with hostname
+      ansible.builtin.command: >
+        tailscale up
+        --hostname={{ irl_tailscale_hostname }}
+        --accept-dns
+      when: >
+        ts_status.rc != 0 or
+        (ts_status.stdout | from_json).BackendState != "Running"
+      changed_when: true
+      register: ts_up
+
+    - name: Display Tailscale IP
+      ansible.builtin.command: tailscale ip -4
+      register: ts_ip
+      changed_when: false
+
+    - name: Report Tailscale status
+      ansible.builtin.debug:
+        msg: >
+          Tailscale is running. Server Tailscale IPv4: {{ ts_ip.stdout }}.
+          Update inventory/hosts.ini with this IP for future runs.

@@ -1,0 +1,72 @@
+# helm/postgres/values.yaml
+# ==========================
+# Bitnami PostgreSQL 16 chart values for the IRL homelab.
+# Chart: bitnami/postgresql
+# Docs: https://github.com/bitnami/charts/tree/main/bitnami/postgresql
+#
+# Memory limit from irl_mem_limits.postgres: 2g
+# Secrets come from k8s-secrets.yml (existingSecret pattern).
+
+image:
+  tag: "16"
+
+auth:
+  # Superuser password from Kubernetes Secret (created by k8s-secrets.yml).
+  existingSecret: postgres-superuser
+  secretKeys:
+    adminPasswordKey: postgres-password
+
+primary:
+  # Resource limits mapped from irl_mem_limits.postgres: 2g
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+
+  # PostgreSQL tuning from host_vars/homelab.yml
+  extendedConfiguration: |
+    shared_buffers = 512MB
+    effective_cache_size = 1536MB
+    work_mem = 16MB
+    maintenance_work_mem = 128MB
+    max_connections = 100
+
+  # NodePort so Caddy / Ansible can reach PG from host if needed
+  service:
+    type: NodePort
+    nodePorts:
+      postgresql: "30432"
+
+  persistence:
+    enabled: true
+    storageClass: zfs-local
+    size: 50Gi
+    existingClaim: ""
+
+  # PVC selector to bind to the pv-postgres-data PV created by k3s.yml
+  persistentVolumeClaimRetentionPolicy:
+    enabled: true
+    whenDeleted: Retain
+    whenScaled: Retain
+
+# Create per-service databases and users after initial setup.
+# These are created by helm-deploy.yml using community.postgresql after chart install.
+initdb:
+  scripts:
+    create_databases.sql: |
+      CREATE DATABASE gitea;
+      CREATE DATABASE plane;
+      CREATE DATABASE vault;
+      CREATE DATABASE authentik;
+      CREATE DATABASE grafana;
+
+# Disable replication -- single-node homelab.
+replication:
+  enabled: false
+
+# Disable metrics sidecar -- kube-prometheus-stack scrapes via postgres_exporter separately.
+metrics:
+  enabled: false

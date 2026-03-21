@@ -1,0 +1,15 @@
+---
+# Homelab group-specific variables
+# =================================
+# Applied to all hosts in the [homelab] group.
+
+# Firewall (nftables)
+irl_firewall_allowed_tcp_ports:
+  - 22     # SSH
+  - 80     # HTTP (Caddy)
+  - 443    # HTTPS (Caddy)
+  - 6443   # k3s API server
+  - 41641  # Tailscale direct connections
+
+# NFS -- restrict to specific hosts after Tailscale is up
+irl_nfs_allowed_subnet: "192.168.2.0/24"

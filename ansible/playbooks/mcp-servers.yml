@@ -1,0 +1,43 @@
+---
+# playbooks/mcp-servers.yml
+# ==========================
+# Placeholder for MCP server deployment in k3s.
+# MCP servers provide tool interfaces for Claude Code agents to
+# interact with homelab services (Gitea, Prometheus, Vault, etc.).
+#
+# MCP servers will be deployed as Kubernetes Deployments in the irl namespace.
+# They access cluster services via ClusterIP DNS (e.g., gitea.irl.svc.cluster.local).
+# Agents access MCP servers via kubectl port-forward over Tailscale.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/mcp-servers.yml
+
+- name: MCP server containers
+  hosts: homelab
+  become: true
+  tags: [phase5, mcp]
+
+  vars:
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    k3s_namespace: "{{ irl_k3s_namespace }}"
+
+  tasks:
+    - name: MCP servers placeholder notice
+      ansible.builtin.debug:
+        msg: |
+          MCP server implementations are pending development.
+          When ready, each will be deployed as a Kubernetes Deployment in
+          namespace {{ k3s_namespace }} and accessed via kubectl port-forward.
+
+          Planned MCP servers:
+          - mcp-gitea: Repo management, PRs, issues
+            Target: gitea.{{ k3s_namespace }}.svc.cluster.local:3000
+          - mcp-prometheus: Metrics queries
+            Target: kube-prometheus-stack-prometheus.{{ k3s_namespace }}.svc.cluster.local:9090
+          - mcp-vault: Secret retrieval (read-only)
+            Target: vault.{{ k3s_namespace }}.svc.cluster.local:8200
+          - mcp-postgresql: Database queries
+            Target: postgresql.{{ k3s_namespace }}.svc.cluster.local:5432
+
+          Ollama is accessible via:
+            kubectl port-forward -n {{ k3s_namespace }} svc/ollama 11434:11434

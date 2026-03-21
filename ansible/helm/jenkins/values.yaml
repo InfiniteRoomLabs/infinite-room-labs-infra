@@ -1,0 +1,72 @@
+# helm/jenkins/values.yaml
+# =========================
+# Jenkins official chart values for the IRL homelab.
+# Chart: jenkins/jenkins
+# Docs: https://github.com/jenkinsci/helm-charts/tree/main/charts/jenkins
+#
+# Memory limit from irl_mem_limits.jenkins: 2g
+# Domain: ci.lab.infiniteroomlabs.cloud
+# NodePort 30080 -> Caddy proxies at https://ci.lab.infiniteroomlabs.cloud
+
+controller:
+  image:
+    tag: "2.479"
+
+  # Jenkins needs initial admin password. The chart auto-generates one and stores
+  # it in a Secret named "{release}-jenkins". Retrieve with:
+  #   kubectl get secret irl-jenkins -n irl -o jsonpath='{.data.jenkins-admin-password}' | base64 -d
+  admin:
+    existingSecret: ""  # Leave empty to auto-generate; copy to Jenkins after first run.
+
+  # Resource limits mapped from irl_mem_limits.jenkins: 2g
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+
+  javaOpts: "-Xms512m -Xmx1g -XX:MaxMetaspaceSize=256m"
+
+  service:
+    type: NodePort
+    nodePort: 30080
+
+  # JCasC -- Jenkins Configuration as Code
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      gitea-integration: |
+        jenkins:
+          systemMessage: "IRL Jenkins -- managed by Ansible/Helm"
+        unclassified:
+          giteaServers:
+            servers:
+              - displayName: "IRL Gitea"
+                serverUrl: "https://git.lab.infiniteroomlabs.cloud"
+                credentialsId: "gitea-access-token"
+
+  installPlugins:
+    - kubernetes:latest
+    - workflow-aggregator:latest
+    - git:latest
+    - gitea:latest
+    - configuration-as-code:latest
+    - credentials-binding:latest
+    - blueocean:latest
+    - pipeline-stage-view:latest
+
+  persistence:
+    enabled: true
+    storageClass: zfs-local
+    size: 20Gi
+
+# Disable Kubernetes plugin built-in agent -- we'll add agents manually.
+agent:
+  enabled: false
+
+# Disable bundled RBAC that assumes ClusterAdmin -- we use namespaced RBAC.
+rbac:
+  create: true
+  readSecrets: false

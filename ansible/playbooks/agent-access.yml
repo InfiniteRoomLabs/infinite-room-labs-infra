@@ -1,0 +1,41 @@
+---
+# playbooks/agent-access.yml
+# ============================
+# Deploys CLAUDE.md files to root and wes user home directories
+# on the server. These provide context to any Claude Code agent
+# that SSHes into the server.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/agent-access.yml
+
+- name: Agent access (CLAUDE.md deployment)
+  hosts: homelab
+  become: true
+  tags: [phase5, agents]
+
+  tasks:
+    # ── Root CLAUDE.md ─────────────────────────────────────────────
+    - name: Ensure /root/.claude directory exists
+      ansible.builtin.file:
+        path: /root/.claude
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Deploy root CLAUDE.md
+      ansible.builtin.template:
+        src: ../templates/claude-md/root-claude.md.j2
+        dest: /root/.claude/CLAUDE.md
+        owner: root
+        group: root
+        mode: "0600"
+
+    # ── Wes CLAUDE.md ──────────────────────────────────────────────
+    - name: Deploy wes CLAUDE.md
+      ansible.builtin.template:
+        src: ../templates/claude-md/wes-claude.md.j2
+        dest: "/home/{{ irl_admin_user }}/.claude/CLAUDE.md"
+        owner: "{{ irl_admin_user }}"
+        group: "{{ irl_admin_user }}"
+        mode: "0600"

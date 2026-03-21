@@ -1,0 +1,92 @@
+---
+# site.yml -- Master orchestrator for Infinite Room Labs homelab
+# ================================================================
+# Imports playbooks in dependency order. Run the full stack:
+#   ./run-ansible.sh playbook site.yml
+#
+# Or run individual phases:
+#   ./run-ansible.sh playbook site.yml --tags phase0
+#   ./run-ansible.sh playbook playbooks/security-hardening.yml
+#
+# Architecture (as of 2026-03-20):
+#   Phase 0-1: Ansible manages OS hardening, users, Tailscale, Caddy, ZFS.
+#              Docker is NOT installed -- services run in k3s, not Compose.
+#   Phase 2+:  k3s (single-node) + Helm charts for all services.
+#              Caddy (bare-metal) proxies NodePort services. Traefik disabled.
+
+# ── Phase 0: Security + Cleanup ─────────────────────────────────────
+# ORDERING: users MUST run before security-hardening because sshd_config
+# sets AllowUsers + disables root login. If the admin user doesn't exist
+# yet when sshd reloads, SSH becomes inaccessible.
+- name: "Phase 0: User setup"
+  ansible.builtin.import_playbook: playbooks/users.yml
+  tags: [phase0, users]
+
+- name: "Phase 0: Security hardening"
+  ansible.builtin.import_playbook: playbooks/security-hardening.yml
+  tags: [phase0, security]
+
+- name: "Phase 0: Cleanup old services and packages"
+  ansible.builtin.import_playbook: playbooks/cleanup.yml
+  tags: [phase0, cleanup]
+
+- name: "Phase 0: Credential rotation"
+  ansible.builtin.import_playbook: playbooks/credentials-rotation.yml
+  tags: [phase0, credentials]
+
+# ── Phase 1: Network Foundation ──────────────────────────────────────
+- name: "Phase 1: Tailscale mesh network"
+  ansible.builtin.import_playbook: playbooks/tailscale.yml
+  tags: [phase1, tailscale]
+
+- name: "Phase 1: Caddy reverse proxy"
+  ansible.builtin.import_playbook: playbooks/caddy.yml
+  tags: [phase1, caddy]
+
+- name: "Phase 1: ZFS datasets and snapshots"
+  ansible.builtin.import_playbook: playbooks/zfs.yml
+  tags: [phase1, zfs]
+
+# ── Phase 2: k3s + Core Data ─────────────────────────────────────────
+# Replaces: docker.yml, postgres.yml, vault.yml (Compose-based)
+# k3s installs as a systemd service. Traefik is disabled (Caddy handles ingress).
+# Kubernetes Secrets are provisioned from Ansible Vault before Helm deploys.
+- name: "Phase 2: k3s installation"
+  ansible.builtin.import_playbook: playbooks/k3s.yml
+  tags: [phase2, k3s]
+
+- name: "Phase 2: Kubernetes Secrets from Ansible Vault"
+  ansible.builtin.import_playbook: playbooks/k8s-secrets.yml
+  tags: [phase2, k8s-secrets]
+
+# ── Phase 2-5: Helm chart deployments ────────────────────────────────
+# A single playbook handles all service deployments via Helm.
+# Use --tags to deploy individual services:
+#   --tags postgres   (Phase 2)
+#   --tags redis      (Phase 2)
+#   --tags vault      (Phase 2)
+#   --tags gitea      (Phase 3)
+#   --tags authentik  (Phase 3)
+#   --tags plane      (Phase 3)
+#   --tags monitoring (Phase 3)
+#   --tags loki       (Phase 3)
+#   --tags jenkins    (Phase 4)
+#   --tags ollama     (Phase 5)
+- name: "Phase 2-5: Helm service deployments"
+  ansible.builtin.import_playbook: playbooks/helm-deploy.yml
+  tags: [phase2, phase3, phase4, phase5, helm]
+
+# ── Phase 5: Agent Integration ───────────────────────────────────────
+# These remain Ansible-managed (not Helm) -- they configure the OS layer,
+# not containerized services.
+- name: "Phase 5: Agent access (CLAUDE.md deployment)"
+  ansible.builtin.import_playbook: playbooks/agent-access.yml
+  tags: [phase5, agents]
+
+- name: "Phase 5: MCP server containers"
+  ansible.builtin.import_playbook: playbooks/mcp-servers.yml
+  tags: [phase5, mcp]
+
+- name: "Phase 5: Agent cron jobs"
+  ansible.builtin.import_playbook: playbooks/cron-agents.yml
+  tags: [phase5, cron]

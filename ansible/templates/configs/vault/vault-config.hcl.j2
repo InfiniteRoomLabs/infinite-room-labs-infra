@@ -1,0 +1,20 @@
+# Managed by Ansible -- do not edit manually
+# HashiCorp Vault server configuration
+
+storage "file" {
+  path = "/vault/data"
+}
+
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = true
+  # TLS is terminated by Caddy reverse proxy
+}
+
+api_addr = "http://127.0.0.1:8200"
+
+ui = true
+
+disable_mlock = false
+
+log_level = "info"

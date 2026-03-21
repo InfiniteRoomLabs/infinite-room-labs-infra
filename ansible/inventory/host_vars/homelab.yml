@@ -1,0 +1,47 @@
+---
+# Host-specific variables for the homelab server (HP Z600)
+# ========================================================
+# Resource-scaled parameters based on 40GB RAM, 24 CPU threads.
+
+# ── Resource budgets ─────────────────────────────────────────────────
+# Total RAM: 40GB. Reserve 4GB for OS + overhead.
+irl_total_ram_gb: 40
+irl_reserved_ram_gb: 4
+
+# ── Per-service memory limits (Docker --memory) ─────────────────────
+irl_mem_limits:
+  postgres: "2g"
+  redis: "256m"
+  gitea: "512m"
+  plane_api: "1g"
+  plane_worker: "512m"
+  plane_web: "512m"
+  plane_minio: "512m"
+  vault: "256m"
+  authentik_server: "1g"
+  authentik_worker: "512m"
+  grafana: "512m"
+  prometheus: "1g"
+  loki: "512m"
+  alertmanager: "128m"
+  jenkins: "2g"
+  ollama: "8g"
+
+# ── PostgreSQL tuning (based on 2GB allocation) ─────────────────────
+irl_pg_shared_buffers: "512MB"
+irl_pg_effective_cache_size: "1536MB"
+irl_pg_work_mem: "16MB"
+irl_pg_maintenance_work_mem: "128MB"
+irl_pg_max_connections: 100
+
+# ── Prometheus retention ─────────────────────────────────────────────
+irl_prometheus_retention: "30d"
+irl_prometheus_retention_size: "15GB"
+
+# ── Loki retention ──────────────────────────────────────────────────
+irl_loki_retention: "30d"
+
+# ── Ollama ──────────────────────────────────────────────────────────
+irl_ollama_models:
+  - "llama3.2"
+  - "codellama"

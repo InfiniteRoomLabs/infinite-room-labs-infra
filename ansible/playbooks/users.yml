@@ -1,0 +1,68 @@
+---
+# playbooks/users.yml
+# ====================
+# Sets up the wes admin user with sudo, SSH keys, and Docker group.
+# Root SSH login is disabled after this (handled in security-hardening).
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/users.yml
+
+- name: User setup
+  hosts: homelab
+  become: true
+  tags: [phase0, users]
+
+  tasks:
+    # ── Pre-flight check ───────────────────────────────────────────
+    - name: Validate SSH public key is not a placeholder
+      ansible.builtin.assert:
+        that:
+          - "'PLACEHOLDER' not in irl_admin_ssh_pubkey"
+        fail_msg: >
+          STOP: irl_admin_ssh_pubkey in group_vars/all/main.yml still contains
+          a placeholder. Replace it with your real SSH public key before running
+          this playbook, or you WILL be locked out of the server.
+
+    # ── Create/configure admin user ────────────────────────────────
+    - name: Ensure admin user exists
+      ansible.builtin.user:
+        name: "{{ irl_admin_user }}"
+        groups:
+          - sudo
+          - docker
+        append: true
+        shell: /bin/bash
+        create_home: true
+        state: present
+
+    - name: Set authorized SSH key for admin user
+      ansible.posix.authorized_key:
+        user: "{{ irl_admin_user }}"
+        key: "{{ irl_admin_ssh_pubkey }}"
+        state: present
+        exclusive: false
+
+    - name: Ensure passwordless sudo for admin user
+      ansible.builtin.lineinfile:
+        path: "/etc/sudoers.d/{{ irl_admin_user }}"
+        line: "{{ irl_admin_user }} ALL=(ALL) NOPASSWD:ALL"
+        create: true
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    # ── Set up admin user home directory ───────────────────────────
+    - name: Create .claude directory for admin user
+      ansible.builtin.file:
+        path: "/home/{{ irl_admin_user }}/.claude"
+        state: directory
+        owner: "{{ irl_admin_user }}"
+        group: "{{ irl_admin_user }}"
+        mode: "0700"
+
+    - name: Create .ssh directory for admin user
+      ansible.builtin.file:
+        path: "/home/{{ irl_admin_user }}/.ssh"
+        state: directory
+        owner: "{{ irl_admin_user }}"
+        group: "{{ irl_admin_user }}"
+        mode: "0700"

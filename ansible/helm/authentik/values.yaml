@@ -1,0 +1,80 @@
+# helm/authentik/values.yaml
+# ===========================
+# Authentik SSO chart values for the IRL homelab.
+# Chart: goauthentik/authentik
+# Docs: https://docs.goauthentik.io/docs/installation/helm
+#
+# Memory limits from irl_mem_limits:
+#   authentik_server: 1g
+#   authentik_worker: 512m
+# Domain: auth.lab.infiniteroomlabs.cloud
+# NodePort 30900 -> Caddy proxies at https://auth.lab.infiniteroomlabs.cloud
+
+image:
+  tag: "2024.10"
+
+# Bootstrap admin credentials from Kubernetes Secret (created by k8s-secrets.yml).
+authentik:
+  secret_key:
+    valueFrom:
+      secretKeyRef:
+        name: authentik-bootstrap
+        key: secret-key
+  bootstrap_password:
+    valueFrom:
+      secretKeyRef:
+        name: authentik-bootstrap
+        key: bootstrap-password
+  bootstrap_token: ""
+
+  postgresql:
+    host: "postgresql.irl.svc.cluster.local"
+    port: 5432
+    name: authentik
+    user: authentik
+    password:
+      valueFrom:
+        secretKeyRef:
+          name: postgres-authentik
+          key: password
+
+  redis:
+    host: "redis-master.irl.svc.cluster.local"
+    password:
+      valueFrom:
+        secretKeyRef:
+          name: redis-auth
+          key: redis-password
+
+server:
+  # Resource limits mapped from irl_mem_limits.authentik_server: 1g
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  service:
+    type: NodePort
+    servicePort: 9000
+    nodePorts:
+      http: 30900
+
+worker:
+  # Resource limits mapped from irl_mem_limits.authentik_worker: 512m
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Disable bundled PostgreSQL and Redis -- using dedicated charts.
+postgresql:
+  enabled: false
+
+redis:
+  enabled: false

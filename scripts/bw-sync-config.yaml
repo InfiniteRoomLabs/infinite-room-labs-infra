@@ -1,0 +1,84 @@
+# scripts/bw-sync-config.yaml
+# Mapping file for bw-sync.sh -- defines where each Bitwarden item gets written.
+# The "IRL" folder in Bitwarden is the root; all items here live under that folder.
+
+bitwarden_folder: "IRL"
+
+targets:
+  ansible_vault:
+    output_file: "ansible/inventory/group_vars/all/vault.yml"
+    encryption_password_item: "ansible-vault-password"
+  kubernetes:
+    namespace: "irl"
+    kubeconfig: "~/.kube/homelab.yaml"
+
+secrets:
+  - bw_item: "pg-superuser"
+    ansible_var: "vault_pg_superuser_password"
+    k8s_secret: "postgres-superuser"
+    k8s_key: "postgres-password"
+
+  - bw_item: "pg-gitea"
+    ansible_var: "vault_pg_passwords.gitea"
+    k8s_secret: "postgres-gitea"
+    k8s_key: "password"
+
+  - bw_item: "pg-plane"
+    ansible_var: "vault_pg_passwords.plane"
+    k8s_secret: "postgres-plane"
+    k8s_key: "password"
+
+  - bw_item: "pg-vault"
+    ansible_var: "vault_pg_passwords.vault"
+    k8s_secret: "postgres-vault"
+    k8s_key: "password"
+
+  - bw_item: "pg-authentik"
+    ansible_var: "vault_pg_passwords.authentik"
+    k8s_secret: "postgres-authentik"
+    k8s_key: "password"
+
+  - bw_item: "pg-grafana"
+    ansible_var: "vault_pg_passwords.grafana"
+    k8s_secret: "postgres-grafana"
+    k8s_key: "password"
+
+  - bw_item: "redis-auth"
+    ansible_var: "vault_redis_password"
+    k8s_secret: "redis-auth"
+    k8s_key: "redis-password"
+
+  - bw_item: "gitea-admin"
+    ansible_var: "vault_gitea_admin_password"
+    k8s_secret: "gitea-admin"
+    k8s_key: "password"
+
+  - bw_item: "authentik-admin"
+    ansible_var: "vault_authentik_bootstrap_password"
+    k8s_secret: "authentik-bootstrap"
+    k8s_key: "bootstrap-password"
+
+  - bw_item: "authentik-secret-key"
+    ansible_var: "vault_authentik_secret_key"
+    k8s_secret: "authentik-bootstrap"
+    k8s_key: "secret-key"
+
+  - bw_item: "grafana-admin"
+    ansible_var: "vault_grafana_admin_password"
+    k8s_secret: "grafana-admin"
+    k8s_key: "admin-password"
+
+  - bw_item: "plane-secret-key"
+    ansible_var: "vault_plane_secret_key"
+    k8s_secret: "plane-secrets"
+    k8s_key: "secret-key"
+
+  - bw_item: "plane-minio"
+    ansible_var: "vault_plane_minio_password"
+    k8s_secret: "plane-secrets"
+    k8s_key: "minio-root-password"
+
+  - bw_item: "ansible-vault-password"
+    ansible_var: "vault_ansible_vault_password"
+    k8s_secret: null
+    k8s_key: null

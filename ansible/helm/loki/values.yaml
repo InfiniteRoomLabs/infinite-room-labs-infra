@@ -1,0 +1,92 @@
+# helm/loki/values.yaml
+# ======================
+# Grafana Loki chart values for the IRL homelab.
+# Chart: grafana/loki
+# Docs: https://grafana.com/docs/loki/latest/setup/install/helm/
+#
+# Memory limit from irl_mem_limits.loki: 512m
+# Retention from host_vars: 30d
+# Storage: ZFS dataset at irl_zfs_mount/logs/loki
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+
+  limits_config:
+    retention_period: "30d"
+    ingestion_rate_mb: 16
+    ingestion_burst_size_mb: 32
+    max_query_series: 5000
+
+  compactor:
+    retention_enabled: true
+    retention_delete_delay: 2h
+    working_directory: /data/loki/compactor
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+singleBinary:
+  replicas: 1
+
+  # Resource limits mapped from irl_mem_limits.loki: 512m
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+
+  persistence:
+    enabled: true
+    storageClass: zfs-local
+    size: 50Gi
+
+  extraVolumeMounts:
+    - name: loki-data
+      mountPath: /data/loki
+
+  extraVolumes:
+    - name: loki-data
+      persistentVolumeClaim:
+        claimName: loki-data-pvc
+
+service:
+  type: ClusterIP
+  port: 3100
+
+# Disable components not used in SingleBinary mode.
+backend:
+  replicas: 0
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+# Disable bundled Grafana -- using the one in kube-prometheus-stack.
+grafana:
+  enabled: false
+
+# Promtail for log shipping from all pods.
+promtail:
+  enabled: true
+  config:
+    clients:
+      - url: http://loki.irl.svc.cluster.local:3100/loki/api/v1/push

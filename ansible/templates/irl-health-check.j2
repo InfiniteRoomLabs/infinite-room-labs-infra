@@ -1,0 +1,34 @@
+#!/bin/bash
+# Managed by Ansible -- do not edit manually
+# Service health checker for Infinite Room Labs homelab
+# Outputs JSON array for agent consumption
+#
+# Ports and services are derived from irl_services in group_vars.
+
+set -euo pipefail
+
+check_service() {
+  local name="$1"
+  local url="$2"
+  local status
+
+  if status=$(curl -sf -o /dev/null -w "%{http_code}" "$url" 2>/dev/null); then
+    echo "  {\"service\": \"$name\", \"status\": \"healthy\", \"code\": $status}"
+  else
+    echo "  {\"service\": \"$name\", \"status\": \"unhealthy\", \"code\": ${status:-0}}"
+  fi
+}
+
+RESULTS=()
+{% for svc_name, svc in irl_services.items() %}
+{% if svc.health_path is defined %}
+RESULTS+=("$(check_service "{{ svc_name }}" "http://127.0.0.1:{{ svc.port }}{{ svc.health_path }}")")
+{% endif %}
+{% endfor %}
+
+echo "["
+for i in "${!RESULTS[@]}"; do
+  if [[ $i -gt 0 ]]; then echo ","; fi
+  echo "${RESULTS[$i]}"
+done
+echo "]"

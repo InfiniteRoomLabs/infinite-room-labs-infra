@@ -1,0 +1,39 @@
+# Managed by Ansible -- do not edit manually
+# Security stack: HashiCorp Vault
+# Authentik SSO is in its own stack at /opt/irl/authentik/
+
+services:
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: irl-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - vault_data:/vault/data
+      - ./vault-config:/vault/config:ro
+    networks:
+      - irl-backend
+      # Vault is NOT on irl-frontend -- access is via Caddy reverse proxy
+      # on localhost:8200 only. This limits the blast radius of the
+      # plaintext HTTP listener to backend containers only.
+    deploy:
+      resources:
+        limits:
+          memory: {{ irl_mem_limits.vault }}
+    command: vault server -config=/vault/config/vault.hcl
+    healthcheck:
+      test: ["CMD", "vault", "status", "-format=json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  vault_data:
+
+networks:
+  irl-backend:
+    external: true

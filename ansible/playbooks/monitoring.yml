@@ -1,0 +1,112 @@
+---
+# playbooks/monitoring.yml
+# =========================
+# Deploys the full monitoring stack:
+# - Prometheus (metrics collection + alerting rules)
+# - Grafana (dashboards + visualization)
+# - Loki (log aggregation)
+# - Alertmanager (alert routing)
+# - node_exporter (host metrics)
+# - cadvisor (container metrics)
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/monitoring.yml
+
+- name: Monitoring stack
+  hosts: homelab
+  become: true
+  tags: [phase3, monitoring]
+
+  tasks:
+    - name: Create monitoring stack directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/monitoring"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Create monitoring config directories
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/monitoring/{{ item }}"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+      loop:
+        - prometheus
+        - grafana/provisioning/datasources
+        - grafana/provisioning/dashboards
+        - grafana/dashboards
+        - alertmanager
+        - loki
+
+    - name: Deploy Prometheus configuration
+      ansible.builtin.template:
+        src: ../templates/configs/prometheus.yml.j2
+        dest: "{{ irl_compose_base }}/monitoring/prometheus/prometheus.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Deploy Alertmanager configuration
+      ansible.builtin.template:
+        src: ../templates/configs/alertmanager.yml.j2
+        dest: "{{ irl_compose_base }}/monitoring/alertmanager/alertmanager.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Deploy Grafana datasources
+      ansible.builtin.template:
+        src: ../templates/configs/grafana/datasources.yml.j2
+        dest: "{{ irl_compose_base }}/monitoring/grafana/provisioning/datasources/datasources.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+
+    - name: Deploy Grafana dashboard provisioner
+      ansible.builtin.template:
+        src: ../templates/configs/grafana/dashboards.yml.j2
+        dest: "{{ irl_compose_base }}/monitoring/grafana/provisioning/dashboards/dashboards.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+
+    - name: Deploy Loki configuration
+      ansible.builtin.template:
+        src: ../templates/configs/loki/loki-config.yml.j2
+        dest: "{{ irl_compose_base }}/monitoring/loki/loki-config.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Copy pre-built Grafana dashboards
+      ansible.builtin.copy:
+        src: "../files/grafana/dashboards/{{ item }}"
+        dest: "{{ irl_compose_base }}/monitoring/grafana/dashboards/{{ item }}"
+        owner: root
+        group: docker
+        mode: "0640"
+      loop:
+        - homelab-overview.json
+        - docker-containers.json
+        - zfs-health.json
+
+    - name: Deploy monitoring stack compose file
+      ansible.builtin.template:
+        src: ../templates/compose/monitoring/docker-compose.yml.j2
+        dest: "{{ irl_compose_base }}/monitoring/docker-compose.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Start monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ irl_compose_base }}/monitoring"
+        state: present
+        pull: "always"

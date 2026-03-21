@@ -1,0 +1,69 @@
+---
+# playbooks/jenkins.yml
+# ======================
+# Deploys Jenkins as a Docker Compose stack with Gitea integration.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/jenkins.yml
+
+- name: Jenkins CI/CD
+  hosts: homelab
+  become: true
+  tags: [phase4, jenkins]
+
+  tasks:
+    - name: Create CI stack directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/ci"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Deploy CI stack compose file
+      ansible.builtin.template:
+        src: ../templates/compose/ci/docker-compose.yml.j2
+        dest: "{{ irl_compose_base }}/ci/docker-compose.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Start CI stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ irl_compose_base }}/ci"
+        state: present
+        pull: "always"
+
+    - name: Wait for Jenkins to be ready
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:8080/login"
+        status_code: 200
+      register: jenkins_health
+      until: jenkins_health.status == 200
+      retries: 60
+      delay: 5
+
+    - name: Get Jenkins initial admin password
+      ansible.builtin.command: >
+        docker exec irl-jenkins
+        cat /var/jenkins_home/secrets/initialAdminPassword
+      register: jenkins_password
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Display Jenkins setup instructions
+      ansible.builtin.debug:
+        msg: |
+          Jenkins is running at https://ci.{{ irl_public_domain }}
+
+          To get the initial admin password, SSH to the server and run:
+            docker exec irl-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+
+          Post-setup:
+          1. Install recommended plugins
+          2. Install Gitea plugin
+          3. Configure Gitea server connection (http://irl-gitea:3000)
+          4. Set up Vault credential provider
+          5. Create pipeline jobs for IRL repos

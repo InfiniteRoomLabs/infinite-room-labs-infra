@@ -1,0 +1,71 @@
+---
+# playbooks/vault.yml
+# ====================
+# Deploys HashiCorp Vault as a Docker Compose stack.
+# Vault init and unseal are manual operations (by design -- unseal
+# keys should never be automated without a KMS).
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/vault.yml
+
+- name: HashiCorp Vault
+  hosts: homelab
+  become: true
+  tags: [phase2, vault]
+
+  tasks:
+    # ── Deploy security stack ──────────────────────────────────────
+    - name: Create security stack directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/security"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Create Vault config directory
+      ansible.builtin.file:
+        path: "{{ irl_compose_base }}/security/vault-config"
+        state: directory
+        owner: root
+        group: docker
+        mode: "0750"
+
+    - name: Deploy Vault configuration
+      ansible.builtin.template:
+        src: ../templates/configs/vault/vault-config.hcl.j2
+        dest: "{{ irl_compose_base }}/security/vault-config/vault.hcl"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Deploy security stack compose file
+      ansible.builtin.template:
+        src: ../templates/compose/security/docker-compose.yml.j2
+        dest: "{{ irl_compose_base }}/security/docker-compose.yml"
+        owner: root
+        group: docker
+        mode: "0640"
+        backup: true
+
+    - name: Start security stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ irl_compose_base }}/security"
+        state: present
+        pull: "always"
+
+    # ── Post-deploy instructions ───────────────────────────────────
+    - name: Display Vault init instructions
+      ansible.builtin.debug:
+        msg: |
+          Vault is running but NOT initialized.
+          To initialize and unseal:
+
+          1. SSH to the server
+          2. docker exec -it irl-vault vault operator init -key-shares=5 -key-threshold=3
+          3. Save the unseal keys and root token securely
+          4. docker exec -it irl-vault vault operator unseal (repeat 3x with different keys)
+          5. Export VAULT_ADDR=http://127.0.0.1:8200
+          6. vault login (use root token)
+          7. vault secrets enable -path=secret kv-v2

@@ -1,0 +1,381 @@
+---
+# playbooks/k3s.yml
+# ==================
+# Installs k3s (single-node) on the homelab server.
+#
+# Design decisions:
+#   - Traefik disabled: Caddy runs bare-metal as the ingress/reverse proxy.
+#     Services are exposed via NodePort; Caddy proxies to them on Tailscale IP.
+#   - Bound to Tailscale interface: k3s API server and node IP use the
+#     Tailscale address so kubectl from the laptop works over the VPN.
+#   - Local-path-provisioner kept (k3s default): ZFS datasets are mounted
+#     as hostPath directories; PVs are created per-service in helm-deploy.yml.
+#   - Single namespace "irl" for all services.
+#
+# Prerequisites:
+#   - Phase 1 complete: Tailscale running, tailscale0 interface up
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/k3s.yml
+
+- name: k3s installation and configuration
+  hosts: homelab
+  become: true
+  tags: [phase2, k3s]
+
+  vars:
+    k3s_version: "v1.31.4+k3s1"
+    k3s_install_dir: /usr/local/bin
+    k3s_config_dir: /etc/rancher/k3s
+    k3s_data_dir: /var/lib/rancher/k3s
+    k3s_kubeconfig_host_path: /etc/rancher/k3s/k3s.yaml
+    k3s_kubeconfig_user_path: "/home/{{ irl_admin_user }}/.kube/config"
+    k3s_kubeconfig_laptop_path: "{{ lookup('env', 'HOME') }}/.kube/homelab.yaml"
+    k3s_namespace: irl
+
+  tasks:
+    # ── Gather IPs ───────────────────────────────────────────────
+    - name: Get Tailscale IP address
+      ansible.builtin.command: tailscale ip -4
+      register: tailscale_ip_raw
+      changed_when: false
+
+    - name: Set IP facts
+      ansible.builtin.set_fact:
+        k3s_node_ip: "{{ tailscale_ip_raw.stdout | trim }}"
+        k3s_node_lan_ip: "{{ ansible_default_ipv4.address }}"
+
+    # ── Kernel prerequisites ─────────────────────────────────────
+    - name: Set required kernel parameters for k3s
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-k3s.conf
+        reload: true
+      loop:
+        - { key: "vm.overcommit_memory", value: "1" }
+        - { key: "kernel.panic", value: "10" }
+        - { key: "kernel.panic_on_oops", value: "1" }
+
+    - name: Ensure audit log directory exists
+      ansible.builtin.file:
+        path: /var/log/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+
+    # ── Install k3s ────────────────────────────────────────────────
+    - name: Check if k3s is already installed
+      ansible.builtin.stat:
+        path: "{{ k3s_install_dir }}/k3s"
+      register: k3s_binary
+
+    - name: Download k3s install script
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: "0755"
+        force: true
+      when: not k3s_binary.stat.exists
+
+    # ── Security: encryption at rest config ─────────────────────
+    - name: Create k3s config directory
+      ansible.builtin.file:
+        path: "{{ k3s_config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: not k3s_binary.stat.exists
+
+    - name: Generate Secrets encryption key
+      ansible.builtin.command: openssl rand -base64 32
+      register: encryption_key_raw
+      changed_when: false
+      when: not k3s_binary.stat.exists
+      no_log: true
+
+    - name: Deploy Secrets encryption config
+      ansible.builtin.copy:
+        content: |
+          apiVersion: apiserver.config.k8s.io/v1
+          kind: EncryptionConfiguration
+          resources:
+            - resources:
+                - secrets
+              providers:
+                - aescbc:
+                    keys:
+                      - name: key1
+                        secret: {{ encryption_key_raw.stdout }}
+                - identity: {}
+        dest: "{{ k3s_config_dir }}/encryption.yaml"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not k3s_binary.stat.exists
+      no_log: true
+
+    # ── Security: audit logging policy ───────────────────────────
+    - name: Deploy k3s audit policy
+      ansible.builtin.copy:
+        content: |
+          apiVersion: audit.k8s.io/v1
+          kind: Policy
+          rules:
+            - level: Metadata
+              resources:
+                - group: ""
+                  resources: ["secrets", "configmaps"]
+            - level: Metadata
+              verbs: ["create", "delete", "patch", "update"]
+            - level: None
+              resources:
+                - group: ""
+                  resources: ["events"]
+            - level: None
+              users: ["system:kube-proxy"]
+            - level: Metadata
+        dest: "{{ k3s_config_dir }}/audit-policy.yaml"
+        owner: root
+        group: root
+        mode: "0600"
+      when: not k3s_binary.stat.exists
+
+    - name: Install k3s (hardened, stock Flannel CNI, Caddy as ingress)
+      ansible.builtin.command: >
+        /tmp/k3s-install.sh
+        --node-ip {{ k3s_node_lan_ip }}
+        --tls-san {{ k3s_node_ip }}
+        --tls-san {{ k3s_node_lan_ip }}
+        --disable traefik
+        --disable servicelb
+        --write-kubeconfig-mode 644
+        --protect-kernel-defaults
+        --kube-apiserver-arg encryption-provider-config={{ k3s_config_dir }}/encryption.yaml
+        --kube-apiserver-arg audit-log-path=/var/log/k3s/audit.log
+        --kube-apiserver-arg audit-log-maxage=30
+        --kube-apiserver-arg audit-log-maxbackup=5
+        --kube-apiserver-arg audit-log-maxsize=100
+        --kube-apiserver-arg audit-policy-file={{ k3s_config_dir }}/audit-policy.yaml
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+      when: not k3s_binary.stat.exists
+      notify: restart k3s
+
+    - name: Ensure k3s is enabled and running
+      ansible.builtin.systemd:
+        name: k3s
+        state: started
+        enabled: true
+
+    - name: Wait for k3s API server to be ready
+      ansible.builtin.command: k3s kubectl get nodes
+      register: k3s_nodes
+      until: k3s_nodes.rc == 0
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    # ── Wait for node Ready ────────────────────────────────────────
+    # k3s uses stock Flannel CNI + kube-router for NetworkPolicy.
+    # No Calico -- single node doesn't need a mesh CNI.
+    - name: Wait for node to reach Ready state
+      ansible.builtin.command: >
+        k3s kubectl get node -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    # ── kubeconfig for admin user ──────────────────────────────────
+    - name: Create .kube directory for {{ irl_admin_user }}
+      ansible.builtin.file:
+        path: "/home/{{ irl_admin_user }}/.kube"
+        state: directory
+        owner: "{{ irl_admin_user }}"
+        group: "{{ irl_admin_user }}"
+        mode: "0700"
+
+    - name: Copy kubeconfig for {{ irl_admin_user }}
+      ansible.builtin.copy:
+        src: "{{ k3s_kubeconfig_host_path }}"
+        dest: "{{ k3s_kubeconfig_user_path }}"
+        owner: "{{ irl_admin_user }}"
+        group: "{{ irl_admin_user }}"
+        mode: "0600"
+        remote_src: true
+        backup: true
+
+    - name: Replace 127.0.0.1 with Tailscale IP in user kubeconfig
+      ansible.builtin.replace:
+        path: "{{ k3s_kubeconfig_user_path }}"
+        regexp: 'https://127\.0\.0\.1:6443'
+        replace: "https://{{ k3s_node_ip }}:6443"
+        backup: true
+
+    # ── Fetch kubeconfig to operator's laptop ─────────────────────
+    - name: Fetch kubeconfig to operator laptop
+      ansible.builtin.fetch:
+        src: "{{ k3s_kubeconfig_user_path }}"
+        dest: "{{ k3s_kubeconfig_laptop_path }}"
+        flat: true
+      tags: [k3s-kubeconfig]
+
+    # ── Create IRL namespace ───────────────────────────────────────
+    - name: Create irl namespace
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: "{{ k3s_namespace }}"
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+
+    # ── Default-deny NetworkPolicy (Calico enforces) ────────────
+    - name: Apply default-deny NetworkPolicy in irl namespace
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: default-deny-all
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Ingress
+              - Egress
+
+    - name: Apply DNS egress NetworkPolicy (all pods need DNS)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: allow-dns-egress
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Egress
+            egress:
+              - to: []
+                ports:
+                  - protocol: UDP
+                    port: 53
+                  - protocol: TCP
+                    port: 53
+
+    # ── Create PersistentVolumes for ZFS-backed storage ───────────
+    # These use hostPath pointing to ZFS dataset mountpoints.
+    # k3s local-path-provisioner handles PVCs that don't need ZFS.
+    - name: Create ZFS-backed PersistentVolumes
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolume
+          metadata:
+            name: "{{ item.name }}"
+            labels:
+              app: "{{ item.app }}"
+              storage: zfs
+          spec:
+            capacity:
+              storage: "{{ item.capacity }}"
+            accessModes:
+              - ReadWriteOnce
+            persistentVolumeReclaimPolicy: Retain
+            storageClassName: zfs-local
+            hostPath:
+              path: "{{ item.hostPath }}"
+              type: DirectoryOrCreate
+      loop:
+        - name: pv-postgres-data
+          app: postgres
+          capacity: "50Gi"
+          hostPath: /var/lib/rancher/k3s/storage/postgres-data
+        - name: pv-gitea-lfs
+          app: gitea
+          capacity: "100Gi"
+          hostPath: "{{ irl_zfs_mount }}/gitea-lfs"
+        - name: pv-ollama-models
+          app: ollama
+          capacity: "200Gi"
+          hostPath: "{{ irl_zfs_mount }}/ollama-models"
+        - name: pv-prometheus-data
+          app: prometheus
+          capacity: "15Gi"
+          hostPath: /var/lib/rancher/k3s/storage/prometheus-data
+        - name: pv-loki-data
+          app: loki
+          capacity: "50Gi"
+          hostPath: "{{ irl_zfs_mount }}/logs/loki"
+        - name: pv-grafana-data
+          app: grafana
+          capacity: "5Gi"
+          hostPath: /var/lib/rancher/k3s/storage/grafana-data
+        - name: pv-vault-data
+          app: vault
+          capacity: "5Gi"
+          hostPath: /var/lib/rancher/k3s/storage/vault-data
+        - name: pv-jenkins-data
+          app: jenkins
+          capacity: "20Gi"
+          hostPath: /var/lib/rancher/k3s/storage/jenkins-data
+
+    - name: Create zfs-local StorageClass
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: zfs-local
+          provisioner: kubernetes.io/no-provisioner
+          volumeBindingMode: WaitForFirstConsumer
+
+    # ── Firewall: handled by nftables template ─────────────────────
+    # k3s API (6443) is in irl_firewall_allowed_tcp_ports (group_vars).
+    # NodePorts (30000-32767) are accessible via the cni0/flannel.1
+    # allow rules in the nftables template. No lineinfile needed.
+
+    # ── Post-install status ────────────────────────────────────────
+    - name: Show cluster status
+      ansible.builtin.command: k3s kubectl get nodes -o wide
+      register: cluster_status
+      changed_when: false
+
+    - name: Display cluster status
+      ansible.builtin.debug:
+        msg: |
+          k3s cluster ready.
+
+          Node status:
+          {{ cluster_status.stdout }}
+
+          Tailscale IP: {{ k3s_node_ip }}
+          API server:   https://{{ k3s_node_ip }}:6443
+          Kubeconfig (server):  {{ k3s_kubeconfig_user_path }}
+          Kubeconfig (laptop):  {{ k3s_kubeconfig_laptop_path }}
+
+          Next: run helm-deploy.yml to deploy services.
+
+  handlers:
+    - name: restart k3s
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+
+    - name: reload nftables
+      ansible.builtin.systemd:
+        name: nftables
+        state: reloaded

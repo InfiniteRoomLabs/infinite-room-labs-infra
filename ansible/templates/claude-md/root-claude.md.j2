@@ -1,0 +1,54 @@
+# Server Context -- Infinite Room Labs Homelab
+
+## What This Is
+
+HP Z600 homelab server running the IRL self-hosted infrastructure.
+Managed by Ansible from the laptop. Do not make manual changes.
+
+## Server Details
+
+- **OS**: Debian 12 Bookworm
+- **CPU**: 2x Xeon X5650 (24 threads)
+- **RAM**: {{ irl_total_ram_gb }}GB DDR3 ECC
+- **Boot**: /dev/sda 233GB SSD (LVM)
+- **Storage**: ZFS pool `{{ irl_zfs_pool }}` (3x 7.3TB RAIDZ1) at {{ irl_zfs_mount }}
+
+## Services
+
+| Service | Port | Compose Stack |
+|---------|------|---------------|
+{% for svc_name, svc in irl_services.items() %}
+| {{ svc_name | capitalize }} | {{ svc.port }} | {{ irl_compose_base }}/{{ svc_name }} |
+{% endfor %}
+
+## Docker
+
+- Socket only (no TCP). Never expose Docker TCP.
+- Compose stacks: `{{ irl_compose_base }}/{stack}/docker-compose.yml`
+- Shared networks: irl-frontend, irl-backend, irl-monitoring
+
+## ZFS
+
+- Pool: `{{ irl_zfs_pool }}` at `{{ irl_zfs_mount }}`
+- Sacred data in `{{ irl_zfs_mount }}/nfs-share/` -- NEVER modify
+- Service datasets: backups, artifacts, logs, ollama-models, gitea-lfs
+- Snapshots managed by sanoid. Weekly scrubs via cron.
+
+## SSH
+
+- Root login DISABLED. Use `{{ irl_admin_user }}` with sudo.
+- Key-only auth. Password auth disabled.
+
+## Network
+
+- Tailscale mesh: hostname `{{ irl_tailscale_hostname }}`
+- Caddy reverse proxy on Tailscale interface
+- nftables firewall: default deny, allow SSH + Tailscale + HTTP/S
+
+## Rules for Agents
+
+1. Do NOT modify files managed by Ansible (marked "Managed by Ansible")
+2. Do NOT touch sacred data in {{ irl_zfs_mount }}/nfs-share/
+3. Do NOT expose Docker TCP or disable the firewall
+4. Do NOT modify /etc/ssh/sshd_config or /etc/nftables.conf directly
+5. All infrastructure changes go through Ansible playbooks on the laptop

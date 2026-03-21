@@ -1,0 +1,50 @@
+---
+# playbooks/cron-agents.yml
+# ==========================
+# Sets up cron jobs that invoke Claude Code agents for automated
+# monitoring and maintenance tasks.
+#
+# These agents SSH into the server via Tailscale and run health
+# checks, security scans, and performance analysis.
+#
+# Run standalone:
+#   ./run-ansible.sh playbook playbooks/cron-agents.yml
+
+- name: Agent cron jobs
+  hosts: homelab
+  become: true
+  tags: [phase5, cron]
+
+  tasks:
+    # ── Health check script ────────────────────────────────────────
+    - name: Deploy health check script
+      ansible.builtin.template:
+        src: ../templates/irl-health-check.j2
+        dest: /usr/local/bin/irl-health-check
+        owner: root
+        group: root
+        mode: "0755"
+
+    # ── Cron jobs ──────────────────────────────────────────────────
+    - name: Schedule health check every 6 hours
+      ansible.builtin.cron:
+        name: "IRL service health check"
+        minute: "0"
+        hour: "*/6"
+        job: "/usr/local/bin/irl-health-check >> /var/log/irl-health-check.log 2>&1"
+        user: root
+
+    - name: Set up log rotation for health check
+      ansible.builtin.copy:
+        content: |
+          /var/log/irl-health-check.log {
+            weekly
+            rotate 4
+            compress
+            missingok
+            notifempty
+          }
+        dest: /etc/logrotate.d/irl-health-check
+        owner: root
+        group: root
+        mode: "0644"

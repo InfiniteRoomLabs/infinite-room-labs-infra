@@ -1,0 +1,140 @@
+---
+# Global variables shared by all playbooks
+# ==========================================
+# These define the "contract" that every playbook reads from.
+# Host-specific overrides go in host_vars/homelab.yml.
+
+# ── Company ──────────────────────────────────────────────────────────
+irl_company_name: "Infinite Room Labs"
+
+# ── k3s / Kubernetes ─────────────────────────────────────────────────
+# Single-node k3s. Traefik disabled -- Caddy (bare-metal) handles ingress.
+# Services exposed as NodePorts; Caddy proxies localhost:{nodePort}.
+irl_k3s_namespace: "irl"
+irl_k3s_kubeconfig: "/etc/rancher/k3s/k3s.yaml"
+irl_helm_values_base: "/home/{{ irl_admin_user }}/helm-values"
+
+# ── Compose base path (DEPRECATED -- kept for cleanup playbook reference) ──
+# Docker Compose stacks have been replaced by k3s + Helm charts.
+# This path is referenced only by cleanup.yml to remove old stacks.
+irl_compose_base: "/opt/irl"
+
+# ── ZFS ──────────────────────────────────────────────────────────────
+irl_zfs_pool: "main"
+irl_zfs_mount: "/media/root/storage1"
+irl_zfs_datasets:
+  - name: "{{ irl_zfs_pool }}/backups"
+    mountpoint: "{{ irl_zfs_mount }}/backups"
+    quota: "500G"
+  - name: "{{ irl_zfs_pool }}/artifacts"
+    mountpoint: "{{ irl_zfs_mount }}/artifacts"
+    quota: "200G"
+  - name: "{{ irl_zfs_pool }}/logs"
+    mountpoint: "{{ irl_zfs_mount }}/logs"
+    quota: "100G"
+  - name: "{{ irl_zfs_pool }}/ollama-models"
+    mountpoint: "{{ irl_zfs_mount }}/ollama-models"
+    quota: "200G"
+  - name: "{{ irl_zfs_pool }}/gitea-lfs"
+    mountpoint: "{{ irl_zfs_mount }}/gitea-lfs"
+    quota: "100G"
+
+# ── Domains ──────────────────────────────────────────────────────────
+irl_public_domain: "lab.infiniteroomlabs.cloud"
+irl_internal_domain: "internal.lab.infiniteroomlabs.cloud"
+
+# ── Service subdomains (used in Caddyfile + DNS records) ─────────────
+# Ports are k3s NodePorts. Caddy proxies localhost:{nodePort} -> k3s service.
+# NodePort assignments match helm/{service}/values.yaml service.nodePort fields.
+irl_services:
+  gitea:
+    subdomain: "git"
+    port: 30300           # NodePort -- gitea-charts/gitea, service.http.nodePort
+    internal: false
+    health_path: "/api/v1/version"
+  plane:
+    subdomain: "plane"
+    port: 30082           # NodePort -- makeplane/plane-ce, service.nodePort
+    internal: false
+  authentik:
+    subdomain: "auth"
+    port: 30900           # NodePort -- goauthentik/authentik, server.service.nodePorts.http
+    internal: false
+  grafana:
+    subdomain: "grafana"
+    port: 30001           # NodePort -- kube-prometheus-stack, grafana.service.nodePort
+    internal: false
+    health_path: "/api/health"
+  vault:
+    subdomain: "vault"
+    port: 30200           # NodePort -- hashicorp/vault, server.service.nodePort
+    internal: false
+    health_path: "/v1/sys/health"
+  jenkins:
+    subdomain: "ci"
+    port: 30080           # NodePort -- jenkins/jenkins, controller.service.nodePort
+    internal: false
+    health_path: "/login"
+  prometheus:
+    subdomain: "metrics"
+    port: 30090           # NodePort -- kube-prometheus-stack, prometheus.service.nodePort
+    internal: true
+    health_path: "/-/healthy"
+  alertmanager:
+    subdomain: "alerts"
+    port: 30093           # NodePort -- kube-prometheus-stack, alertmanager.service.nodePort
+    internal: true
+    health_path: "/-/healthy"
+
+# ── Users ────────────────────────────────────────────────────────────
+irl_admin_user: "wes"
+irl_admin_ssh_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII/2fedq5yEme4BIkc5FWmPoKi8cwnbPZRJ39SIxJrN9 deathnerd@wes-lenovo"
+
+# ── Tailscale ────────────────────────────────────────────────────────
+irl_tailscale_hostname: "homelab"
+
+# ── PostgreSQL ───────────────────────────────────────────────────────
+irl_pg_version: "16"
+irl_pg_databases:
+  - name: gitea
+  - name: plane
+  - name: vault
+  - name: authentik
+  - name: grafana
+
+# ── Caddy ────────────────────────────────────────────────────────────
+irl_caddy_bind_interface: "tailscale0"
+
+# ── Services to disable during cleanup ───────────────────────────────
+irl_services_to_disable:
+  - gdm
+  - ModemManager
+  - wpa_supplicant
+  - ksmtuned
+  - iscsid
+  - xrdp
+  - xrdp-sesman
+  - avahi-daemon
+  - switcheroo-control
+  - colord
+  - power-profiles-daemon
+  - fwupd
+
+# ── Packages to remove during cleanup ───────────────────────────────
+irl_packages_to_remove:
+  - gnome-shell
+  - gnome-session
+  - gdm3
+  - xrdp
+  - modemmanager
+  - snapd
+
+# ── Old compose stacks to remove ────────────────────────────────────
+irl_old_compose_stacks:
+  - /root/infrastructure/traefik
+  - /root/infrastructure/nextcloud
+  - /root/infrastructure/pihole
+  - /root/infrastructure/deluged
+  - /root/infrastructure/tachidesk
+  - /root/infrastructure/lancache
+  - /root/infrastructure/heimdall
