@@ -7,6 +7,7 @@
 # Total RAM: 40GB. Reserve 4GB for OS + overhead.
 irl_total_ram_gb: 40
 irl_reserved_ram_gb: 4
+irl_zfs_arc_max_gb: 8
 
 # ── Per-service memory limits (Docker --memory) ─────────────────────
 irl_mem_limits:

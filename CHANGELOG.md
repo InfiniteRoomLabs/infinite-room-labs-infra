@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- ZFS ARC memory cap (8 GB) in zfs.yml playbook with persistent modprobe.d config
 - Full Ansible automation for homelab (HP Z600, Debian 12)
   - Phase 0: security hardening (nftables, SSH, Docker TCP fix, cleanup)
   - Phase 1: Tailscale mesh, Caddy reverse proxy, ZFS datasets + sanoid

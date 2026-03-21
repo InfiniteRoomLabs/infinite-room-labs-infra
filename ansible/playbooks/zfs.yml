@@ -16,6 +16,22 @@
   tags: [phase1, zfs]
 
   tasks:
+    # ── ARC memory cap ─────────────────────────────────────────────
+    # ZFS ARC defaults to 50% of RAM which looks alarming in htop
+    # and steals headroom from k8s pods. Cap it explicitly.
+    - name: Set ZFS ARC max (persistent across reboots)
+      ansible.builtin.copy:
+        content: "options zfs zfs_arc_max={{ irl_zfs_arc_max_gb * 1024 * 1024 * 1024 }}\n"
+        dest: /etc/modprobe.d/zfs.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply ZFS ARC max immediately (no reboot needed)
+      ansible.builtin.shell:
+        cmd: "echo {{ irl_zfs_arc_max_gb * 1024 * 1024 * 1024 }} > /sys/module/zfs/parameters/zfs_arc_max"
+      changed_when: true
+
     # ── Pool-level optimizations ───────────────────────────────────
     - name: Disable atime on ZFS pool (reduces unnecessary writes)
       community.general.zfs:
