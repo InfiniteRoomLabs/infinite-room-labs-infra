@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 - SOPs: deploy-new-service, backup-and-restore, rotate-secrets, add-dns-record
 - Runbooks: drive-failure, service-down, security-breach, vault-sealed
 - Pre-built Grafana dashboards (homelab overview, Docker containers, ZFS health)
+- Deployment plan with decisions log and OTel observability architecture (`docs/plans/2026-03-20-homelab-k3s-helm-deployment.md`)
 
 ### Changed
 - Docker Hub provider (`docker/docker ~> 0.5`) and `dockerhub-repo` module

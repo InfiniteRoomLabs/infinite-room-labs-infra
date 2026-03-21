@@ -6,6 +6,8 @@
 
 **Architecture:** OTel-centric observability pipeline exporting to Grafana Cloud (managed free tier). Netdata on every node for system metrics. Ghost CMS behind Tailscale serving content via API to Astro static builds deployed on Cloudflare Pages. All services containerized with Docker Compose, deployed via Ansible, IaC-managed with Terraform/Terragrunt.
 
+> **UPDATE 2026-03-21**: The architecture has pivoted from Docker Compose + Grafana Cloud to **k3s + Helm + self-hosted observability**. The OTel pipeline concept remains valid but targets self-hosted Prometheus/Loki/Tempo instead of Grafana Cloud. See the active deployment plan at `docs/plans/2026-03-20-homelab-k3s-helm-deployment.md` for current decisions and the observability architecture diagram. The monitoring stack is `irl-monitoring` in `InfiniteRoomLabs/helm-charts`.
+
 **Tech Stack:** Terraform + Terragrunt (Grafana Cloud provider, Cloudflare provider), Ansible, Docker Compose, OpenTelemetry Collector, Netdata, Grafana Cloud, Sentry, Ghost CMS, Astro, Cloudflare Pages.
 
 **Dependencies:** Phase 1.25+ tasks require Phase 1 (Tailscale + Vault) to be complete first. Phase 0.5 and scaffolding tasks can run immediately.
