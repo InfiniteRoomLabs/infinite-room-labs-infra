@@ -21,6 +21,11 @@ All notable changes to this project will be documented in this file.
 - Deployment plan with decisions log and OTel observability architecture (`docs/plans/2026-03-20-homelab-k3s-helm-deployment.md`)
 
 ### Changed
+- helm-deploy.yml rewritten to use IRL charts (irl-postgres, irl-valkey, irl-gitea, irl-monitoring) from InfiniteRoomLabs/helm-charts repo
+- Jenkins commented out (plugin version incompatibility, deferred)
+- Vault storage class switched from zfs-local to local-path (SSD performance)
+
+### Previously
 - Docker Hub provider (`docker/docker ~> 0.5`) and `dockerhub-repo` module
 - `global/dockerhub/repos` resource group with `claudesync-mcp` repository (namespace: `deathnerd`)
 - `global-dockerhub-repos` TFC workspace

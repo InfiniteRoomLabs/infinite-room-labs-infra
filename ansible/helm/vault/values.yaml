@@ -47,7 +47,7 @@ server:
 
   dataStorage:
     enabled: true
-    storageClass: zfs-local
+    storageClass: local-path
     size: 5Gi
 
   # Readiness: Vault returns 200 when initialized and unsealed,

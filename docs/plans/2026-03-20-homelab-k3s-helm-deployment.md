@@ -86,7 +86,7 @@ graph TD
 | Platform | Umbrella: entire stack as one release. | `irl-platform` |
 | Authentik | Official chart works, just needs values. | Direct (values only) |
 | Vault | Official chart works. | Direct (values only) |
-| Jenkins | Official chart works. | Direct (values only) |
+| Jenkins | **SKIPPED** -- plugin version incompatibility, parking until needed. | Deferred |
 | Plane | Official chart works. | Direct (values only) |
 | Ollama | Community chart works. | Direct (values only) |
 
@@ -167,6 +167,7 @@ Add `helm-charts/` repo entry to the Current Repositories section.
 | 2026-03-21 | OpenTelemetry Collector + Tempo added to irl-monitoring | Complete the three pillars (metrics, logs, traces). Deploy monitoring stack first, layer OTel after services are generating traffic. Collector runs as DaemonSet, receives OTLP, routes to Prometheus/Loki/Tempo. |
 | 2026-03-21 | NFS stays as home SAN | Chairman uses it as network storage for the household. Not moving to Tailscale-only access. |
 | 2026-03-21 | Vault handles secrets + signing CA | HashiCorp Vault is the long-term secrets backend and certificate authority. Ansible Vault + bw-sync.sh is the bootstrap path. |
+| 2026-03-21 | Jenkins skipped | Plugin version incompatibility (chart installs 2.479, plugins need 2.479.1+). Not critical for initial deployment. Revisit when CI/CD is needed -- may use Gitea Actions instead. |
 
 ## Observability Architecture (Decided 2026-03-21)
 

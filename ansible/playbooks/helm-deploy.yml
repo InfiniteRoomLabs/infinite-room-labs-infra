@@ -2,17 +2,18 @@
 # playbooks/helm-deploy.yml
 # ==========================
 # Deploys all IRL services to k3s using Helm charts.
-# Follows the same phase structure as the original Compose playbooks.
+#
+# Charts are sourced from:
+#   - IRL helm-charts repo (irl-postgres, irl-valkey, irl-gitea, irl-monitoring)
+#   - Upstream repos (vault, authentik, jenkins, plane, ollama)
 #
 # Prerequisites:
 #   - k3s.yml complete (cluster running, namespace created, PVs created)
 #   - k8s-secrets.yml complete (Kubernetes Secrets provisioned)
+#   - IRL helm-charts repo cloned at ~/projects/infinite-room-labs/helm-charts
 #
 # Run full deploy:
 #   ./run-ansible.sh playbook playbooks/helm-deploy.yml
-#
-# Run a specific phase:
-#   ./run-ansible.sh playbook playbooks/helm-deploy.yml --tags phase2
 #
 # Run a single service:
 #   ./run-ansible.sh playbook playbooks/helm-deploy.yml --tags postgres
@@ -20,376 +21,360 @@
 - name: Helm chart deployment for all IRL services
   hosts: homelab
   become: true
-  tags: [phase2, phase3, phase4, phase5, helm]
+  tags: [helm]
 
   vars:
     kubeconfig: /etc/rancher/k3s/k3s.yaml
     k3s_namespace: irl
-    helm_values_base: "/home/{{ irl_admin_user }}/helm-values"
+    irl_charts_path: "/home/{{ irl_admin_user }}/helm-charts/charts"
+    helm_values_path: "/home/{{ irl_admin_user }}/helm-values"
 
   tasks:
-    # ── Upload values files to server ─────────────────────────────
-    # Values files live in the repo at ansible/helm/. We copy them to
-    # the server so kubernetes.core.helm can reference them by path.
-    - name: Create Helm values directory on server
+    # ── Sync IRL helm-charts repo to server ──────────────────────
+    - name: Clone or update IRL helm-charts repo
+      ansible.builtin.git:
+        repo: "https://github.com/InfiniteRoomLabs/helm-charts.git"
+        dest: "/home/{{ irl_admin_user }}/helm-charts"
+        version: main
+        force: true
+      become_user: "{{ irl_admin_user }}"
+      tags: [always]
+
+    - name: Build chart dependencies
+      ansible.builtin.command:
+        cmd: helm dependency update
+        chdir: "{{ irl_charts_path }}/{{ item }}"
+      loop:
+        - irl-postgres
+        - irl-valkey
+        - irl-gitea
+        - irl-monitoring
+      changed_when: true
+      tags: [always]
+
+    # ── Upload values override files to server ───────────────────
+    - name: Create values override directories
       ansible.builtin.file:
-        path: "{{ helm_values_base }}/{{ item }}"
+        path: "{{ helm_values_path }}/{{ item }}"
         state: directory
         owner: "{{ irl_admin_user }}"
         group: "{{ irl_admin_user }}"
         mode: "0750"
       loop:
-        - postgres
-        - redis
+        - ""
         - vault
-        - gitea
-        - authentik
-        - plane
-        - monitoring
-        - loki
         - jenkins
         - ollama
+      tags: [always]
 
-    - name: Copy Helm values files to server
-      ansible.builtin.copy:
-        src: "../helm/{{ item }}/values.yaml"
-        dest: "{{ helm_values_base }}/{{ item }}/values.yaml"
-        owner: "{{ irl_admin_user }}"
-        group: "{{ irl_admin_user }}"
-        mode: "0640"
-        backup: true
-      loop:
-        - postgres
-        - redis
-        - vault
-        - gitea
-        - authentik
-        - plane
-        - monitoring
-        - loki
-        - jenkins
-        - ollama
-
-    # ── Add Helm repos ─────────────────────────────────────────────
-    - name: Add Helm repositories
+    # ── Add upstream Helm repos (for non-IRL charts) ─────────────
+    - name: Add upstream Helm repositories
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
         repo_url: "{{ item.url }}"
       loop:
-        - name: bitnami
-          url: https://charts.bitnami.com/bitnami
-        - name: hashicorp
-          url: https://helm.releases.hashicorp.com
-        - name: gitea-charts
-          url: https://dl.gitea.com/charts/
-        - name: goauthentik
-          url: https://charts.goauthentik.io
-        - name: makeplane
-          url: https://helm.plane.so/
-        - name: prometheus-community
-          url: https://prometheus-community.github.io/helm-charts
-        - name: grafana
-          url: https://grafana.github.io/helm-charts
-        - name: jenkins
-          url: https://charts.jenkins.io
-        - name: ollama-helm
-          url: https://otwld.github.io/ollama-helm/
+        - { name: hashicorp, url: "https://helm.releases.hashicorp.com" }
+        - { name: cnpg, url: "https://cloudnative-pg.github.io/charts" }
+        - { name: goauthentik, url: "https://charts.goauthentik.io" }
+        - { name: makeplane, url: "https://helm.plane.so/" }
+        - { name: jenkins, url: "https://charts.jenkins.io" }
+        - { name: ollama-helm, url: "https://otwld.github.io/ollama-helm/" }
+      tags: [always]
 
     - name: Update Helm repo cache
       ansible.builtin.command: helm repo update
       changed_when: false
+      tags: [always]
 
-    # ── Phase 2: Core Data ─────────────────────────────────────────
-    - name: "Phase 2: Deploy PostgreSQL 16"
+    # ══════════════════════════════════════════════════════════════
+    # Phase 2: Core Data
+    # ══════════════════════════════════════════════════════════════
+
+    - name: "Phase 2: Install CNPG operator"
       kubernetes.core.helm:
-        name: postgresql
-        chart_ref: bitnami/postgresql
-        chart_version: "15.x"
-        release_namespace: "{{ k3s_namespace }}"
-        create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/postgres/values.yaml"
-        kubeconfig: "{{ kubeconfig }}"
-        wait: true
-        timeout: "5m0s"
-      tags: [phase2, postgres]
-
-    - name: "Phase 2: Wait for PostgreSQL pod to be running"
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Pod
-        namespace: "{{ k3s_namespace }}"
-        label_selectors:
-          - "app.kubernetes.io/name=postgresql"
-        kubeconfig: "{{ kubeconfig }}"
-      register: pg_pods
-      until:
-        - pg_pods.resources | length > 0
-        - pg_pods.resources[0].status.phase == "Running"
-      retries: 30
-      delay: 10
-      tags: [phase2, postgres]
-
-    - name: "Phase 2: Create per-service PostgreSQL users"
-      kubernetes.core.k8s_exec:
-        namespace: "{{ k3s_namespace }}"
-        pod: "postgresql-0"
-        kubeconfig: "{{ kubeconfig }}"
-        command: >
-          psql -U postgres -c
-          "DO $$ BEGIN
-            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ item.name }}') THEN
-              CREATE USER {{ item.name }} WITH PASSWORD '{{ vault_pg_passwords[item.name] }}';
-              GRANT ALL PRIVILEGES ON DATABASE {{ item.name }} TO {{ item.name }};
-            END IF;
-          END $$;"
-      loop: "{{ irl_pg_databases }}"
-      no_log: true
-      tags: [phase2, postgres]
-
-    - name: "Phase 2: Deploy Redis"
-      kubernetes.core.helm:
-        name: redis
-        chart_ref: bitnami/redis
-        chart_version: "19.x"
-        release_namespace: "{{ k3s_namespace }}"
-        create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/redis/values.yaml"
+        name: cnpg-operator
+        chart_ref: cnpg/cloudnative-pg
+        release_namespace: cnpg-system
+        create_namespace: true
         kubeconfig: "{{ kubeconfig }}"
         wait: true
         timeout: "3m0s"
-      tags: [phase2, redis]
+      tags: [phase2, postgres]
 
-    - name: "Phase 2: Deploy HashiCorp Vault"
+    - name: "Phase 2: Deploy PostgreSQL (irl-postgres chart)"
+      kubernetes.core.helm:
+        name: postgresql
+        chart_ref: "{{ irl_charts_path }}/irl-postgres"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        wait: false
+        timeout: "5m0s"
+        values:
+          operator:
+            enabled: false
+          cluster:
+            storage:
+              storageClass: local-path
+            nodePort: 30432
+      tags: [phase2, postgres]
+
+    - name: "Phase 2: Wait for CNPG cluster healthy"
+      ansible.builtin.command: >
+        kubectl get cluster postgresql -n {{ k3s_namespace }}
+        -o jsonpath='{.status.phase}' --kubeconfig {{ kubeconfig }}
+      register: cnpg_status
+      until: "'Cluster in healthy state' in cnpg_status.stdout"
+      retries: 60
+      delay: 5
+      changed_when: false
+      tags: [phase2, postgres]
+
+    - name: "Phase 2: Create service databases"
+      kubernetes.core.k8s_exec:
+        namespace: "{{ k3s_namespace }}"
+        pod: "postgresql-1"
+        container: postgres
+        kubeconfig: "{{ kubeconfig }}"
+        command: >
+          psql -U postgres -c "
+            DO $$ BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ item.name }}') THEN
+                CREATE USER {{ item.name }} WITH PASSWORD '{{ vault_pg_passwords[item.name] }}';
+              END IF;
+            END $$;
+            SELECT 'exists' FROM pg_database WHERE datname='{{ item.name }}';"
+      loop: "{{ irl_pg_databases }}"
+      no_log: true
+      register: db_check
+      tags: [phase2, postgres]
+
+    - name: "Phase 2: Create databases (if not exist)"
+      kubernetes.core.k8s_exec:
+        namespace: "{{ k3s_namespace }}"
+        pod: "postgresql-1"
+        container: postgres
+        kubeconfig: "{{ kubeconfig }}"
+        command: >
+          psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='{{ item.name }}'"
+      loop: "{{ irl_pg_databases }}"
+      register: db_exists
+      changed_when: false
+      tags: [phase2, postgres]
+
+    - name: "Phase 2: Create missing databases"
+      kubernetes.core.k8s_exec:
+        namespace: "{{ k3s_namespace }}"
+        pod: "postgresql-1"
+        container: postgres
+        kubeconfig: "{{ kubeconfig }}"
+        command: >
+          psql -U postgres -c "CREATE DATABASE {{ item.item.name }} OWNER {{ item.item.name }}"
+      loop: "{{ db_exists.results }}"
+      when: "'1' not in item.stdout"
+      tags: [phase2, postgres]
+
+    - name: "Phase 2: Deploy Valkey (irl-valkey chart)"
+      kubernetes.core.helm:
+        name: valkey
+        chart_ref: "{{ irl_charts_path }}/irl-valkey"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        wait: true
+        timeout: "3m0s"
+      tags: [phase2, valkey]
+
+    - name: "Phase 2: Upload Vault values file"
+      ansible.builtin.copy:
+        src: ../helm/vault/values.yaml
+        dest: "{{ helm_values_path }}/vault/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase2, vault]
+
+    - name: "Phase 2: Deploy Vault"
       kubernetes.core.helm:
         name: vault
         chart_ref: hashicorp/vault
-        chart_version: "0.28.x"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         values_files:
-          - "{{ helm_values_base }}/vault/values.yaml"
+          - "{{ helm_values_path }}/vault/values.yaml"
         kubeconfig: "{{ kubeconfig }}"
-        wait: true
         timeout: "3m0s"
       tags: [phase2, vault]
 
     - name: "Phase 2: Display Vault init instructions"
       ansible.builtin.debug:
         msg: |
-          Vault is running but NOT initialized. Init and unseal are manual operations.
+          Vault is running but NOT initialized.
 
           To initialize:
             kubectl exec -n irl vault-0 -- vault operator init -key-shares=5 -key-threshold=3
 
-          Save the unseal keys and root token securely (see docs/runbooks/vault-sealed.md).
-
           To unseal (run 3x with different keys):
             kubectl exec -n irl vault-0 -- vault operator unseal
+
+          See docs/runbooks/vault-sealed.md for the full procedure.
       tags: [phase2, vault]
 
-    # ── Phase 3: Dev Platform ──────────────────────────────────────
-    - name: "Phase 3: Create Gitea LFS PVC"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: gitea-lfs-pvc
-            namespace: "{{ k3s_namespace }}"
-          spec:
-            storageClassName: zfs-local
-            accessModes:
-              - ReadWriteOnce
-            resources:
-              requests:
-                storage: 100Gi
-            selector:
-              matchLabels:
-                app: gitea
+    # ══════════════════════════════════════════════════════════════
+    # Phase 3: Dev Platform + Monitoring
+    # ══════════════════════════════════════════════════════════════
+
+    - name: "Phase 3: Write Gitea secrets override"
+      ansible.builtin.copy:
+        content: |
+          gitea:
+            gitea:
+              config:
+                database:
+                  PASSWD: "{{ vault_pg_passwords.gitea }}"
+                cache:
+                  HOST: "redis://:{{ vault_redis_password }}@valkey:6379/0"
+                session:
+                  PROVIDER_CONFIG: "redis://:{{ vault_redis_password }}@valkey:6379/1"
+                queue:
+                  CONN_STR: "redis://:{{ vault_redis_password }}@valkey:6379/2"
+        dest: "{{ helm_values_path }}/gitea-secrets.yaml"
+        owner: root
+        mode: "0600"
+      no_log: true
       tags: [phase3, gitea]
 
-    - name: "Phase 3: Deploy Gitea"
+    - name: "Phase 3: Deploy Gitea (irl-gitea chart)"
       kubernetes.core.helm:
         name: gitea
-        chart_ref: gitea-charts/gitea
-        chart_version: "10.x"
+        chart_ref: "{{ irl_charts_path }}/irl-gitea"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/gitea/values.yaml"
         kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/gitea-secrets.yaml"
         wait: true
         timeout: "5m0s"
       tags: [phase3, gitea]
+
+    - name: "Phase 3: Write Authentik secrets override"
+      ansible.builtin.copy:
+        content: |
+          authentik:
+            secret_key: "{{ vault_authentik_secret_key }}"
+            postgresql:
+              host: "postgresql-rw"
+              name: "authentik"
+              user: "authentik"
+              password: "{{ vault_pg_passwords.authentik }}"
+            redis:
+              host: "valkey"
+              password: "{{ vault_redis_password }}"
+            bootstrap_password: "{{ vault_authentik_bootstrap_password }}"
+          server:
+            service:
+              type: NodePort
+              nodePort: 30900
+            resources:
+              limits:
+                memory: "1Gi"
+              requests:
+                memory: "256Mi"
+          worker:
+            resources:
+              limits:
+                memory: "512Mi"
+              requests:
+                memory: "128Mi"
+          postgresql:
+            enabled: false
+          redis:
+            enabled: false
+        dest: "{{ helm_values_path }}/authentik-values.yaml"
+        owner: root
+        mode: "0600"
+      no_log: true
+      tags: [phase3, authentik]
 
     - name: "Phase 3: Deploy Authentik SSO"
       kubernetes.core.helm:
         name: authentik
         chart_ref: goauthentik/authentik
-        chart_version: "2024.10.x"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/authentik/values.yaml"
         kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/authentik-values.yaml"
         wait: true
         timeout: "5m0s"
       tags: [phase3, authentik]
 
-    - name: "Phase 3: Deploy Plane project management"
+    - name: "Phase 3: Deploy monitoring (irl-monitoring chart)"
       kubernetes.core.helm:
-        name: plane
-        chart_ref: makeplane/plane-ce
-        chart_version: "1.x"
+        name: monitoring
+        chart_ref: "{{ irl_charts_path }}/irl-monitoring"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/plane/values.yaml"
         kubeconfig: "{{ kubeconfig }}"
-        wait: true
-        timeout: "5m0s"
-      tags: [phase3, plane]
-
-    - name: "Phase 3: Deploy kube-prometheus-stack (Prometheus + Grafana + Alertmanager)"
-      kubernetes.core.helm:
-        name: kube-prometheus-stack
-        chart_ref: prometheus-community/kube-prometheus-stack
-        chart_version: "65.x"
-        release_namespace: "{{ k3s_namespace }}"
-        create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/monitoring/values.yaml"
-        kubeconfig: "{{ kubeconfig }}"
+        values:
+          kube-prometheus-stack:
+            grafana:
+              adminPassword: "{{ vault_grafana_admin_password }}"
         wait: true
         timeout: "10m0s"
+      no_log: true
       tags: [phase3, monitoring]
 
-    - name: "Phase 3: Create Grafana dashboards ConfigMap"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: grafana-dashboards
-            namespace: "{{ k3s_namespace }}"
-            labels:
-              grafana_dashboard: "1"
-      tags: [phase3, monitoring]
+    # ── Phase 4: CI/CD ────────────────────────────────────────────
+    # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,
+    # plugins need 2.479.1+). Revisit when CI/CD is needed.
+    # May use Gitea Actions instead.
+    #
+    # - name: "Phase 4: Upload Jenkins values file"
+    #   ansible.builtin.copy:
+    #     src: ../helm/jenkins/values.yaml
+    #     dest: "{{ helm_values_path }}/jenkins/values.yaml"
+    #     owner: "{{ irl_admin_user }}"
+    #     mode: "0640"
+    #   tags: [phase4, jenkins]
+    #
+    # - name: "Phase 4: Deploy Jenkins"
+    #   kubernetes.core.helm:
+    #     name: jenkins
+    #     chart_ref: jenkins/jenkins
+    #     release_namespace: "{{ k3s_namespace }}"
+    #     create_namespace: false
+    #     values_files:
+    #       - "{{ helm_values_path }}/jenkins/values.yaml"
+    #     kubeconfig: "{{ kubeconfig }}"
+    #     wait: true
+    #     timeout: "5m0s"
+    #   tags: [phase4, jenkins]
 
-    - name: "Phase 3: Upload pre-built Grafana dashboards to ConfigMap"
-      ansible.builtin.shell: >
-        kubectl --kubeconfig {{ kubeconfig }} create configmap grafana-dashboards
-        --from-file=../files/grafana/dashboards/
-        --namespace {{ k3s_namespace }}
-        --dry-run=client -o yaml | kubectl --kubeconfig {{ kubeconfig }} apply -f -
-      changed_when: true
-      tags: [phase3, monitoring]
+    # ── Phase 5: Agent Integration ────────────────────────────────
 
-    - name: "Phase 3: Create Loki data PVC"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: loki-data-pvc
-            namespace: "{{ k3s_namespace }}"
-          spec:
-            storageClassName: zfs-local
-            accessModes:
-              - ReadWriteOnce
-            resources:
-              requests:
-                storage: 50Gi
-            selector:
-              matchLabels:
-                app: loki
-      tags: [phase3, loki]
-
-    - name: "Phase 3: Deploy Loki"
-      kubernetes.core.helm:
-        name: loki
-        chart_ref: grafana/loki
-        chart_version: "6.x"
-        release_namespace: "{{ k3s_namespace }}"
-        create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/loki/values.yaml"
-        kubeconfig: "{{ kubeconfig }}"
-        wait: true
-        timeout: "5m0s"
-      tags: [phase3, loki]
-
-    # ── Phase 4: CI/CD ─────────────────────────────────────────────
-    - name: "Phase 4: Deploy Jenkins"
-      kubernetes.core.helm:
-        name: jenkins
-        chart_ref: jenkins/jenkins
-        chart_version: "5.x"
-        release_namespace: "{{ k3s_namespace }}"
-        create_namespace: false
-        values_files:
-          - "{{ helm_values_base }}/jenkins/values.yaml"
-        kubeconfig: "{{ kubeconfig }}"
-        wait: true
-        timeout: "5m0s"
-      tags: [phase4, jenkins]
-
-    - name: "Phase 4: Display Jenkins admin password retrieval command"
-      ansible.builtin.debug:
-        msg: |
-          Jenkins deployed. To get the initial admin password:
-            kubectl get secret irl-jenkins -n irl -o jsonpath='{.data.jenkins-admin-password}' | base64 -d
-
-          Jenkins is accessible at https://ci.{{ irl_public_domain }}
-          (after Caddy is configured to proxy NodePort 30080)
-      tags: [phase4, jenkins]
-
-    # ── Phase 5: Agent Integration ─────────────────────────────────
-    - name: "Phase 5: Create Ollama models PVC"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: ollama-models-pvc
-            namespace: "{{ k3s_namespace }}"
-          spec:
-            storageClassName: zfs-local
-            accessModes:
-              - ReadWriteOnce
-            resources:
-              requests:
-                storage: 200Gi
-            selector:
-              matchLabels:
-                app: ollama
+    - name: "Phase 5: Upload Ollama values file"
+      ansible.builtin.copy:
+        src: ../helm/ollama/values.yaml
+        dest: "{{ helm_values_path }}/ollama/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
       tags: [phase5, ollama]
 
     - name: "Phase 5: Deploy Ollama"
       kubernetes.core.helm:
         name: ollama
         chart_ref: ollama-helm/ollama
-        chart_version: "0.x"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         values_files:
-          - "{{ helm_values_base }}/ollama/values.yaml"
+          - "{{ helm_values_path }}/ollama/values.yaml"
         kubeconfig: "{{ kubeconfig }}"
         wait: true
         timeout: "30m0s"
       tags: [phase5, ollama]
 
-    # ── Deploy summary ─────────────────────────────────────────────
+    # ── Deploy summary ────────────────────────────────────────────
+
     - name: List deployed Helm releases
       ansible.builtin.command: >
         helm list --namespace {{ k3s_namespace }} --kubeconfig {{ kubeconfig }}
@@ -397,22 +382,20 @@
       changed_when: false
       tags: [always]
 
+    - name: List CNPG operator
+      ansible.builtin.command: >
+        helm list --namespace cnpg-system --kubeconfig {{ kubeconfig }}
+      register: cnpg_list
+      changed_when: false
+      tags: [always]
+
     - name: Display deployment summary
       ansible.builtin.debug:
         msg: |
-          Helm deployments in namespace {{ k3s_namespace }}:
+          Helm deployments:
+          {{ cnpg_list.stdout }}
           {{ helm_list.stdout }}
 
-          NodePort -> Service mapping (for Caddy configuration):
-            30432 -> PostgreSQL
-            30200 -> HashiCorp Vault    (https://vault.{{ irl_public_domain }})
-            30300 -> Gitea              (https://git.{{ irl_public_domain }})
-            30022 -> Gitea SSH
-            30900 -> Authentik          (https://auth.{{ irl_public_domain }})
-            30082 -> Plane              (https://plane.{{ irl_public_domain }})
-            30001 -> Grafana            (https://grafana.{{ irl_public_domain }})
-            30090 -> Prometheus         (https://metrics.{{ irl_internal_domain }})
-            30093 -> Alertmanager       (https://alerts.{{ irl_internal_domain }})
-            30080 -> Jenkins            (https://ci.{{ irl_public_domain }})
-            11434 -> Ollama             (ClusterIP only -- port-forward to access)
+          All services deployed via IRL charts or upstream values files.
+          NodePorts defined in chart values, proxied by Caddy.
       tags: [always]
