@@ -1,123 +1,94 @@
 # helm/plane/values.yaml
 # =======================
-# Plane project management chart values for the IRL homelab.
-# Chart: makeplane/plane-ce (community edition)
+# Plane CE (community edition) for the IRL homelab.
+# Chart: makeplane/plane-ce v1.4.1
 # Repo: https://helm.plane.so/
 # Docs: https://docs.plane.so/self-hosting/methods/kubernetes
 #
-# Memory limits from irl_mem_limits:
-#   plane_api: 1g
-#   plane_worker: 512m
-#   plane_web: 512m
-#   plane_minio: 512m
-# Domain: plane.lab.infiniteroomlabs.cloud
-# NodePort 30082 -> Caddy proxies at https://plane.lab.infiniteroomlabs.cloud
+# Uses external PostgreSQL (CNPG) and Redis (Valkey).
+# Local MinIO for file storage. Local RabbitMQ for async.
+# Ingress disabled -- Caddy on bare metal handles TLS + routing.
 
-planeVersion: "0.23"
+planeVersion: v1.2.0
 
-# Web frontend
-web:
-  replicas: 1
-  resources:
-    requests:
-      memory: "128Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "1000m"
+# ── Disable bundled databases -- using dedicated charts ──────────
+postgres:
+  local_setup: false
 
-# API backend
-api:
-  replicas: 1
-  secret_key:
-    valueFrom:
-      secretKeyRef:
-        name: plane-secrets
-        key: secret-key
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "200m"
-    limits:
-      memory: "1Gi"
-      cpu: "1000m"
-
-# Async worker
-worker:
-  replicas: 1
-  resources:
-    requests:
-      memory: "128Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "500m"
-
-# Beat scheduler
-beatworker:
-  replicas: 1
-  resources:
-    requests:
-      memory: "64Mi"
-      cpu: "50m"
-    limits:
-      memory: "256Mi"
-      cpu: "250m"
-
-# Database configuration -- external PostgreSQL
-db:
-  host: "postgresql.irl.svc.cluster.local"
-  port: 5432
-  name: plane
-  user: plane
-  password:
-    valueFrom:
-      secretKeyRef:
-        name: postgres-plane
-        key: password
-  postgresqlMaxConnections: 20
-
-# Redis -- external Redis
 redis:
-  host: "redis-master.irl.svc.cluster.local"
-  port: 6379
-  password:
-    valueFrom:
-      secretKeyRef:
-        name: redis-auth
-        key: redis-password
+  local_setup: false
 
-# MinIO for file storage
-minio:
-  enabled: true
-  storageSize: "50Gi"
+rabbitmq:
+  local_setup: true
   storageClass: local-path
-  root_user: plane
-  root_password:
-    valueFrom:
-      secretKeyRef:
-        name: plane-secrets
-        key: minio-root-password
-  # Resource limits mapped from irl_mem_limits.plane_minio: 512m
-  resources:
-    requests:
-      memory: "128Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "500m"
+  volumeSize: 500Mi
 
-# Ingress via NodePort -- Caddy handles TLS termination
+minio:
+  local_setup: true
+  storageClass: local-path
+  volumeSize: 5Gi
+
+# ── Ingress disabled -- Caddy handles TLS ────────────────────────
 ingress:
   enabled: false
 
-service:
-  type: NodePort
-  nodePort: 30082
+# ── Resource limits (homelab-sized) ──────────────────────────────
+web:
+  replicas: 1
+  memoryLimit: 512Mi
+  cpuLimit: 500m
+  cpuRequest: 50m
+  memoryRequest: 128Mi
 
-# Disable bundled dependencies -- using dedicated charts
-postgresql:
-  enabled: false
+space:
+  replicas: 1
+  memoryLimit: 512Mi
+  cpuLimit: 500m
+  cpuRequest: 50m
+  memoryRequest: 64Mi
 
-rabbitmq:
-  enabled: false
+admin:
+  replicas: 1
+  memoryLimit: 512Mi
+  cpuLimit: 500m
+  cpuRequest: 50m
+  memoryRequest: 64Mi
+
+live:
+  replicas: 1
+  memoryLimit: 512Mi
+  cpuLimit: 500m
+  cpuRequest: 50m
+  memoryRequest: 64Mi
+
+api:
+  replicas: 1
+  memoryLimit: 1Gi
+  cpuLimit: 1000m
+  cpuRequest: 100m
+  memoryRequest: 256Mi
+
+worker:
+  replicas: 1
+  memoryLimit: 512Mi
+  cpuLimit: 500m
+  cpuRequest: 50m
+  memoryRequest: 128Mi
+
+beatworker:
+  replicas: 1
+  memoryLimit: 256Mi
+  cpuLimit: 250m
+  cpuRequest: 50m
+  memoryRequest: 64Mi
+
+# ── Environment -- secrets injected via Ansible override file ────
+# env.pgdb_remote_url, env.remote_redis_url, env.secret_key,
+# and minio credentials are written to a secrets override file
+# by helm-deploy.yml and merged at deploy time.
+env:
+  pgdb_username: plane
+  pgdb_name: plane
+  docstore_bucket: "uploads"
+  doc_upload_size_limit: "5242880"
+  default_cluster_domain: cluster.local

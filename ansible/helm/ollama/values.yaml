@@ -5,20 +5,21 @@
 # Repo: https://otwld.github.io/ollama-helm/
 # Docs: https://github.com/otwld/ollama-helm
 #
-# Memory limit from irl_mem_limits.ollama: 8g
-# Models stored on ZFS dataset: irl_zfs_mount/ollama-models
-# Access: ClusterIP only (agents access via kubectl port-forward or Tailscale)
+# Models stored on ZFS dataset: /media/root/storage1/ollama-models
+# Access: ClusterIP only (agents access via kubectl port-forward)
 
-image:
-  tag: "0.4"
-
-# Pull models on startup. Maps to irl_ollama_models: [llama3.2, codellama]
 ollama:
-  models:
-    - llama3.2
-    - codellama
+  # No GPU on HP Z600 -- CPU inference only
+  gpu:
+    enabled: false
 
-# Resource limits mapped from irl_mem_limits.ollama: 8g
+  # Pull models on first startup (can be slow -- 30m timeout in helm-deploy.yml)
+  models:
+    pull:
+      - llama3.2
+      - codellama
+
+# Resource limits -- CPU inference is RAM-hungry
 resources:
   requests:
     memory: "1Gi"
@@ -27,30 +28,16 @@ resources:
     memory: "8Gi"
     cpu: "8000m"
 
-# ZFS-backed model storage
+# ZFS-backed model storage via pre-created PVC
+# PV: pv-ollama-models (200Gi, hostPath to ZFS dataset)
+# PVC: ollama-models-pvc (created in helm-deploy.yml)
 persistentVolume:
   enabled: true
   existingClaim: ollama-models-pvc
-
-extraVolumes:
-  - name: ollama-models
-    persistentVolumeClaim:
-      claimName: ollama-models-pvc
-
-extraVolumeMounts:
-  - name: ollama-models
-    mountPath: /root/.ollama/models
-
-# No GPU on HP Z600 -- CPU inference only.
-gpu:
-  enabled: false
-  type: ""
 
 service:
   type: ClusterIP
   port: 11434
 
-# Keep the Ollama API internal -- accessed via kubectl port-forward or
-# an MCP server container that exposes it on the Tailscale interface.
 ingress:
   enabled: false

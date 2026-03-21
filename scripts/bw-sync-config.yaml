@@ -78,6 +78,11 @@ secrets:
     k8s_secret: "plane-secrets"
     k8s_key: "minio-root-password"
 
+  - bw_item: "plane-live-secret-key"
+    ansible_var: "vault_plane_live_secret_key"
+    k8s_secret: "plane-secrets"
+    k8s_key: "live-secret-key"
+
   - bw_item: "ansible-vault-password"
     ansible_var: "vault_ansible_vault_password"
     k8s_secret: null

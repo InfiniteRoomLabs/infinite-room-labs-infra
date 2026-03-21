@@ -35,7 +35,15 @@ fi
 # ── Common Docker run flags ──────────────────────────────────────────
 DOCKER_ARGS=(
   --rm
-  -it
+  -i
+)
+# Only attach a pseudo-TTY when one is available (avoids "not a TTY" errors
+# when run from CI, cron, or agent contexts).
+if [ -t 0 ]; then
+  DOCKER_ARGS+=(-t)
+fi
+
+DOCKER_ARGS+=(
   -v "$SCRIPT_DIR:/ansible:ro"
   -v "$SSH_KEY:/root/.ssh/id_ed25519:ro"
   -v "$HOME/.ssh/known_hosts:/root/.ssh/known_hosts:rw"

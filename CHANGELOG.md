@@ -21,9 +21,17 @@ All notable changes to this project will be documented in this file.
 - Pre-built Grafana dashboards (homelab overview, Docker containers, ZFS health)
 - Deployment plan with decisions log and OTel observability architecture (`docs/plans/2026-03-20-homelab-k3s-helm-deployment.md`)
 
+- Homelab service access guide (`docs/homelab-access-guide.md`)
+
 ### Changed
 - helm-deploy.yml rewritten to use IRL charts (irl-postgres, irl-valkey, irl-gitea, irl-monitoring) from InfiniteRoomLabs/helm-charts repo
 - Jenkins commented out (plugin version incompatibility, deferred)
+- Ollama values rewritten to match actual chart schema (ollama.models.pull, ollama.gpu)
+- Plane values rewritten for makeplane/plane-ce v1.4.1 (external PG/Redis, local MinIO/RabbitMQ)
+- Plane deployment uses external_secrets.app_env_existingSecret with short hostnames (DNS race fix)
+- Authentik server memory limit bumped from 1Gi to 1.5Gi
+- run-ansible.sh: conditional TTY detection for non-interactive contexts
+- bw-sync-config.yaml: added plane-live-secret-key mapping
 - Vault storage class switched from zfs-local to local-path (SSD performance)
 
 ### Previously
