@@ -16,6 +16,13 @@ All notable changes to this project will be documented in this file.
 - NetworkPolicy: allow-intra-namespace for cross-node pod communication
 - OpenViking context database: PV, secret, deployment in helm-deploy.yml (Phase 2)
 - Ollama values: add nomic-embed-text to model pull list
+- Caddy playbook: log directory ownership fix, restart handler
+- Plane NodePort services for Caddy path-based routing (web/api/space/admin/live)
+
+### Changed
+- Caddyfile template: all services use internal TLS (Tailscale-only access), Plane path-based routing, admin API enabled for reload
+- CoreDNS: hostNetwork patch for port 53 (Tailscale Split DNS requires standard port)
+- irl_services: fix Authentik port (30900->30080), remove Jenkins, mark ClusterIP services as caddy_proxy:false
 
 ### Changed
 - k3s.yml: add `--flannel-iface tailscale0`, `--flannel-mtu 1230`, `--node-external-ip`, `--flannel-external-ip` for multi-node over Tailscale

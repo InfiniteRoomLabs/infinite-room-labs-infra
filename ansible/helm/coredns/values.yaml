@@ -7,11 +7,17 @@
 # Serves lab.infiniteroomlabs.cloud and internal.infiniteroomlabs.cloud
 # zones from a ConfigMap. Tailscale Split DNS routes queries here.
 # All tailnet devices resolve internal domains without /etc/hosts hacks.
+#
+# Uses hostNetwork + hostPort 53 so Tailscale Split DNS can reach it
+# at the node's Tailscale IP on standard DNS port.
 
 replicaCount: 1
 
-# Exposed via NodePort so Tailscale Split DNS can reach it from any device
-serviceType: NodePort
+# Use host network so DNS is available on the node's Tailscale IP at port 53
+# k3s's own CoreDNS only listens on ClusterIP (10.43.0.10), no conflict.
+hostNetwork: true
+
+serviceType: ClusterIP
 service:
   annotations: {}
 

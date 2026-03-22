@@ -1,4 +1,4 @@
-# Managed by Ansible -- do not edit manually
+# {{ ansible_managed }}
 # Infinite Room Labs homelab reverse proxy
 #
 # All services are proxied through Caddy on the Tailscale interface.
@@ -7,16 +7,16 @@
 
 # Global options
 {
-	admin off
+	# Admin API on localhost only (needed for caddy reload)
+	admin localhost:2019
 }
 
 {% for svc_name, svc in irl_services.items() %}
+{% if svc.get('caddy_proxy', true) and svc_name != 'plane' %}
 {% set domain = irl_internal_domain if svc.internal else irl_public_domain %}
 # {{ svc_name | capitalize }}{{ " (internal)" if svc.internal else "" }}
 {{ svc.subdomain }}.{{ domain }} {
-{% if svc.internal %}
 	tls internal
-{% endif %}
 	reverse_proxy localhost:{{ svc.port }}
 	log {
 		output file /var/log/caddy/{{ svc_name }}.log {
@@ -26,4 +26,30 @@
 	}
 }
 
+{% endif %}
 {% endfor %}
+# Plane -- path-based routing to multiple backends
+plane.{{ irl_public_domain }} {
+	tls internal
+	handle /api/* {
+		reverse_proxy localhost:30083
+	}
+	handle /spaces/* {
+		reverse_proxy localhost:30084
+	}
+	handle /god-mode/* {
+		reverse_proxy localhost:30085
+	}
+	handle /live/* {
+		reverse_proxy localhost:30086
+	}
+	handle {
+		reverse_proxy localhost:30082
+	}
+	log {
+		output file /var/log/caddy/plane.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

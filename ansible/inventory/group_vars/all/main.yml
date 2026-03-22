@@ -66,7 +66,7 @@ irl_services:
     internal: false
   authentik:
     subdomain: "auth"
-    port: 30900           # NodePort -- goauthentik/authentik, server.service.nodePorts.http
+    port: 30080           # NodePort -- goauthentik/authentik, server.service.nodePorts.http
     internal: false
   grafana:
     subdomain: "grafana"
@@ -78,11 +78,10 @@ irl_services:
     port: 30200           # NodePort -- hashicorp/vault, server.service.nodePort
     internal: false
     health_path: "/v1/sys/health"
-  jenkins:
-    subdomain: "ci"
-    port: 30080           # NodePort -- jenkins/jenkins, controller.service.nodePort
-    internal: false
-    health_path: "/login"
+  # jenkins:                   # SKIPPED -- plugin version incompatibility
+  #   subdomain: "ci"
+  #   port: 30080
+  #   internal: false
   prometheus:
     subdomain: "metrics"
     port: 30090           # NodePort -- kube-prometheus-stack, prometheus.service.nodePort
@@ -100,12 +99,14 @@ irl_services:
     health_path: "/"
   garage-s3:
     subdomain: "s3"
-    port: 3900            # ClusterIP -- irl-garage, S3 API (internal access only)
+    port: 3900            # ClusterIP -- irl-garage, S3 API (cluster-internal only)
     internal: true
+    caddy_proxy: false    # No NodePort -- accessed within cluster only
   openviking:
     subdomain: "knowledge"
-    port: 1933            # ClusterIP -- irl-openviking, API (internal access only)
+    port: 1933            # ClusterIP -- irl-openviking, API (cluster-internal only)
     internal: true
+    caddy_proxy: false    # No NodePort -- accessed within cluster only
 
 # ── Users ────────────────────────────────────────────────────────────
 irl_admin_user: "wes"

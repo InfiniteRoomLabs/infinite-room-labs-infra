@@ -596,6 +596,35 @@
         timeout: "10m0s"
       tags: [phase3, plane]
 
+    # Plane CE creates headless services only. Create NodePort services
+    # for Caddy path-based routing.
+    - name: "Phase 3: Create Plane NodePort services for Caddy"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "plane-{{ item.name }}-np"
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            type: NodePort
+            selector:
+              app.name: "irl-plane-{{ item.name }}"
+            ports:
+              - name: http
+                port: "{{ item.port }}"
+                targetPort: "{{ item.port }}"
+                nodePort: "{{ item.nodePort }}"
+      loop:
+        - { name: web,   port: 3000, nodePort: 30082 }
+        - { name: api,   port: 8000, nodePort: 30083 }
+        - { name: space, port: 3000, nodePort: 30084 }
+        - { name: admin, port: 3000, nodePort: 30085 }
+        - { name: live,  port: 3000, nodePort: 30086 }
+      tags: [phase3, plane]
+
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,
     # plugins need 2.479.1+). Revisit when CI/CD is needed.

@@ -52,6 +52,15 @@
         group: root
         mode: "0755"
 
+    - name: Ensure Caddy log directory exists with correct ownership
+      ansible.builtin.file:
+        path: /var/log/caddy
+        state: directory
+        owner: caddy
+        group: caddy
+        mode: "0755"
+        recurse: true
+
     - name: Deploy Caddyfile
       ansible.builtin.template:
         src: ../templates/Caddyfile.j2
@@ -73,4 +82,4 @@
     - name: reload caddy
       ansible.builtin.systemd:
         name: caddy
-        state: reloaded
+        state: restarted
