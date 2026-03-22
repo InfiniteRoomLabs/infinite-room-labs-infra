@@ -1,0 +1,23 @@
+# ansible/inventory/host_vars/oracle-arm.yml
+# ============================================
+# Resource budgets for Oracle Cloud ARM VM (4 OCPU, 24 GB RAM).
+# Ampere A1 Flex, Always Free tier.
+
+# ── Resource Budgets ──────────────────────────────────────────────
+
+irl_total_ram_gb: 24
+irl_reserved_ram_gb: 2  # OS + k3s agent overhead
+
+# Per-service memory limits (services scheduled here via nodeSelector)
+irl_plane_api_memory: "1Gi"
+irl_plane_web_memory: "512Mi"
+irl_plane_worker_memory: "512Mi"
+irl_plane_beatworker_memory: "256Mi"
+irl_plane_space_memory: "512Mi"
+irl_plane_admin_memory: "512Mi"
+irl_plane_live_memory: "512Mi"
+irl_plane_minio_memory: "1Gi"
+irl_plane_rabbitmq_memory: "512Mi"
+
+irl_authentik_server_memory: "1536Mi"
+irl_authentik_worker_memory: "768Mi"

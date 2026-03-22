@@ -147,6 +147,9 @@
       ansible.builtin.command: >
         /tmp/k3s-install.sh
         --node-ip {{ k3s_node_lan_ip }}
+        --node-external-ip {{ k3s_node_ip }}
+        --flannel-external-ip
+        --flannel-iface tailscale0
         --tls-san {{ k3s_node_ip }}
         --tls-san {{ k3s_node_lan_ip }}
         --disable traefik
@@ -225,6 +228,25 @@
       tags: [k3s-kubeconfig]
 
     # ── Create IRL namespace ───────────────────────────────────────
+    # ── Node labels (IRL taxonomy) ───────────────────────────────
+    - name: Apply homelab node labels
+      ansible.builtin.command: >
+        kubectl label node {{ ansible_hostname }}
+        topology.kubernetes.io/region=us-east
+        topology.kubernetes.io/zone=homelab
+        irl.dev/provider=homelab
+        irl.dev/tier=data
+        irl.dev/instance-type=hp-z600
+        irl.dev/storage=zfs
+        irl.dev/network=lan
+        irl.dev/cost=owned
+        irl.dev/persistence=permanent
+        irl.dev/gpu=none
+        irl.dev/memory-class=high
+        --overwrite
+        --kubeconfig {{ k3s_kubeconfig_host_path }}
+      changed_when: true
+
     - name: Create irl namespace
       kubernetes.core.k8s:
         api_version: v1
@@ -233,7 +255,7 @@
         state: present
         kubeconfig: "{{ k3s_kubeconfig_host_path }}"
 
-    # ── Default-deny NetworkPolicy (Calico enforces) ────────────
+    # ── NetworkPolicies (kube-router enforces) ───────────────────
     - name: Apply default-deny NetworkPolicy in irl namespace
       kubernetes.core.k8s:
         state: present
@@ -249,6 +271,34 @@
             policyTypes:
               - Ingress
               - Egress
+
+    - name: Allow intra-namespace traffic (pods talk to each other)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: allow-intra-namespace
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Ingress
+              - Egress
+            ingress:
+              - from:
+                  - podSelector: {}
+            egress:
+              - to:
+                  - podSelector: {}
+              - to: []
+                ports:
+                  - protocol: UDP
+                    port: 53
+                  - protocol: TCP
+                    port: 53
 
     - name: Apply DNS egress NetworkPolicy (all pods need DNS)
       kubernetes.core.k8s:
@@ -322,6 +372,14 @@
           app: grafana
           capacity: "5Gi"
           hostPath: /var/lib/rancher/k3s/storage/grafana-data
+        - name: pv-garage-data
+          app: garage
+          capacity: "500Gi"
+          hostPath: "{{ irl_zfs_mount }}/garage-data"
+        - name: pv-garage-meta
+          app: garage
+          capacity: "5Gi"
+          hostPath: /var/lib/garage/meta
         - name: pv-vault-data
           app: vault
           capacity: "5Gi"

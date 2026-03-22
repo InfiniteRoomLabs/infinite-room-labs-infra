@@ -1,0 +1,63 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+# Infinite Room Labs -- k3s agent node firewall (nftables)
+#
+# Policy: default deny inbound, trust Tailscale/CNI/Flannel interfaces.
+# Simpler than the server template -- no k3s API, no Caddy.
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        # Allow loopback
+        iif "lo" accept
+
+        # Allow established/related connections
+        ct state established,related accept
+
+        # Drop invalid packets
+        ct state invalid drop
+
+        # ICMP (ping, path MTU discovery)
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+
+        # Trust internal interfaces unconditionally
+        iifname "tailscale0" accept
+        iifname "cni0" accept
+        iifname "flannel.1" accept
+
+        # Allowed TCP ports
+{% for port in irl_firewall_allowed_tcp_ports %}
+        tcp dport {{ port }} accept
+{% endfor %}
+
+        # Allowed UDP ports
+{% for port in irl_firewall_allowed_udp_ports %}
+        udp dport {{ port }} accept
+{% endfor %}
+
+        # Log dropped packets (rate limited)
+        limit rate 5/minute burst 5 packets log prefix "nftables-dropped: " level info
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy accept;
+
+        ct state established,related accept
+
+        # Allow overlay network forwarding
+        iifname "tailscale0" accept
+        oifname "tailscale0" accept
+        iifname "flannel.1" accept
+        oifname "flannel.1" accept
+        iifname "cni0" accept
+        oifname "cni0" accept
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}

@@ -1,0 +1,130 @@
+---
+# ansible/playbooks/k3s-agent.yml
+# ================================
+# Manages k3s agent nodes after initial cloud-init bootstrap.
+# Handles upgrades, config drift correction, and ongoing hardening.
+#
+# Cloud-init handles first-boot provisioning (Tailscale, k3s install,
+# firewall, user setup). This playbook manages the node after that.
+#
+# Run:
+#   ./run-ansible.sh playbook playbooks/k3s-agent.yml
+#
+# Tags: k3s-agent, security, firewall
+
+- name: "k3s Agent Node Management"
+  hosts: k3s_agents
+  become: true
+  tags: [k3s-agent]
+
+  tasks:
+    # ── Verify Prerequisites ──────────────────────────────────────
+
+    - name: Verify Tailscale is running
+      ansible.builtin.command: tailscale status --json
+      register: ts_status
+      changed_when: false
+      failed_when: >
+        (ts_status.stdout | from_json).BackendState != "Running"
+      tags: [always]
+
+    - name: Get Tailscale IP
+      ansible.builtin.command: tailscale ip -4
+      register: ts_ip
+      changed_when: false
+      tags: [always]
+
+    - name: Display node info
+      ansible.builtin.debug:
+        msg: "Node {{ inventory_hostname }} | Tailscale IP: {{ ts_ip.stdout }} | Role: {{ irl_k3s_role }}"
+      tags: [always]
+
+    # ── Node Label Reconciliation ────────────────────────────────
+    # Ensures labels from group_vars match what's on the node.
+    # Cloud-init sets labels at first boot; this corrects drift.
+
+    - name: Reconcile node labels from group_vars
+      delegate_to: localhost
+      ansible.builtin.command: >
+        kubectl label node {{ inventory_hostname }}
+        {{ irl_k3s_node_labels | join(' ') }}
+        --overwrite
+      changed_when: true
+      tags: [k3s-agent, labels]
+
+    # ── k3s Agent Health ──────────────────────────────────────────
+
+    - name: Verify k3s-agent is running
+      ansible.builtin.systemd:
+        name: k3s-agent
+        state: started
+        enabled: true
+      tags: [k3s-agent]
+
+    - name: Check k3s agent version
+      ansible.builtin.command: k3s --version
+      register: k3s_version
+      changed_when: false
+      tags: [k3s-agent]
+
+    - name: Display k3s version
+      ansible.builtin.debug:
+        msg: "k3s version: {{ k3s_version.stdout }}"
+      tags: [k3s-agent]
+
+    # ── Kernel Parameters ─────────────────────────────────────────
+
+    - name: Ensure k3s kernel parameters
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-k3s.conf
+        reload: true
+      loop:
+        - { key: "vm.overcommit_memory", value: "1" }
+        - { key: "kernel.panic", value: "10" }
+        - { key: "kernel.panic_on_oops", value: "1" }
+        - { key: "net.ipv4.ip_forward", value: "1" }
+        - { key: "net.ipv6.conf.all.forwarding", value: "1" }
+      tags: [security]
+
+    # ── Firewall ──────────────────────────────────────────────────
+
+    - name: Deploy nftables config
+      ansible.builtin.template:
+        src: ../templates/nftables-agent.conf.j2
+        dest: /etc/nftables.conf
+        owner: root
+        mode: "0644"
+      notify: reload nftables
+      tags: [firewall]
+
+    - name: Ensure nftables is enabled
+      ansible.builtin.systemd:
+        name: nftables
+        state: started
+        enabled: true
+      tags: [firewall]
+
+    # ── SSH Hardening ─────────────────────────────────────────────
+
+    - name: Deploy hardened sshd_config
+      ansible.builtin.template:
+        src: ../templates/sshd_config.j2
+        dest: /etc/ssh/sshd_config
+        owner: root
+        mode: "0600"
+        validate: "sshd -t -f %s"
+      notify: reload sshd
+      tags: [security]
+
+  handlers:
+    - name: reload nftables
+      ansible.builtin.systemd:
+        name: nftables
+        state: reloaded
+
+    - name: reload sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: reloaded

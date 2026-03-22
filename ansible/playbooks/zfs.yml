@@ -45,11 +45,11 @@
       community.general.zfs:
         name: "{{ item.name }}"
         state: present
-        extra_zfs_properties:
-          mountpoint: "{{ item.mountpoint }}"
-          quota: "{{ item.quota }}"
-          compression: "lz4"
-          atime: "off"
+        extra_zfs_properties: >-
+          {{
+            {'mountpoint': item.mountpoint, 'quota': item.quota, 'compression': 'lz4', 'atime': 'off'}
+            | combine(item.properties | default({}))
+          }}
       loop: "{{ irl_zfs_datasets }}"
 
     # ── ZFS scrub schedule ─────────────────────────────────────────

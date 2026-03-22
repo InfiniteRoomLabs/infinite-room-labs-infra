@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- DigitalOcean k3s agent node: Terraform module (`do-droplet`), cloud-init, Ansible inventory
+- Garage S3 object storage: PVs, secrets, deployment in helm-deploy.yml, replaces MinIO for Plane
+- Internal CoreDNS for Tailscale Split DNS (`lab.infiniteroomlabs.cloud`, `internal.infiniteroomlabs.cloud`)
+- Tailscale Split DNS Terraform config (`environments/homelab/tailscale/split-dns/`)
+- k3s agent playbook (`k3s-agent.yml`) with nftables template for agent nodes
+- Node label taxonomy (`irl.dev/*`) for scheduling: provider, tier, storage, network, cost, persistence, gpu, memory-class
+- Bitwarden provider config for future Terraform secret integration
+- `.envrc` for homelab env (direnv auto-sources secrets from `~/.secrets/`)
+- NetworkPolicy: allow-intra-namespace for cross-node pod communication
+
+### Changed
+- k3s.yml: add `--flannel-iface tailscale0`, `--node-external-ip`, `--flannel-external-ip` for multi-node over Tailscale
+- Plane values: nodeSelector + tolerations for DO node, MinIO disabled (using Garage), external_secrets for DNS race fix
+- Authentik memory bumped to 1.5Gi
+- ZFS playbook: support per-dataset custom properties (recordsize, xattr)
+- root.hcl: add digitalocean and bitwarden providers
+- bw-sync-config: add Garage secrets (rpc, admin, metrics, plane keys)
+- run-ansible.sh: conditional TTY detection
+
+### Previously (this session)
 - ZFS ARC memory cap (8 GB) in zfs.yml playbook with persistent modprobe.d config
 - Full Ansible automation for homelab (HP Z600, Debian 12)
   - Phase 0: security hardening (nftables, SSH, Docker TCP fix, cleanup)

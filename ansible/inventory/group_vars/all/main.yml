@@ -38,6 +38,14 @@ irl_zfs_datasets:
   - name: "{{ irl_zfs_pool }}/gitea-lfs"
     mountpoint: "{{ irl_zfs_mount }}/gitea-lfs"
     quota: "100G"
+  - name: "{{ irl_zfs_pool }}/garage-data"
+    mountpoint: "{{ irl_zfs_mount }}/garage-data"
+    quota: "500G"
+    properties:
+      recordsize: "1M"
+      atime: "off"
+      compression: "lz4"
+      xattr: "sa"
 
 # ── Domains ──────────────────────────────────────────────────────────
 irl_public_domain: "lab.infiniteroomlabs.cloud"
@@ -85,6 +93,15 @@ irl_services:
     port: 30093           # NodePort -- kube-prometheus-stack, alertmanager.service.nodePort
     internal: true
     health_path: "/-/healthy"
+  garage:
+    subdomain: "storage"
+    port: 30039           # NodePort -- irl-garage, webui.service.nodePort
+    internal: true
+    health_path: "/"
+  garage-s3:
+    subdomain: "s3"
+    port: 3900            # ClusterIP -- irl-garage, S3 API (internal access only)
+    internal: true
 
 # ── Users ────────────────────────────────────────────────────────────
 irl_admin_user: "wes"

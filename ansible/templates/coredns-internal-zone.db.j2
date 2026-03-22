@@ -1,0 +1,37 @@
+; {{ ansible_managed }}
+; Internal DNS zone for IRL homelab services.
+; Generated from irl_services dict in group_vars/all/main.yml.
+; Served by CoreDNS in k3s, queried via Tailscale Split DNS.
+
+$ORIGIN lab.infiniteroomlabs.cloud.
+$TTL 300
+
+@   IN SOA ns1.lab.infiniteroomlabs.cloud. admin.infiniteroomlabs.cloud. (
+    2026032201                     ; serial (YYYYMMDDNN)
+    3600                           ; refresh
+    900                            ; retry
+    604800                         ; expire
+    300                            ; minimum TTL
+)
+
+    IN NS ns1.lab.infiniteroomlabs.cloud.
+
+ns1 IN A {{ homelab_tailscale_ip }}
+
+; Service records -- all services point to homelab Tailscale IP.
+; When services move to other nodes, update the IP here.
+{% for svc_name, svc in irl_services.items() %}
+{% if not svc.internal | default(false) %}
+{{ svc.subdomain }} IN A {{ homelab_tailscale_ip }}
+{% endif %}
+{% endfor %}
+
+; Internal-only services
+{% for svc_name, svc in irl_services.items() %}
+{% if svc.internal | default(false) %}
+{{ svc.subdomain }} IN A {{ homelab_tailscale_ip }}
+{% endif %}
+{% endfor %}
+
+; Wildcard -- catch-all for future services
+* IN A {{ homelab_tailscale_ip }}

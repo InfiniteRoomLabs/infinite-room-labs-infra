@@ -1,0 +1,38 @@
+# ansible/inventory/group_vars/digitalocean/main.yml
+# ===================================================
+# Variables for DigitalOcean k3s agent nodes.
+
+# k3s role
+irl_k3s_role: agent
+irl_k3s_server_url: "https://100.86.213.22:6443"
+
+# Node labels (IRL taxonomy)
+# Source of truth. Cloud-init applies at first boot,
+# k3s-agent.yml reconciles drift on subsequent runs.
+irl_k3s_node_labels:
+  - "topology.kubernetes.io/region=us-east"
+  - "topology.kubernetes.io/zone=do-nyc3"
+  - "irl.dev/provider=digitalocean"
+  - "irl.dev/tier=compute"
+  - "irl.dev/instance-type=s-4vcpu-8gb"
+  - "irl.dev/storage=nvme"
+  - "irl.dev/network=tailscale"
+  - "irl.dev/cost=paid"
+  - "irl.dev/persistence=ephemeral"
+  - "irl.dev/gpu=none"
+  - "irl.dev/memory-class=standard"
+
+irl_k3s_node_taints:
+  - "irl.dev/cloud=digitalocean:NoSchedule"
+
+# Firewall ports (in addition to tailscale0 interface allow)
+irl_firewall_allowed_tcp_ports:
+  - 22     # SSH
+  - 10250  # kubelet
+
+irl_firewall_allowed_udp_ports:
+  - 41641  # Tailscale
+  - 8472   # Flannel VXLAN
+
+# Tailscale
+irl_tailscale_hostname: "do-k3s-agent-01"

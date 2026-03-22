@@ -1,0 +1,64 @@
+# helm/coredns/values.yaml
+# =========================
+# Internal CoreDNS for IRL Split DNS.
+# Chart: coredns/coredns
+# Repo: https://coredns.github.io/helm
+#
+# Serves lab.infiniteroomlabs.cloud and internal.infiniteroomlabs.cloud
+# zones from a ConfigMap. Tailscale Split DNS routes queries here.
+# All tailnet devices resolve internal domains without /etc/hosts hacks.
+
+replicaCount: 1
+
+# Exposed via NodePort so Tailscale Split DNS can reach it from any device
+serviceType: NodePort
+service:
+  annotations: {}
+
+# CoreDNS server block configuration
+servers:
+  - zones:
+      - zone: lab.infiniteroomlabs.cloud.
+    port: 53
+    plugins:
+      - name: file
+        parameters: /etc/coredns/zones/lab.infiniteroomlabs.cloud.db
+        configBlock: ""
+      - name: errors
+      - name: log
+      - name: health
+        configBlock: |-
+          lameduck 5s
+      - name: ready
+
+  - zones:
+      - zone: internal.lab.infiniteroomlabs.cloud.
+    port: 53
+    plugins:
+      - name: file
+        parameters: /etc/coredns/zones/lab.infiniteroomlabs.cloud.db
+        configBlock: ""
+      - name: errors
+
+# Zone file mounted from a ConfigMap (created by Ansible)
+extraVolumes:
+  - name: zone-files
+    configMap:
+      name: coredns-internal-zones
+
+extraVolumeMounts:
+  - name: zone-files
+    mountPath: /etc/coredns/zones
+    readOnly: true
+
+# Schedule on homelab node (data tier)
+nodeSelector:
+  irl.dev/tier: data
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "128Mi"
+    cpu: "250m"

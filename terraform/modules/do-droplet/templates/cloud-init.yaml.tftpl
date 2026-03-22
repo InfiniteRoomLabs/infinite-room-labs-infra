@@ -1,0 +1,266 @@
+#cloud-config
+# Managed by Terraform -- do not edit manually
+# Infinite Room Labs -- k3s Agent Node Bootstrap
+#
+# Bootstraps a fresh Ubuntu 24.04 VM to join the IRL k3s cluster
+# over Tailscale. Cloud-init handles ALL first-boot provisioning.
+# Ansible manages ongoing config after this completes.
+
+timezone: ${timezone}
+package_update: true
+package_upgrade: true
+
+packages:
+  - nftables
+  - unattended-upgrades
+  - apt-listchanges
+  - python3
+  - python3-pip
+  - python3-venv
+  - curl
+  - jq
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - open-iscsi
+  - nfs-common
+
+users:
+  - name: ${admin_user}
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${admin_ssh_pubkey}
+
+disable_root: true
+
+write_files:
+  - path: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root:root
+    permissions: "0644"
+    content: |
+      Unattended-Upgrade::Allowed-Origins {
+          "$${distro_id}:$${distro_codename}";
+          "$${distro_id}:$${distro_codename}-security";
+          "$${distro_id}ESMApps:$${distro_codename}-apps-security";
+          "$${distro_id}ESM:$${distro_codename}-infra-security";
+      };
+      Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+      Unattended-Upgrade::MinimalSteps "true";
+      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+      Unattended-Upgrade::Automatic-Reboot "true";
+      Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root:root
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::Download-Upgradeable-Packages "1";
+      APT::Periodic::AutocleanInterval "7";
+
+  - path: /etc/ssh/sshd_config
+    owner: root:root
+    permissions: "0600"
+    content: |
+      Port 22
+      AddressFamily any
+      ListenAddress 0.0.0.0
+      ListenAddress ::
+      PermitRootLogin no
+      PubkeyAuthentication yes
+      PasswordAuthentication no
+      ChallengeResponseAuthentication no
+      UsePAM yes
+      KerberosAuthentication no
+      GSSAPIAuthentication no
+      HostbasedAuthentication no
+      PermitEmptyPasswords no
+      MaxAuthTries 3
+      MaxSessions 10
+      LoginGraceTime 30
+      AllowAgentForwarding no
+      AllowTcpForwarding no
+      X11Forwarding no
+      Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr
+      MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+      KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512
+      SyslogFacility AUTH
+      LogLevel VERBOSE
+      PrintMotd no
+      AcceptEnv LANG LC_*
+      Subsystem sftp /usr/lib/openssh/sftp-server
+      AllowUsers ${admin_user}
+
+  - path: /etc/nftables.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      #!/usr/sbin/nft -f
+      flush ruleset
+      table inet filter {
+          chain input {
+              type filter hook input priority filter; policy drop;
+              iif "lo" accept
+              ct state established,related accept
+              ct state invalid drop
+              ip protocol icmp accept
+              ip6 nexthdr icmpv6 accept
+              iifname "tailscale0" accept
+              iifname "cni0" accept
+              iifname "flannel.1" accept
+              tcp dport 22 accept
+              udp dport 41641 accept
+              tcp dport 10250 accept
+              udp dport 8472 accept
+              limit rate 5/minute burst 5 packets log prefix "nftables-dropped: " level info
+          }
+          chain forward {
+              type filter hook forward priority filter; policy accept;
+              ct state established,related accept
+              iifname "tailscale0" accept
+              oifname "tailscale0" accept
+              iifname "flannel.1" accept
+              oifname "flannel.1" accept
+              iifname "cni0" accept
+              oifname "cni0" accept
+          }
+          chain output {
+              type filter hook output priority filter; policy accept;
+          }
+      }
+
+  - path: /etc/sysctl.d/99-k3s.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      vm.overcommit_memory = 1
+      kernel.panic = 10
+      kernel.panic_on_oops = 1
+      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+      net.netfilter.nf_conntrack_max = 131072
+
+  - path: /etc/rancher/k3s/config.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      server: "${k3s_server_url}"
+      token: "${k3s_node_token}"
+      node-name: "${tailscale_hostname}"
+      flannel-iface: tailscale0
+      node-label:
+%{ for label in k3s_node_labels ~}
+        - "${label}"
+%{ endfor ~}
+      node-taint:
+%{ for taint in k3s_node_taints ~}
+        - "${taint}"
+%{ endfor ~}
+
+  - path: /etc/irl-cloud-init-version
+    owner: root:root
+    permissions: "0644"
+    content: |
+      template: do-droplet/templates/cloud-init.yaml.tftpl
+      version: 1.0.0
+
+runcmd:
+  - sysctl --system
+  - systemctl enable nftables
+  - systemctl start nftables
+  - systemctl reload sshd
+
+  - |
+    if ! command -v tailscale >/dev/null 2>&1; then
+      curl -fsSL https://tailscale.com/install.sh | sh
+    fi
+
+  - systemctl enable tailscaled
+  - systemctl start tailscaled
+  - |
+    TS_STATUS=$(tailscale status --json 2>/dev/null | jq -r '.BackendState // "NoState"')
+    if [ "$TS_STATUS" != "Running" ]; then
+      tailscale up \
+        --authkey="${tailscale_auth_key}" \
+        --hostname="${tailscale_hostname}" \
+        --accept-dns \
+        --accept-routes
+    fi
+
+  - |
+    echo "Waiting for Tailscale IP..."
+    for i in $(seq 1 60); do
+      TS_IP=$(tailscale ip -4 2>/dev/null)
+      if [ -n "$TS_IP" ]; then
+        echo "Tailscale IP: $TS_IP"
+        break
+      fi
+      sleep 2
+    done
+    if [ -z "$TS_IP" ]; then
+      echo "ERROR: No Tailscale IP after 120s" >&2
+      exit 1
+    fi
+
+  - |
+    K3S_HOST=$(echo "${k3s_server_url}" | sed 's|https://||;s|:.*||')
+    for i in $(seq 1 30); do
+      if ping -c 1 -W 2 "$K3S_HOST" >/dev/null 2>&1; then
+        echo "k3s server reachable at $K3S_HOST"
+        break
+      fi
+      sleep 2
+    done
+
+  - |
+    TS_IP=$(tailscale ip -4)
+    if ! grep -q "node-ip:" /etc/rancher/k3s/config.yaml; then
+      echo "node-ip: \"$TS_IP\"" >> /etc/rancher/k3s/config.yaml
+    else
+      sed -i "s|node-ip:.*|node-ip: \"$TS_IP\"|" /etc/rancher/k3s/config.yaml
+    fi
+
+  - |
+    if ! command -v k3s >/dev/null 2>&1; then
+      curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="${k3s_version}" \
+        K3S_URL="${k3s_server_url}" \
+        K3S_TOKEN="${k3s_node_token}" \
+        sh -s - agent
+    fi
+
+  - systemctl enable k3s-agent
+  - systemctl start k3s-agent
+
+  - |
+    echo "Waiting for k3s-agent..."
+    for i in $(seq 1 60); do
+      if systemctl is-active --quiet k3s-agent; then
+        echo "k3s-agent is running"
+        break
+      fi
+      sleep 5
+    done
+
+  - |
+    echo "=========================================="
+    echo "IRL Cloud-Init Complete"
+    echo "Hostname:     ${tailscale_hostname}"
+    echo "Tailscale IP: $(tailscale ip -4 2>/dev/null || echo unknown)"
+    echo "k3s server:   ${k3s_server_url}"
+    echo "k3s-agent:    $(systemctl is-active k3s-agent 2>/dev/null || echo unknown)"
+    echo "=========================================="
+
+power_state:
+  mode: reboot
+  condition: test -f /var/run/reboot-required
+  timeout: 30
+  message: "Rebooting after cloud-init (kernel updates)"
+
+final_message: |
+  IRL cloud-init complete. Hostname: ${tailscale_hostname}. Uptime: $UPTIME seconds.

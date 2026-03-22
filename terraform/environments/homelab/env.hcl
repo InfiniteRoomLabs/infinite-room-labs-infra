@@ -1,25 +1,26 @@
 locals {
   environment = "homelab"
 
-  # Cloudflare zone for homelab DNS records.
-  # Records are created under lab.infiniteroomlabs.cloud.
+  # ── Non-sensitive config only ───────────────────────────────────
+  # NO secrets, keys, tokens, fingerprints, or IPs here.
+  # All sensitive values come from env vars at apply time,
+  # sourced from ~/.secrets/ files or bw-unlock.
+  # Bitwarden provider reads secrets at plan/apply via data sources.
+
+  k3s_version     = "v1.31.4+k3s1"
+  k3s_server_port = "6443"
+
+  # ── Cloudflare (non-sensitive) ──────────────────────────────────
   cloudflare_domain = "infiniteroomlabs.cloud"
 
-  # Sourced from CLOUDFLARE_ACCOUNT_ID environment variable.
-  cloudflare_account_id = get_env("CLOUDFLARE_ACCOUNT_ID", "")
-
-  # Homelab service subdomains that need DNS records.
-  # These point to the Tailscale IP of the homelab server.
-  # The Tailscale IP must be set via HOMELAB_TAILSCALE_IP env var.
-  homelab_tailscale_ip = get_env("HOMELAB_TAILSCALE_IP", "")
-
+  # ── DNS records (IP content comes from env var at leaf level) ───
   homelab_dns_records = [
-    { name = "git.lab",     type = "A", content = local.homelab_tailscale_ip, proxied = false },
-    { name = "plane.lab",   type = "A", content = local.homelab_tailscale_ip, proxied = false },
-    { name = "auth.lab",    type = "A", content = local.homelab_tailscale_ip, proxied = false },
-    { name = "grafana.lab", type = "A", content = local.homelab_tailscale_ip, proxied = false },
-    { name = "vault.lab",   type = "A", content = local.homelab_tailscale_ip, proxied = false },
-    { name = "ci.lab",      type = "A", content = local.homelab_tailscale_ip, proxied = false },
-    { name = "*.lab",       type = "A", content = local.homelab_tailscale_ip, proxied = false },
+    { name = "git.lab",     type = "A", proxied = false },
+    { name = "plane.lab",   type = "A", proxied = false },
+    { name = "auth.lab",    type = "A", proxied = false },
+    { name = "grafana.lab", type = "A", proxied = false },
+    { name = "vault.lab",   type = "A", proxied = false },
+    { name = "ci.lab",      type = "A", proxied = false },
+    { name = "*.lab",       type = "A", proxied = false },
   ]
 }

@@ -83,6 +83,31 @@ secrets:
     k8s_secret: "plane-secrets"
     k8s_key: "live-secret-key"
 
+  - bw_item: "garage-rpc-secret"
+    ansible_var: "vault_garage_rpc_secret"
+    k8s_secret: "garage-rpc-secret"
+    k8s_key: "rpc-secret"
+
+  - bw_item: "garage-admin-token"
+    ansible_var: "vault_garage_admin_token"
+    k8s_secret: "garage-admin-secret"
+    k8s_key: "admin-token"
+
+  - bw_item: "garage-metrics-token"
+    ansible_var: "vault_garage_metrics_token"
+    k8s_secret: "garage-admin-secret"
+    k8s_key: "metrics-token"
+
+  - bw_item: "garage-plane-access-key"
+    ansible_var: "vault_garage_plane_access_key"
+    k8s_secret: "garage-plane-key"
+    k8s_key: "access-key"
+
+  - bw_item: "garage-plane-secret-key"
+    ansible_var: "vault_garage_plane_secret_key"
+    k8s_secret: "garage-plane-key"
+    k8s_key: "secret-key"
+
   - bw_item: "ansible-vault-password"
     ansible_var: "vault_ansible_vault_password"
     k8s_secret: null

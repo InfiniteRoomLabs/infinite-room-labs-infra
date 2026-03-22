@@ -7,7 +7,7 @@
 #
 # Uses external PostgreSQL (CNPG) and Redis (Valkey).
 # Local MinIO for file storage. Local RabbitMQ for async.
-# Ingress disabled -- Caddy on bare metal handles TLS + routing.
+# All Plane pods scheduled on DigitalOcean node via nodeSelector + toleration.
 
 planeVersion: v1.2.0
 
@@ -22,23 +22,36 @@ rabbitmq:
   local_setup: true
   storageClass: local-path
   volumeSize: 500Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
+# MinIO disabled -- using Garage S3-compatible storage on homelab
 minio:
-  local_setup: true
-  storageClass: local-path
-  volumeSize: 5Gi
+  local_setup: false
 
 # ── Ingress disabled -- Caddy handles TLS ────────────────────────
 ingress:
   enabled: false
 
-# ── Resource limits (homelab-sized) ──────────────────────────────
+# ── Scheduling: all pods on DigitalOcean node ────────────────────
 web:
   replicas: 1
   memoryLimit: 512Mi
   cpuLimit: 500m
   cpuRequest: 50m
   memoryRequest: 128Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
 space:
   replicas: 1
@@ -46,6 +59,13 @@ space:
   cpuLimit: 500m
   cpuRequest: 50m
   memoryRequest: 64Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
 admin:
   replicas: 1
@@ -53,6 +73,13 @@ admin:
   cpuLimit: 500m
   cpuRequest: 50m
   memoryRequest: 64Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
 live:
   replicas: 1
@@ -60,6 +87,13 @@ live:
   cpuLimit: 500m
   cpuRequest: 50m
   memoryRequest: 64Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
 api:
   replicas: 1
@@ -67,6 +101,13 @@ api:
   cpuLimit: 1000m
   cpuRequest: 100m
   memoryRequest: 256Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
 worker:
   replicas: 1
@@ -74,6 +115,13 @@ worker:
   cpuLimit: 500m
   cpuRequest: 50m
   memoryRequest: 128Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
 beatworker:
   replicas: 1
@@ -81,11 +129,15 @@ beatworker:
   cpuLimit: 250m
   cpuRequest: 50m
   memoryRequest: 64Mi
+  nodeSelector:
+    irl.dev/provider: digitalocean
+  tolerations:
+    - key: "irl.dev/cloud"
+      operator: "Equal"
+      value: "digitalocean"
+      effect: "NoSchedule"
 
 # ── Environment -- secrets injected via Ansible override file ────
-# env.pgdb_remote_url, env.remote_redis_url, env.secret_key,
-# and minio credentials are written to a secrets override file
-# by helm-deploy.yml and merged at deploy time.
 env:
   pgdb_username: plane
   pgdb_name: plane

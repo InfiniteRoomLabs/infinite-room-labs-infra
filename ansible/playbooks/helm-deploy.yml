@@ -49,6 +49,7 @@
         - irl-valkey
         - irl-gitea
         - irl-monitoring
+        - irl-garage
       changed_when: true
       tags: [always]
 
@@ -65,6 +66,7 @@
         - vault
         - plane
         - ollama
+        - coredns
       tags: [always]
 
     # ── Add upstream Helm repos (for non-IRL charts) ─────────────
@@ -184,6 +186,145 @@
         wait: true
         timeout: "3m0s"
       tags: [phase2, valkey]
+
+    # ── Garage S3 Object Storage ──────────────────────────────────
+
+    # ── Internal DNS (CoreDNS for Tailscale Split DNS) ───────────
+    # Serves lab.infiniteroomlabs.cloud and internal.infiniteroomlabs.cloud
+    # zones. Records generated from irl_services dict.
+
+    - name: "Phase 2: Add CoreDNS Helm repo"
+      kubernetes.core.helm_repository:
+        name: coredns
+        repo_url: "https://coredns.github.io/helm"
+      tags: [phase2, coredns]
+
+    - name: "Phase 2: Template internal DNS zone file"
+      ansible.builtin.template:
+        src: ../templates/coredns-internal-zone.db.j2
+        dest: "{{ helm_values_path }}/coredns-zone.db"
+        owner: "{{ irl_admin_user }}"
+        mode: "0644"
+      vars:
+        homelab_tailscale_ip: "100.86.213.22"
+      tags: [phase2, coredns]
+
+    - name: "Phase 2: Read zone file from server"
+      ansible.builtin.slurp:
+        src: "{{ helm_values_path }}/coredns-zone.db"
+      register: zone_file_content
+      tags: [phase2, coredns]
+
+    - name: "Phase 2: Create CoreDNS zone ConfigMap"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: coredns-internal-zones
+            namespace: "{{ k3s_namespace }}"
+          data:
+            lab.infiniteroomlabs.cloud.db: "{{ zone_file_content.content | b64decode }}"
+      tags: [phase2, coredns]
+
+    - name: "Phase 2: Upload CoreDNS values"
+      ansible.builtin.copy:
+        src: ../helm/coredns/values.yaml
+        dest: "{{ helm_values_path }}/coredns/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase2, coredns]
+
+    - name: "Phase 2: Deploy internal CoreDNS"
+      kubernetes.core.helm:
+        name: coredns-internal
+        chart_ref: coredns/coredns
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/coredns/values.yaml"
+        wait: true
+        timeout: "3m0s"
+      tags: [phase2, coredns]
+
+    - name: "Phase 2: Create Garage data PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: garage-data-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "500Gi"
+            selector:
+              matchLabels:
+                app: garage
+      tags: [phase2, garage]
+
+    - name: "Phase 2: Create Garage meta PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: garage-meta-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "5Gi"
+            selector:
+              matchLabels:
+                app: garage
+      tags: [phase2, garage]
+
+    - name: "Phase 2: Create Garage secrets"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ item.name }}"
+            namespace: "{{ k3s_namespace }}"
+          type: Opaque
+          stringData: "{{ item.data }}"
+      loop:
+        - name: garage-rpc-secret
+          data:
+            rpc-secret: "{{ vault_garage_rpc_secret }}"
+        - name: garage-admin-secret
+          data:
+            admin-token: "{{ vault_garage_admin_token }}"
+            metrics-token: "{{ vault_garage_metrics_token }}"
+      no_log: true
+      tags: [phase2, garage]
+
+    - name: "Phase 2: Deploy Garage (irl-garage chart)"
+      kubernetes.core.helm:
+        name: garage
+        chart_ref: "{{ irl_charts_path }}/irl-garage"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        wait: true
+        timeout: "3m0s"
+      tags: [phase2, garage]
 
     - name: "Phase 2: Upload Vault values file"
       ansible.builtin.copy:
@@ -356,7 +497,7 @@
       no_log: true
       tags: [phase3, plane]
 
-    - name: "Phase 3: Create Plane doc-store secret"
+    - name: "Phase 3: Create Plane doc-store secret (Garage S3)"
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig }}"
@@ -368,11 +509,13 @@
             namespace: "{{ k3s_namespace }}"
           type: Opaque
           stringData:
-            AWS_ACCESS_KEY_ID: "plane"
-            AWS_SECRET_ACCESS_KEY: "{{ vault_plane_minio_password }}"
-            AWS_S3_ENDPOINT_URL: "http://plane-minio:9000"
-            AWS_S3_BUCKET_NAME: "uploads"
-            AWS_REGION: ""
+            USE_MINIO: "0"
+            AWS_ACCESS_KEY_ID: "{{ vault_garage_plane_access_key }}"
+            AWS_SECRET_ACCESS_KEY: "{{ vault_garage_plane_secret_key }}"
+            AWS_S3_ENDPOINT_URL: "http://garage:3900"
+            AWS_S3_BUCKET_NAME: "plane-uploads"
+            AWS_REGION: "garage"
+            FILE_SIZE_LIMIT: "5242880"
       no_log: true
       tags: [phase3, plane]
 
@@ -382,9 +525,6 @@
           external_secrets:
             app_env_existingSecret: "plane-app-env"
             doc_store_existingSecret: "plane-doc-store-env"
-          minio:
-            root_user: plane
-            root_password: "{{ vault_plane_minio_password }}"
         dest: "{{ helm_values_path }}/plane/secrets.yaml"
         owner: root
         mode: "0600"

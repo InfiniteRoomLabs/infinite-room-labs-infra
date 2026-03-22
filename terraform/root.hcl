@@ -49,6 +49,14 @@ generate "providers" {
           source  = "tailscale/tailscale"
           version = "~> 0.18"
         }
+        digitalocean = {
+          source  = "digitalocean/digitalocean"
+          version = "~> 2.0"
+        }
+        bitwarden = {
+          source  = "maxlaverse/bitwarden"
+          version = "~> 0.9"
+        }
       }
     }
   EOF
