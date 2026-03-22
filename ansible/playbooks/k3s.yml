@@ -150,6 +150,7 @@
         --node-external-ip {{ k3s_node_ip }}
         --flannel-external-ip
         --flannel-iface tailscale0
+        --flannel-mtu 1230
         --tls-san {{ k3s_node_ip }}
         --tls-san {{ k3s_node_lan_ip }}
         --disable traefik

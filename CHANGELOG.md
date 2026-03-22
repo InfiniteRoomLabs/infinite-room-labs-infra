@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 - NetworkPolicy: allow-intra-namespace for cross-node pod communication
 
 ### Changed
-- k3s.yml: add `--flannel-iface tailscale0`, `--node-external-ip`, `--flannel-external-ip` for multi-node over Tailscale
+- k3s.yml: add `--flannel-iface tailscale0`, `--flannel-mtu 1230`, `--node-external-ip`, `--flannel-external-ip` for multi-node over Tailscale
 - Plane values: nodeSelector + tolerations for DO node, MinIO disabled (using Garage), external_secrets for DNS race fix
 - Authentik memory bumped to 1.5Gi
 - ZFS playbook: support per-dataset custom properties (recordsize, xattr)
