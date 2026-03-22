@@ -18,6 +18,7 @@ ollama:
     pull:
       - llama3.2
       - codellama
+      - nomic-embed-text
 
 # Resource limits -- CPU inference is RAM-hungry
 resources:

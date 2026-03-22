@@ -50,6 +50,7 @@
         - irl-gitea
         - irl-monitoring
         - irl-garage
+        - irl-openviking
       changed_when: true
       tags: [always]
 
@@ -325,6 +326,56 @@
         wait: true
         timeout: "3m0s"
       tags: [phase2, garage]
+
+    # ── OpenViking Context Database ────────────────────────────────
+
+    - name: "Phase 2: Create OpenViking data PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: openviking-data-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "20Gi"
+            selector:
+              matchLabels:
+                app: openviking
+      tags: [phase2, openviking]
+
+    - name: "Phase 2: Create OpenViking API key secret"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: openviking-api-key
+            namespace: "{{ k3s_namespace }}"
+          type: Opaque
+          stringData:
+            root-api-key: "{{ vault_openviking_api_key }}"
+      no_log: true
+      tags: [phase2, openviking]
+
+    - name: "Phase 2: Deploy OpenViking (irl-openviking chart)"
+      kubernetes.core.helm:
+        name: openviking
+        chart_ref: "{{ irl_charts_path }}/irl-openviking"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        wait: true
+        timeout: "3m0s"
+      tags: [phase2, openviking]
 
     - name: "Phase 2: Upload Vault values file"
       ansible.builtin.copy:

@@ -102,6 +102,10 @@ irl_services:
     subdomain: "s3"
     port: 3900            # ClusterIP -- irl-garage, S3 API (internal access only)
     internal: true
+  openviking:
+    subdomain: "knowledge"
+    port: 1933            # ClusterIP -- irl-openviking, API (internal access only)
+    internal: true
 
 # ── Users ────────────────────────────────────────────────────────────
 irl_admin_user: "wes"

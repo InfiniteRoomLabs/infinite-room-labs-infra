@@ -381,6 +381,10 @@
           app: garage
           capacity: "5Gi"
           hostPath: /var/lib/garage/meta
+        - name: pv-openviking-data
+          app: openviking
+          capacity: "20Gi"
+          hostPath: /var/lib/rancher/k3s/storage/openviking-data
         - name: pv-vault-data
           app: vault
           capacity: "5Gi"

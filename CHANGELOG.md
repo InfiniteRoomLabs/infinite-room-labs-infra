@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 - Bitwarden provider config for future Terraform secret integration
 - `.envrc` for homelab env (direnv auto-sources secrets from `~/.secrets/`)
 - NetworkPolicy: allow-intra-namespace for cross-node pod communication
+- OpenViking context database: PV, secret, deployment in helm-deploy.yml (Phase 2)
+- Ollama values: add nomic-embed-text to model pull list
 
 ### Changed
 - k3s.yml: add `--flannel-iface tailscale0`, `--flannel-mtu 1230`, `--node-external-ip`, `--flannel-external-ip` for multi-node over Tailscale
