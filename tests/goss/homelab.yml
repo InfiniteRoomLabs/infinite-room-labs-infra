@@ -1,0 +1,85 @@
+# Goss validation for homelab server (HP Z600, Debian 12)
+# Run: goss -g homelab.yml validate
+
+# SSH hardening
+file:
+  /etc/ssh/sshd_config:
+    exists: true
+    contains:
+      - "PermitRootLogin no"
+      - "PasswordAuthentication no"
+      - "PubkeyAuthentication yes"
+      - "AllowUsers wes"
+
+# Kernel parameters
+kernel-param:
+  vm.overcommit_memory:
+    value: "1"
+  kernel.panic:
+    value: "10"
+  kernel.panic_on_oops:
+    value: "1"
+  net.ipv4.ip_forward:
+    value: "1"
+
+# Services running
+service:
+  k3s:
+    enabled: true
+    running: true
+  tailscaled:
+    enabled: true
+    running: true
+  nftables:
+    enabled: true
+    running: true
+  caddy:
+    enabled: true
+    running: true
+
+# k3s API responding
+http:
+  https://127.0.0.1:6443/healthz:
+    status: 401
+    no-follow-redirects: true
+    allow-insecure: true
+
+# Processes
+process:
+  k3s:
+    running: true
+  caddy:
+    running: true
+
+# ZFS pool
+command:
+  zpool-status:
+    exec: "zpool status main"
+    exit-status: 0
+    stdout:
+      - "ONLINE"
+      - "/not DEGRADED|FAULTED/"
+  zfs-datasets:
+    exec: "zfs list -H -o name"
+    exit-status: 0
+    stdout:
+      - "main/garage-data"
+      - "main/ollama-models"
+      - "main/gitea-lfs"
+      - "main/backups"
+  tailscale-status:
+    exec: "tailscale status --json"
+    exit-status: 0
+  flannel-tailscale:
+    exec: "ip -d link show flannel.1"
+    exit-status: 0
+    stdout:
+      - "dev tailscale0"
+      - "local 100.86.213.22"
+
+# Ports listening
+port:
+  tcp:6443:
+    listening: true
+  tcp:22:
+    listening: true

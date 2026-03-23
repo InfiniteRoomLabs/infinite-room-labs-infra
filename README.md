@@ -12,6 +12,10 @@ terraform/          Terraform + Terragrunt (domain onboarding, cloud resources)
 
 Additional IaC directories (e.g., `ansible/`) will be added as needed. Each has its own internal structure documented below.
 
+## Testing
+
+See [TESTING.md](TESTING.md) for the full acceptance test suite. Quick: `cd tests/ && task smoke`.
+
 ## Setup
 
 ### 1. Configure credentials

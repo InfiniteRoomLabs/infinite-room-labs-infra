@@ -1,0 +1,22 @@
+[project]
+name = "irl-infra-tests"
+version = "0.1.0"
+description = "Acceptance tests for IRL homelab infrastructure"
+requires-python = ">=3.12"
+dependencies = [
+    "pytest>=8.0",
+    "requests>=2.31",
+    "kubernetes>=29.0",
+    "dnspython>=2.6",
+    "pyyaml>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+markers = [
+    "smoke: Basic health checks -- is it up?",
+    "acceptance: Does it work correctly?",
+    "integration: Do services talk to each other?",
+    "compliance: Security configuration correct?",
+    "networking: Cross-node connectivity (slow)",
+]

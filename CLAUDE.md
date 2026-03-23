@@ -85,6 +85,12 @@ Usage:
 Rotation policy: 180 days for infra secrets, 365 days for service secrets.
 Full procedure: `ansible/docs/sops/rotate-secrets.md`.
 
+## Testing
+
+See [TESTING.md](TESTING.md) for the full acceptance test suite documentation.
+
+Quick: `cd tests/ && task smoke` (17 smoke tests). Full: `task validate` (Goss + pytest + report).
+
 ## Research Protocol
 
 - **Project-wide research**: `docs/plans/RESEARCH.md` tracks open technical questions and provider evaluations. Detailed outputs go in `docs/plans/resources/{slug}.md`.

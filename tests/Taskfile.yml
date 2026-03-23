@@ -1,0 +1,78 @@
+version: '3'
+
+vars:
+  HOMELAB_HOST: homelab-ts
+  DO_HOST: do-k3s
+  RESULTS_DIR: results
+
+tasks:
+  # ── Setup ──────────────────────────────────────────────────────
+  goss:install:
+    desc: Install Goss on remote nodes
+    cmds:
+      - ssh {{.HOMELAB_HOST}} 'curl -fsSL https://goss.rocks/install | sh' || true
+      - ssh {{.DO_HOST}} 'curl -fsSL https://goss.rocks/install | sh' || true
+
+  goss:upload:
+    desc: Upload Goss test files to nodes
+    cmds:
+      - scp goss/homelab.yml {{.HOMELAB_HOST}}:/tmp/goss-homelab.yml
+      - scp goss/digitalocean.yml {{.DO_HOST}}:/tmp/goss-do.yml
+
+  # ── Phase 1: Node validation (Goss via SSH) ────────────────────
+  goss:homelab:
+    desc: Validate homelab server (SSH, kernel, k3s, ZFS)
+    deps: [goss:upload]
+    cmds:
+      - mkdir -p {{.RESULTS_DIR}}
+      - ssh {{.HOMELAB_HOST}} 'goss -g /tmp/goss-homelab.yml validate -f json' > {{.RESULTS_DIR}}/goss-homelab.json || true
+      - echo "Homelab Goss complete"
+    preconditions:
+      - sh: ssh {{.HOMELAB_HOST}} 'which goss' 2>/dev/null
+        msg: "Goss not installed on homelab. Run: task goss:install"
+
+  goss:digitalocean:
+    desc: Validate DO droplet (SSH, kernel, k3s agent)
+    deps: [goss:upload]
+    cmds:
+      - mkdir -p {{.RESULTS_DIR}}
+      - ssh {{.DO_HOST}} 'goss -g /tmp/goss-do.yml validate -f json' > {{.RESULTS_DIR}}/goss-do.json || true
+      - echo "DO Goss complete"
+    preconditions:
+      - sh: ssh {{.DO_HOST}} 'which goss' 2>/dev/null
+        msg: "Goss not installed on DO node. Run: task goss:install"
+
+  goss:
+    desc: Run all Goss tests
+    deps: [goss:homelab, goss:digitalocean]
+
+  # ── Phase 2: Cluster + service tests (pytest) ──────────────────
+  pytest:
+    desc: Run acceptance tests from laptop
+    deps: [goss]
+    cmds:
+      - mkdir -p {{.RESULTS_DIR}}
+      - uv run pytest -v --junit-xml={{.RESULTS_DIR}}/pytest.xml
+
+  # ── Phase 3: Report ────────────────────────────────────────────
+  report:
+    desc: Generate combined Markdown report
+    deps: [pytest]
+    cmds:
+      - uv run python scripts/generate_report.py
+
+  # ── Top-level commands ─────────────────────────────────────────
+  validate:
+    desc: Full infrastructure validation (Goss → pytest → report)
+    deps: [report]
+
+  smoke:
+    desc: Quick service health check (no Goss, no networking tests)
+    cmds:
+      - mkdir -p {{.RESULTS_DIR}}
+      - uv run pytest -v -m "smoke" --junit-xml={{.RESULTS_DIR}}/smoke.xml
+
+  clean:
+    desc: Remove test results
+    cmds:
+      - rm -rf {{.RESULTS_DIR}}

@@ -1,0 +1,72 @@
+# Goss validation for DigitalOcean k3s agent node (Ubuntu 24.04)
+# Run: goss -g digitalocean.yml validate
+
+# SSH hardening
+file:
+  /etc/ssh/sshd_config:
+    exists: true
+    contains:
+      - "PermitRootLogin no"
+      - "PasswordAuthentication no"
+      - "PubkeyAuthentication yes"
+      - "AllowUsers wes"
+
+# Kernel parameters
+kernel-param:
+  vm.overcommit_memory:
+    value: "1"
+  kernel.panic:
+    value: "10"
+  kernel.panic_on_oops:
+    value: "1"
+  net.ipv4.ip_forward:
+    value: "1"
+
+# Services running
+service:
+  k3s-agent:
+    enabled: true
+    running: true
+  tailscaled:
+    enabled: true
+    running: true
+  nftables:
+    enabled: true
+    running: true
+
+# Processes
+process:
+  k3s:
+    running: true
+
+# Tailscale connected
+command:
+  tailscale-status:
+    exec: "tailscale status --json"
+    exit-status: 0
+  tailscale-hostname:
+    exec: "tailscale status --json | jq -r '.Self.HostName'"
+    exit-status: 0
+    stdout:
+      - "do-k3s-agent-01"
+  flannel-tailscale:
+    exec: "ip -d link show flannel.1"
+    exit-status: 0
+    stdout:
+      - "dev tailscale0"
+      - "local 100.102.210.70"
+
+# k3s agent config
+file:
+  /etc/rancher/k3s/config.yaml:
+    exists: true
+    contains:
+      - "flannel-iface: tailscale0"
+      - "server:"
+
+# Ports
+port:
+  tcp:22:
+    listening: true
+  tcp:10250:
+    listening: true
