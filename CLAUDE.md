@@ -85,6 +85,10 @@ Usage:
 Rotation policy: 180 days for infra secrets, 365 days for service secrets.
 Full procedure: `ansible/docs/sops/rotate-secrets.md`.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide on adding services, running Ansible/Terraform, secrets management, node labels, networking, and common gotchas.
+
 ## Testing
 
 See [TESTING.md](TESTING.md) for the full acceptance test suite documentation.

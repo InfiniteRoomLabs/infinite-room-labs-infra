@@ -12,7 +12,8 @@ All notable changes to this project will be documented in this file.
 - Access guide: added DigitalOcean agent node info, Garage S3, OpenViking, CoreDNS, Split DNS troubleshooting
 - OpenViking: switched from ClusterIP to NodePort 31933, accessible at `context.internal.lab.infiniteroomlabs.cloud`
 - Tests: added OpenViking and Homepage to SERVICES dict, DNS resolution list, Caddy health checks
-- Homepage dashboard deployed at `home.lab.infiniteroomlabs.cloud` (NodePort 30000)
+- Homepage dashboard deployed at `home.lab.infiniteroomlabs.cloud` (NodePort 30000, HOMEPAGE_ALLOWED_HOSTS fix)
+- CONTRIBUTING.md: full guide for adding services, secrets, testing, networking, gotchas
 
 ### Added
 - DigitalOcean k3s agent node: Terraform module (`do-droplet`), cloud-init, Ansible inventory

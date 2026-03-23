@@ -28,6 +28,9 @@ service:
 nodeSelector:
   irl.dev/tier: data
 
+env:
+  HOMEPAGE_ALLOWED_HOSTS: "home.lab.infiniteroomlabs.cloud"
+
 resources:
   requests:
     memory: "64Mi"
