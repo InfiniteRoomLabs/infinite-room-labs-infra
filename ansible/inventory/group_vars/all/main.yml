@@ -102,6 +102,11 @@ irl_services:
     port: 3900            # ClusterIP -- irl-garage, S3 API (cluster-internal only)
     internal: true
     caddy_proxy: false    # No NodePort -- accessed within cluster only
+  homepage:
+    subdomain: "home"
+    port: 30000           # NodePort -- homepage dashboard
+    internal: false
+    health_path: "/"
   openviking:
     subdomain: "context"
     port: 31933           # NodePort -- irl-openviking, API

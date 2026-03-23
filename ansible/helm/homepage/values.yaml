@@ -1,0 +1,152 @@
+# helm/homepage/values.yaml
+# =========================
+# Homepage dashboard (gethomepage.dev)
+# Chart: jameswynn/homepage
+#
+# Central landing page for all IRL homelab services.
+# Accessible at home.lab.infiniteroomlabs.cloud via Caddy.
+
+image:
+  repository: ghcr.io/gethomepage/homepage
+  tag: latest
+
+enableRbac: true
+
+serviceAccount:
+  create: true
+  name: homepage
+
+service:
+  main:
+    type: NodePort
+    ports:
+      http:
+        port: 3000
+        nodePort: 30000
+
+# Schedule on homelab node
+nodeSelector:
+  irl.dev/tier: data
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+config:
+  settings:
+    title: Infinite Room Labs
+    favicon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/home-assistant.svg
+    theme: dark
+    color: slate
+    headerStyle: clean
+    layout:
+      Infrastructure:
+        style: row
+        columns: 3
+      Dev Platform:
+        style: row
+        columns: 3
+      Monitoring:
+        style: row
+        columns: 3
+      AI / ML:
+        style: row
+        columns: 2
+
+  widgets:
+    - kubernetes:
+        cluster:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+          label: "IRL Homelab"
+        nodes:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+
+  services:
+    - Infrastructure:
+        - PostgreSQL:
+            icon: postgres
+            href: ""
+            description: "CNPG operator -- 5 databases"
+            server: main
+            container: postgresql
+        - Valkey:
+            icon: redis
+            href: ""
+            description: "Redis-compatible cache + queue"
+        - Vault:
+            icon: vault
+            href: "https://vault.lab.infiniteroomlabs.cloud"
+            description: "Secrets management"
+        - Garage S3:
+            icon: minio
+            href: "https://storage.internal.lab.infiniteroomlabs.cloud"
+            description: "S3-compatible object storage (ZFS-backed)"
+        - CoreDNS:
+            icon: coredns
+            href: ""
+            description: "Internal Split DNS"
+
+    - Dev Platform:
+        - Gitea:
+            icon: gitea
+            href: "https://git.lab.infiniteroomlabs.cloud"
+            description: "Git server + CI"
+            widget:
+              type: gitea
+              url: "https://git.lab.infiniteroomlabs.cloud"
+        - Plane:
+            icon: plane
+            href: "https://plane.lab.infiniteroomlabs.cloud"
+            description: "Project management (on DO node)"
+        - Authentik:
+            icon: authentik
+            href: "https://auth.lab.infiniteroomlabs.cloud"
+            description: "SSO / Identity provider"
+            widget:
+              type: authentik
+              url: "https://auth.lab.infiniteroomlabs.cloud"
+
+    - Monitoring:
+        - Grafana:
+            icon: grafana
+            href: "https://grafana.lab.infiniteroomlabs.cloud"
+            description: "Dashboards + visualization"
+            widget:
+              type: grafana
+              url: "https://grafana.lab.infiniteroomlabs.cloud"
+        - Prometheus:
+            icon: prometheus
+            href: "https://metrics.internal.lab.infiniteroomlabs.cloud"
+            description: "Metrics collection"
+            widget:
+              type: prometheus
+              url: "https://metrics.internal.lab.infiniteroomlabs.cloud"
+        - Alertmanager:
+            icon: alertmanager
+            href: "https://alerts.internal.lab.infiniteroomlabs.cloud"
+            description: "Alert routing"
+
+    - AI / ML:
+        - Ollama:
+            icon: ollama
+            href: ""
+            description: "LLM inference (llama3.2, codellama, nomic-embed-text)"
+        - OpenViking:
+            icon: meilisearch
+            href: "https://context.internal.lab.infiniteroomlabs.cloud"
+            description: "Agent memory / RAG context database"
+
+  bookmarks: []
+
+  kubernetes:
+    mode: cluster

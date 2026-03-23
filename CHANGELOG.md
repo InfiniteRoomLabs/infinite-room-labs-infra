@@ -11,7 +11,8 @@ All notable changes to this project will be documented in this file.
 - Access guide: replaced IP:port URLs with `*.lab.infiniteroomlabs.cloud` domain names via Caddy internal TLS
 - Access guide: added DigitalOcean agent node info, Garage S3, OpenViking, CoreDNS, Split DNS troubleshooting
 - OpenViking: switched from ClusterIP to NodePort 31933, accessible at `context.internal.lab.infiniteroomlabs.cloud`
-- Tests: added OpenViking to SERVICES dict, DNS resolution list, Caddy health checks
+- Tests: added OpenViking and Homepage to SERVICES dict, DNS resolution list, Caddy health checks
+- Homepage dashboard deployed at `home.lab.infiniteroomlabs.cloud` (NodePort 30000)
 
 ### Added
 - DigitalOcean k3s agent node: Terraform module (`do-droplet`), cloud-init, Ansible inventory

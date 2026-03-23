@@ -68,6 +68,7 @@
         - plane
         - ollama
         - coredns
+        - homepage
       tags: [always]
 
     # ── Add upstream Helm repos (for non-IRL charts) ─────────────
@@ -515,6 +516,35 @@
         timeout: "10m0s"
       no_log: true
       tags: [phase3, monitoring]
+
+    # ── Homepage Dashboard ─────────────────────────────────────────
+
+    - name: "Phase 3: Add Homepage Helm repo"
+      kubernetes.core.helm_repository:
+        name: jameswynn
+        repo_url: "https://jameswynn.github.io/helm-charts"
+      tags: [phase3, homepage]
+
+    - name: "Phase 3: Upload Homepage values"
+      ansible.builtin.copy:
+        src: ../helm/homepage/values.yaml
+        dest: "{{ helm_values_path }}/homepage/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, homepage]
+
+    - name: "Phase 3: Deploy Homepage dashboard"
+      kubernetes.core.helm:
+        name: homepage
+        chart_ref: jameswynn/homepage
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/homepage/values.yaml"
+        wait: true
+        timeout: "3m0s"
+      tags: [phase3, homepage]
 
     - name: "Phase 3: Upload Plane base values"
       ansible.builtin.copy:
