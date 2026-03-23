@@ -69,22 +69,13 @@ class TestOllama:
 
 @pytest.mark.acceptance
 class TestOpenViking:
-    def test_health(self):
-        """OpenViking health endpoint responds."""
-        result = subprocess.run(
-            ["kubectl", "exec", "-n", NAMESPACE, "deployment/openviking", "--",
-             "wget", "-qO-", "http://localhost:1933/health"],
-            capture_output=True, text=True, timeout=10,
-        )
-        # Accept either direct response or skip if no wget
-        if result.returncode != 0:
-            # Try curl
-            result = subprocess.run(
-                ["kubectl", "exec", "-n", NAMESPACE, "deployment/openviking", "--",
-                 "python3", "-c", "import urllib.request; print(urllib.request.urlopen('http://localhost:1933/health').status)"],
-                capture_output=True, text=True, timeout=10,
-            )
-        assert result.returncode == 0 or "200" in result.stdout
+    def test_health(self, https):
+        """OpenViking health endpoint responds via Caddy domain."""
+        resp = https.get("https://context.internal.lab.infiniteroomlabs.cloud/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["healthy"] is True
 
 
 @pytest.mark.acceptance

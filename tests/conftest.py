@@ -128,6 +128,14 @@ SERVICES = {
         "health_path": "/",
         "health_status": 200,
     },
+    "openviking": {
+        "subdomain": "context",
+        "domain": "context.internal.lab.infiniteroomlabs.cloud",
+        "port": 31933,
+        "internal": True,
+        "health_path": "/health",
+        "health_status": 200,
+    },
 }
 
 

@@ -103,10 +103,9 @@ irl_services:
     internal: true
     caddy_proxy: false    # No NodePort -- accessed within cluster only
   openviking:
-    subdomain: "knowledge"
-    port: 1933            # ClusterIP -- irl-openviking, API (cluster-internal only)
+    subdomain: "context"
+    port: 31933           # NodePort -- irl-openviking, API
     internal: true
-    caddy_proxy: false    # No NodePort -- accessed within cluster only
 
 # ── Users ────────────────────────────────────────────────────────────
 irl_admin_user: "wes"

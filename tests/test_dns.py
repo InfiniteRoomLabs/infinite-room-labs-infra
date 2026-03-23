@@ -14,6 +14,7 @@ EXPECTED_RECORDS = [
     "storage.internal.lab.infiniteroomlabs.cloud",
     "metrics.internal.lab.infiniteroomlabs.cloud",
     "alerts.internal.lab.infiniteroomlabs.cloud",
+    "context.internal.lab.infiniteroomlabs.cloud",
 ]
 
 
