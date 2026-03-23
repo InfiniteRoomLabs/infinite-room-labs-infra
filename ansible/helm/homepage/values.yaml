@@ -8,7 +8,7 @@
 
 image:
   repository: ghcr.io/gethomepage/homepage
-  tag: latest
+  tag: v1.2.0
 
 enableRbac: true
 
@@ -30,6 +30,28 @@ nodeSelector:
 
 env:
   HOMEPAGE_ALLOWED_HOSTS: "home.lab.infiniteroomlabs.cloud"
+  HOMEPAGE_VAR_GRAFANA_USER:
+    valueFrom:
+      secretKeyRef:
+        name: grafana-admin
+        key: admin-user
+  HOMEPAGE_VAR_GRAFANA_PASSWORD:
+    valueFrom:
+      secretKeyRef:
+        name: grafana-admin
+        key: admin-password
+  HOMEPAGE_VAR_GITEA_KEY:
+    valueFrom:
+      secretKeyRef:
+        name: homepage-api-keys
+        key: gitea-token
+        optional: true
+  HOMEPAGE_VAR_AUTHENTIK_KEY:
+    valueFrom:
+      secretKeyRef:
+        name: homepage-api-keys
+        key: authentik-token
+        optional: true
 
 resources:
   requests:
@@ -80,74 +102,102 @@ config:
             icon: postgres
             href: ""
             description: "CNPG operator -- 5 databases"
-            server: main
-            container: postgresql
+            namespace: irl
+            app: postgresql
         - Valkey:
             icon: redis
             href: ""
             description: "Redis-compatible cache + queue"
+            namespace: irl
+            app: valkey
         - Vault:
             icon: vault
             href: "https://vault.lab.infiniteroomlabs.cloud"
             description: "Secrets management"
+            namespace: irl
+            app: vault
         - Garage S3:
             icon: minio
             href: "https://storage.internal.lab.infiniteroomlabs.cloud"
             description: "S3-compatible object storage (ZFS-backed)"
+            namespace: irl
+            app: garage
         - CoreDNS:
             icon: coredns
             href: ""
             description: "Internal Split DNS"
+            namespace: irl
+            app: coredns
 
     - Dev Platform:
         - Gitea:
             icon: gitea
             href: "https://git.lab.infiniteroomlabs.cloud"
             description: "Git server + CI"
+            namespace: irl
+            app: gitea
             widget:
               type: gitea
-              url: "https://git.lab.infiniteroomlabs.cloud"
+              url: "http://gitea-http:3000"
+              key: "{{HOMEPAGE_VAR_GITEA_KEY}}"
         - Plane:
             icon: plane
             href: "https://plane.lab.infiniteroomlabs.cloud"
             description: "Project management (on DO node)"
+            namespace: irl
+            podSelector: "app.name in (irl-plane-api, irl-plane-web, irl-plane-admin, irl-plane-live, irl-plane-space, irl-plane-worker, irl-plane-beat-worker, irl-plane-rabbitmq)"
         - Authentik:
             icon: authentik
             href: "https://auth.lab.infiniteroomlabs.cloud"
             description: "SSO / Identity provider"
+            namespace: irl
+            app: authentik
             widget:
               type: authentik
-              url: "https://auth.lab.infiniteroomlabs.cloud"
+              url: "http://authentik-server"
+              key: "{{HOMEPAGE_VAR_AUTHENTIK_KEY}}"
 
     - Monitoring:
         - Grafana:
             icon: grafana
             href: "https://grafana.lab.infiniteroomlabs.cloud"
             description: "Dashboards + visualization"
+            namespace: irl
+            app: grafana
             widget:
               type: grafana
-              url: "https://grafana.lab.infiniteroomlabs.cloud"
+              url: "http://monitoring-grafana"
+              username: "{{HOMEPAGE_VAR_GRAFANA_USER}}"
+              password: "{{HOMEPAGE_VAR_GRAFANA_PASSWORD}}"
         - Prometheus:
             icon: prometheus
             href: "https://metrics.internal.lab.infiniteroomlabs.cloud"
             description: "Metrics collection"
+            namespace: irl
+            app: prometheus
             widget:
               type: prometheus
-              url: "https://metrics.internal.lab.infiniteroomlabs.cloud"
+              url: "http://monitoring-kube-prometheus-prometheus:9090"
         - Alertmanager:
             icon: alertmanager
             href: "https://alerts.internal.lab.infiniteroomlabs.cloud"
             description: "Alert routing"
+            namespace: irl
+            app: alertmanager
 
     - AI / ML:
         - Ollama:
             icon: ollama
             href: ""
             description: "LLM inference (llama3.2, codellama, nomic-embed-text)"
+            namespace: irl
+            app: ollama
         - OpenViking:
             icon: meilisearch
             href: "https://context.internal.lab.infiniteroomlabs.cloud"
             description: "Agent memory / RAG context database"
+            namespace: irl
+            app: openviking
 
   bookmarks: []
 

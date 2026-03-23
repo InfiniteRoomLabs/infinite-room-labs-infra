@@ -4,7 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Homepage Kubernetes widget: NaN errors caused by NetworkPolicy blocking API access
+- Homepage service widgets: DNS resolution failures from ndots:5 FQDN expansion (use short names)
+- Homepage PostgreSQL: removed invalid Docker socket integration (server/container)
+
 ### Changed
+- Homepage: pinned image tag to v1.2.0 (was :latest)
+- Homepage: widget URLs use in-cluster short service names instead of external domains
+- Homepage: added namespace/app labels to all 13 services for per-pod CPU/memory stats
+- Homepage: wired Grafana widget with admin credentials, Gitea/Authentik with API tokens
+
+### Added
+- NetworkPolicy: allow-homepage-kube-api (scoped egress to k8s API for dashboard widgets)
+- bw-sync: homepage-api-keys secret with Gitea and Authentik API tokens
+- Design spec: docs/superpowers/specs/2026-03-23-homepage-kubernetes-widget-design.md
 - Deployment plan: added 7 decisions log entries for 2026-03-22 (Oracle->DigitalOcean, Flannel VXLAN/Tailscale, Garage, Split DNS, OpenViking, node labels, acceptance tests)
 - Deployment plan: updated service list with Garage, OpenViking, CoreDNS Internal, Plane (on DO node)
 - Deployment plan: updated chart dependency map with new services

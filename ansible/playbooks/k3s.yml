@@ -323,6 +323,42 @@
                   - protocol: TCP
                     port: 53
 
+    - name: Allow Homepage to reach Kubernetes API (for dashboard widgets)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: allow-homepage-kube-api
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: homepage
+            policyTypes:
+              - Egress
+            egress:
+              - to:
+                  - ipBlock:
+                      cidr: 10.43.0.1/32
+                ports:
+                  - protocol: TCP
+                    port: 443
+              - to:
+                  - ipBlock:
+                      cidr: 192.168.2.2/32
+                ports:
+                  - protocol: TCP
+                    port: 6443
+              - to:
+                  - ipBlock:
+                      cidr: 100.86.213.22/32
+                ports:
+                  - protocol: TCP
+                    port: 6443
+
     # ── Create PersistentVolumes for ZFS-backed storage ───────────
     # These use hostPath pointing to ZFS dataset mountpoints.
     # k3s local-path-provisioner handles PVCs that don't need ZFS.
