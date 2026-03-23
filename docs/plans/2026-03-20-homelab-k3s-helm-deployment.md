@@ -53,8 +53,11 @@ graph TD
     MON["irl-monitoring<br/>(umbrella)"]
     JENKINS["jenkins/jenkins<br/>(direct, no wrapper needed)"]
     VAULT["hashicorp/vault<br/>(direct, no wrapper needed)"]
-    PLANE["makeplane/plane-ce<br/>(direct, no wrapper needed)"]
+    PLANE["makeplane/plane-ce<br/>(direct, DO node)"]
     OLLAMA["ollama-helm/ollama<br/>(direct, no wrapper needed)"]
+    GARAGE["Garage S3<br/>(direct, ZFS-backed)"]
+    OPENVIKING["OpenViking<br/>(direct, context DB)"]
+    COREDNS["CoreDNS Internal<br/>(Split DNS resolver)"]
 
     PLATFORM --> PG
     PLATFORM --> VK
@@ -65,6 +68,10 @@ graph TD
     PLATFORM --> VAULT
     PLATFORM --> PLANE
     PLATFORM --> OLLAMA
+    PLATFORM --> GARAGE
+    PLATFORM --> OPENVIKING
+    PLATFORM --> COREDNS
+    PLANE --> GARAGE
 
     PG --> CNPG["cnpg/cloudnative-pg<br/>(upstream)"]
     VK --> VALKEY["valkey/valkey<br/>(upstream)"]
@@ -87,8 +94,11 @@ graph TD
 | Authentik | Official chart works, just needs values. | Direct (values only) |
 | Vault | Official chart works. | Direct (values only) |
 | Jenkins | **SKIPPED** -- plugin version incompatibility, parking until needed. | Deferred |
-| Plane | Official chart works. | Direct (values only) |
+| Plane | Official chart works. Runs on DO node (nodeSelector). | Direct (values only) |
 | Ollama | Community chart works. | Direct (values only) |
+| Garage | S3-compatible object storage for Plane files. ZFS-backed on homelab node. | Direct (PV + Deployment) |
+| OpenViking | Agent memory/RAG context database. Phase 1 deployment. | Direct (PV + Deployment) |
+| CoreDNS Internal | Tailscale Split DNS resolver. hostNetwork port 53. | Direct (Deployment) |
 
 ## File Changes
 
@@ -168,6 +178,13 @@ Add `helm-charts/` repo entry to the Current Repositories section.
 | 2026-03-21 | NFS stays as home SAN | Chairman uses it as network storage for the household. Not moving to Tailscale-only access. |
 | 2026-03-21 | Vault handles secrets + signing CA | HashiCorp Vault is the long-term secrets backend and certificate authority. Ansible Vault + bw-sync.sh is the bootstrap path. |
 | 2026-03-21 | Jenkins skipped | Plugin version incompatibility (chart installs 2.479, plugins need 2.479.1+). Not critical for initial deployment. Revisit when CI/CD is needed -- may use Gitea Actions instead. |
+| 2026-03-22 | Oracle Cloud abandoned, switched to DigitalOcean | ARM capacity unavailable on Oracle Cloud (Always Free tier perpetually out of stock) + Larry Ellison tax. DigitalOcean s-4vcpu-8gb in NYC3 at $48/mo selected instead. |
+| 2026-03-22 | Flannel VXLAN over Tailscale networking | Requires `flannel-iface: tailscale0` on BOTH server and agent nodes + `flannel-mtu: 1230` to avoid encapsulation overhead. Without both settings, cross-node pod networking silently fails. |
+| 2026-03-22 | Garage S3 replaces MinIO for Plane file storage | Garage runs on the homelab node (ZFS-backed), lightweight alternative to MinIO. Plane configured with external S3 credentials pointing to Garage. |
+| 2026-03-22 | Tailscale Split DNS via CoreDNS | CoreDNS deployed with hostNetwork on port 53, registered as Tailscale Split DNS resolver. Eliminates /etc/hosts management for `*.lab.infiniteroomlabs.cloud` and `*.internal.lab.infiniteroomlabs.cloud`. |
+| 2026-03-22 | OpenViking deployed for agent memory/RAG (Phase 1) | Context database for AI agent persistent memory and RAG retrieval. Deployed alongside nomic-embed-text model in Ollama. |
+| 2026-03-22 | Node label taxonomy (irl.dev/*) for workload scheduling | Labels: provider, tier, storage, network, cost, persistence, gpu, memory-class. Enables nodeSelector-based scheduling across homelab and cloud nodes. |
+| 2026-03-22 | Acceptance test suite added | Task + pytest + Goss framework. `task smoke` runs 17 smoke tests, `task validate` runs full suite with Goss system checks and HTML report generation. |
 
 ## Observability Architecture (Decided 2026-03-21)
 

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Deployment plan: added 7 decisions log entries for 2026-03-22 (Oracle->DigitalOcean, Flannel VXLAN/Tailscale, Garage, Split DNS, OpenViking, node labels, acceptance tests)
+- Deployment plan: updated service list with Garage, OpenViking, CoreDNS Internal, Plane (on DO node)
+- Deployment plan: updated chart dependency map with new services
+- Access guide: replaced IP:port URLs with `*.lab.infiniteroomlabs.cloud` domain names via Caddy internal TLS
+- Access guide: added DigitalOcean agent node info, Garage S3, OpenViking, CoreDNS, Split DNS troubleshooting
+
 ### Added
 - DigitalOcean k3s agent node: Terraform module (`do-droplet`), cloud-init, Ansible inventory
 - Garage S3 object storage: PVs, secrets, deployment in helm-deploy.yml, replaces MinIO for Plane
