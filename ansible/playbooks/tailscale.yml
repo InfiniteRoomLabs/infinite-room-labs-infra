@@ -46,6 +46,23 @@
         update_cache: true
       when: tailscale_check.rc != 0
 
+    # ── Enable IP forwarding (required for exit node) ───────────────
+    - name: Enable IPv4 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        sysctl_set: true
+        state: present
+        reload: true
+
+    - name: Enable IPv6 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv6.conf.all.forwarding
+        value: "1"
+        sysctl_set: true
+        state: present
+        reload: true
+
     # ── Configure Tailscale ────────────────────────────────────────
     - name: Enable and start tailscaled
       ansible.builtin.systemd:
@@ -59,11 +76,12 @@
       changed_when: false
       failed_when: false
 
-    - name: Bring Tailscale up with hostname
+    - name: Bring Tailscale up with hostname and exit node
       ansible.builtin.command: >
         tailscale up
         --hostname={{ irl_tailscale_hostname }}
         --accept-dns
+        --advertise-exit-node
       when: >
         ts_status.rc != 0 or
         (ts_status.stdout | from_json).BackendState != "Running"

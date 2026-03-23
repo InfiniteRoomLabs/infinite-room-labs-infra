@@ -113,6 +113,11 @@ secrets:
     k8s_secret: "openviking-api-key"
     k8s_key: "root-api-key"
 
+  - bw_item: "tailscale-api-key"
+    ansible_var: "vault_tailscale_api_key"
+    k8s_secret: null
+    k8s_key: null
+
   - bw_item: "ansible-vault-password"
     ansible_var: "vault_ansible_vault_password"
     k8s_secret: null

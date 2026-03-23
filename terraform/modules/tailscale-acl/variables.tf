@@ -16,7 +16,7 @@ variable "tag_owners" {
 variable "auto_approvers" {
   type = object({
     routes   = optional(map(list(string)), {})
-    exitNode = optional(map(list(string)), {})
+    exitNode = optional(list(string), [])
   })
   default     = {}
   description = "Auto-approval rules for subnet routes and exit nodes"

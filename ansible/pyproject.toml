@@ -1,0 +1,14 @@
+[project]
+name = "irl-ansible"
+version = "0.1.0"
+description = "Ansible automation for Infinite Room Labs homelab"
+requires-python = ">=3.12"
+dependencies = [
+    "ansible-core==2.17.8",
+    "jmespath>=1.0",
+    "kubernetes>=28.0",
+    "openshift>=0.13",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = []

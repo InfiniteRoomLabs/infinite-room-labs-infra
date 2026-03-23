@@ -17,18 +17,22 @@ inputs = {
     {
       action = "accept"
       src    = ["autogroup:member"]
-      dst    = ["tag:server:*"]
+      dst    = ["autogroup:member:*", "tag:server:*"]
     },
     {
       action = "accept"
       src    = ["tag:server"]
-      dst    = ["autogroup:member:*"]
+      dst    = ["autogroup:member:*", "tag:server:*"]
     },
   ]
 
   tag_owners = {
     "tag:server"      = ["autogroup:admin"]
     "tag:workstation" = ["autogroup:admin"]
+  }
+
+  auto_approvers = {
+    exitNode = ["tag:server", "tag:workstation", "autogroup:member"]
   }
 
   ssh_rules = [

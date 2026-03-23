@@ -38,8 +38,12 @@ providers.tf
 !.env.example
 !.envrc
 
+# Ansible vault password (repo-local secret file)
+.vault-password
+
 # Ansible Vault (encrypted secrets -- use vault.yml.example as template)
 ansible/inventory/group_vars/all/vault.yml
 
 # Ansible runtime
+ansible/.venv/
 ansible/facts_cache/

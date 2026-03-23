@@ -35,33 +35,9 @@ terraform/
 - **State** is in Terraform Cloud (org: `infinite-room-labs`). Workspace names derived from path relative to `root.hcl`.
 - **Credentials** come from environment variables, never hardcoded. See `.env.example`.
 
-### Ansible layout
+### Ansible
 
-```
-ansible/
-  ansible.cfg                             # YAML output, pipelining, fact caching
-  Dockerfile                              # Containerized runner (python:3.12-slim + ansible-core)
-  run-ansible.sh                          # Runner wrapper (playbook/galaxy/vault/shell)
-  requirements.yml                        # Galaxy collections and roles
-  site.yml                                # Master orchestrator (imports playbooks in order)
-  inventory/
-    hosts.ini                             # Homelab via LAN or Tailscale IP
-    group_vars/all/main.yml               # Global vars (domains, compose paths, services)
-    group_vars/all/vault.yml              # Ansible Vault encrypted secrets
-    group_vars/homelab/main.yml           # Homelab group vars (firewall ports)
-    host_vars/homelab.yml                 # Resource-scaled params (RAM budgets, PG tuning)
-  playbooks/                              # One playbook per concern, flat structure
-  templates/                              # Jinja2 templates for configs and compose files
-  files/                                  # Static files (dashboards, sanoid config)
-  docs/sops/                              # Standard operating procedures
-  docs/runbooks/                          # Incident runbooks
-```
-
-- **Runner**: Use `./ansible/run-ansible.sh playbook site.yml` to run from Docker. No local Ansible needed.
-- **Playbooks** are flat (no roles). One per concern, imported by `site.yml` in dependency order.
-- **Phases**: site.yml is tagged with phase0-phase5. Run a phase: `--tags phase0`.
-- **Secrets**: `inventory/group_vars/all/vault.yml` must be encrypted before use. Populated via `bw-sync.sh` -- do not edit manually.
-- **Compose stacks** deploy to `/opt/irl/{stack}/docker-compose.yml` on the server.
+See `ansible/CLAUDE.md` for full Ansible documentation (layout, running, secrets, SSH access).
 
 ### Secrets Sync
 
