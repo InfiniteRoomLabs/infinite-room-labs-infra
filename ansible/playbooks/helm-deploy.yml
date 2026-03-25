@@ -4,13 +4,12 @@
 # Deploys all IRL services to k3s using Helm charts.
 #
 # Charts are sourced from:
-#   - IRL helm-charts repo (irl-postgres, irl-valkey, irl-gitea, irl-monitoring)
+#   - IRL Helm repo (https://infiniteroomlabs.github.io/helm-charts/)
 #   - Upstream repos (vault, authentik, jenkins, plane, ollama)
 #
 # Prerequisites:
 #   - k3s.yml complete (cluster running, namespace created, PVs created)
 #   - k8s-secrets.yml complete (Kubernetes Secrets provisioned)
-#   - IRL helm-charts repo cloned at ~/projects/infinite-room-labs/helm-charts
 #
 # Run full deploy:
 #   ./run-ansible.sh playbook playbooks/helm-deploy.yml
@@ -26,34 +25,9 @@
   vars:
     kubeconfig: /etc/rancher/k3s/k3s.yaml
     k3s_namespace: irl
-    irl_charts_path: "/home/{{ irl_admin_user }}/helm-charts/charts"
     helm_values_path: "/home/{{ irl_admin_user }}/helm-values"
 
   tasks:
-    # ── Sync IRL helm-charts repo to server ──────────────────────
-    - name: Clone or update IRL helm-charts repo
-      ansible.builtin.git:
-        repo: "https://github.com/InfiniteRoomLabs/helm-charts.git"
-        dest: "/home/{{ irl_admin_user }}/helm-charts"
-        version: main
-        force: true
-      become_user: "{{ irl_admin_user }}"
-      tags: [always]
-
-    - name: Build chart dependencies
-      ansible.builtin.command:
-        cmd: helm dependency update
-        chdir: "{{ irl_charts_path }}/{{ item }}"
-      loop:
-        - irl-postgres
-        - irl-valkey
-        - irl-gitea
-        - irl-monitoring
-        - irl-garage
-        - irl-openviking
-      changed_when: true
-      tags: [always]
-
     # ── Upload values override files to server ───────────────────
     - name: Create values override directories
       ansible.builtin.file:
@@ -71,12 +45,13 @@
         - homepage
       tags: [always]
 
-    # ── Add upstream Helm repos (for non-IRL charts) ─────────────
-    - name: Add upstream Helm repositories
+    # ── Add Helm repositories ─────────────────────────────────────
+    - name: Add Helm repositories
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
         repo_url: "{{ item.url }}"
       loop:
+        - { name: irl, url: "https://infiniteroomlabs.github.io/helm-charts/" }
         - { name: hashicorp, url: "https://helm.releases.hashicorp.com" }
         - { name: cnpg, url: "https://cloudnative-pg.github.io/charts" }
         - { name: goauthentik, url: "https://charts.goauthentik.io" }
@@ -108,7 +83,7 @@
     - name: "Phase 2: Deploy PostgreSQL (irl-postgres chart)"
       kubernetes.core.helm:
         name: postgresql
-        chart_ref: "{{ irl_charts_path }}/irl-postgres"
+        chart_ref: irl/irl-postgres
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -181,7 +156,7 @@
     - name: "Phase 2: Deploy Valkey (irl-valkey chart)"
       kubernetes.core.helm:
         name: valkey
-        chart_ref: "{{ irl_charts_path }}/irl-valkey"
+        chart_ref: irl/irl-valkey
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -320,7 +295,7 @@
     - name: "Phase 2: Deploy Garage (irl-garage chart)"
       kubernetes.core.helm:
         name: garage
-        chart_ref: "{{ irl_charts_path }}/irl-garage"
+        chart_ref: irl/irl-garage
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -370,7 +345,7 @@
     - name: "Phase 2: Deploy OpenViking (irl-openviking chart)"
       kubernetes.core.helm:
         name: openviking
-        chart_ref: "{{ irl_charts_path }}/irl-openviking"
+        chart_ref: irl/irl-openviking
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -439,7 +414,7 @@
     - name: "Phase 3: Deploy Gitea (irl-gitea chart)"
       kubernetes.core.helm:
         name: gitea
-        chart_ref: "{{ irl_charts_path }}/irl-gitea"
+        chart_ref: irl/irl-gitea
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -504,7 +479,7 @@
     - name: "Phase 3: Deploy monitoring (irl-monitoring chart)"
       kubernetes.core.helm:
         name: monitoring
-        chart_ref: "{{ irl_charts_path }}/irl-monitoring"
+        chart_ref: irl/irl-monitoring
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
