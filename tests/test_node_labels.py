@@ -65,15 +65,15 @@ class TestDOLabels:
 
 @pytest.mark.compliance
 class TestSchedulingCompliance:
-    def test_plane_pods_on_do(self, k8s):
-        """All Plane pods are scheduled on the DO node."""
+    def test_plane_pods_on_homelab(self, k8s):
+        """All Plane pods are scheduled on the homelab node (data tier)."""
         pods = k8s.list_namespaced_pod(
             NAMESPACE, label_selector="app.name"
         ).items
         plane_pods = [p for p in pods if "plane" in (p.metadata.labels.get("app.name", ""))]
         for pod in plane_pods:
-            assert pod.spec.node_name == "do-k3s-agent-01", (
-                f"Plane pod {pod.metadata.name} on {pod.spec.node_name}, expected do-k3s-agent-01"
+            assert pod.spec.node_name == "home", (
+                f"Plane pod {pod.metadata.name} on {pod.spec.node_name}, expected home"
             )
 
     def test_data_tier_on_homelab(self, k8s):
