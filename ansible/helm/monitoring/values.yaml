@@ -47,8 +47,7 @@ prometheus:
     podMonitorSelectorNilUsesHelmValues: false
 
   service:
-    type: NodePort
-    nodePort: 30090
+    type: ClusterIP
 
 # ── Grafana ───────────────────────────────────────────────────────
 grafana:
@@ -68,8 +67,7 @@ grafana:
       cpu: "500m"
 
   service:
-    type: NodePort
-    nodePort: 30001
+    type: ClusterIP
 
   persistence:
     enabled: true
@@ -115,8 +113,7 @@ alertmanager:
         cpu: "200m"
 
   service:
-    type: NodePort
-    nodePort: 30093
+    type: ClusterIP
 
   config:
     global:

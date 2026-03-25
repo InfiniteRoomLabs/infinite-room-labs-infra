@@ -44,22 +44,22 @@ plane.{{ irl_public_domain }} {
 	}
 {% if irl_plane_cluster_svcs | default(false) %}
 	handle /api/* {
-		reverse_proxy plane-api-clusterip.{{ irl_k8s_namespace }}.svc.cluster.local:8000
+		reverse_proxy plane-api.{{ irl_k8s_namespace }}.svc.cluster.local:8000
 	}
 	handle /spaces/* {
-		reverse_proxy plane-space-clusterip.{{ irl_k8s_namespace }}.svc.cluster.local:3000
+		reverse_proxy plane-space.{{ irl_k8s_namespace }}.svc.cluster.local:3000
 	}
 	redir /god-mode /god-mode/ permanent
 	handle /god-mode/* {
-		reverse_proxy plane-admin-clusterip.{{ irl_k8s_namespace }}.svc.cluster.local:3000 {
+		reverse_proxy plane-admin.{{ irl_k8s_namespace }}.svc.cluster.local:3000 {
 			header_up X-Forwarded-Proto https
 		}
 	}
 	handle /live/* {
-		reverse_proxy plane-live-clusterip.{{ irl_k8s_namespace }}.svc.cluster.local:3000
+		reverse_proxy plane-live.{{ irl_k8s_namespace }}.svc.cluster.local:3000
 	}
 	handle {
-		reverse_proxy plane-web-clusterip.{{ irl_k8s_namespace }}.svc.cluster.local:3000
+		reverse_proxy plane-web.{{ irl_k8s_namespace }}.svc.cluster.local:3000
 	}
 {% else %}
 	handle /api/* {

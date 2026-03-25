@@ -501,6 +501,18 @@
         timeout: "3m0s"
       tags: [phase2, caddy]
 
+    - name: "Caddy: Restart pod to pick up ConfigMap changes"
+      ansible.builtin.command:
+        cmd: kubectl rollout restart deployment/caddy -n {{ k3s_namespace }} --kubeconfig {{ kubeconfig }}
+      changed_when: true
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Wait for pod to be ready"
+      ansible.builtin.command:
+        cmd: kubectl rollout status deployment/caddy -n {{ k3s_namespace }} --timeout=120s --kubeconfig {{ kubeconfig }}
+      changed_when: false
+      tags: [phase2, caddy]
+
     # ══════════════════════════════════════════════════════════════
     # Phase 3: Dev Platform + Monitoring
     # ══════════════════════════════════════════════════════════════
@@ -525,6 +537,14 @@
       no_log: true
       tags: [phase3, gitea]
 
+    - name: "Phase 3: Upload Gitea values"
+      ansible.builtin.copy:
+        src: ../helm/gitea/values.yaml
+        dest: "{{ helm_values_path }}/gitea/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, gitea]
+
     - name: "Phase 3: Deploy Gitea (irl-gitea chart)"
       kubernetes.core.helm:
         name: gitea
@@ -533,6 +553,7 @@
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
         values_files:
+          - "{{ helm_values_path }}/gitea/values.yaml"
           - "{{ helm_values_path }}/gitea-secrets.yaml"
         wait: true
         timeout: "5m0s"
@@ -554,8 +575,7 @@
             bootstrap_password: "{{ vault_authentik_bootstrap_password }}"
           server:
             service:
-              type: NodePort
-              nodePort: 30900
+              type: ClusterIP
             resources:
               limits:
                 memory: "1536Mi"

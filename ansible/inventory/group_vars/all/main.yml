@@ -58,60 +58,78 @@ irl_internal_domain: "internal.lab.infiniteroomlabs.cloud"
 irl_services:
   gitea:
     subdomain: "git"
-    port: 30300           # NodePort -- gitea-charts/gitea, service.http.nodePort
+    port: 30300           # Legacy NodePort (kept for reference)
     internal: false
     health_path: "/api/v1/version"
+    cluster_svc: "gitea-http"
+    cluster_port: 3000
   plane:
     subdomain: "plane"
-    port: 30082           # NodePort -- makeplane/plane-ce, service.nodePort
+    port: 30082           # Legacy NodePort (kept for reference)
     internal: false
   authentik:
     subdomain: "auth"
-    port: 30080           # NodePort -- goauthentik/authentik, server.service.nodePorts.http
+    port: 30080           # Legacy NodePort (kept for reference)
     internal: false
+    cluster_svc: "authentik-server"
+    cluster_port: 80
   grafana:
     subdomain: "grafana"
-    port: 30001           # NodePort -- kube-prometheus-stack, grafana.service.nodePort
+    port: 30001           # Legacy NodePort (kept for reference)
     internal: false
     health_path: "/api/health"
+    cluster_svc: "monitoring-grafana"
+    cluster_port: 80
   vault:
     subdomain: "vault"
-    port: 30200           # NodePort -- hashicorp/vault, server.service.nodePort
+    port: 30200           # Legacy NodePort (kept for reference)
     internal: false
     health_path: "/v1/sys/health"
+    cluster_svc: "vault"
+    cluster_port: 8200
   # jenkins:                   # SKIPPED -- plugin version incompatibility
   #   subdomain: "ci"
   #   port: 30080
   #   internal: false
   prometheus:
     subdomain: "metrics"
-    port: 30090           # NodePort -- kube-prometheus-stack, prometheus.service.nodePort
+    port: 30090           # Legacy NodePort (kept for reference)
     internal: true
     health_path: "/-/healthy"
+    cluster_svc: "monitoring-kube-prometheus-prometheus"
+    cluster_port: 9090
   alertmanager:
     subdomain: "alerts"
-    port: 30093           # NodePort -- kube-prometheus-stack, alertmanager.service.nodePort
+    port: 30093           # Legacy NodePort (kept for reference)
     internal: true
     health_path: "/-/healthy"
+    cluster_svc: "monitoring-kube-prometheus-alertmanager"
+    cluster_port: 9093
   garage:
     subdomain: "storage"
-    port: 30039           # NodePort -- irl-garage, webui.service.nodePort
+    port: 30039           # Legacy NodePort (kept for reference)
     internal: true
     health_path: "/"
+    cluster_svc: "garage-webui"
+    cluster_port: 3909
   garage-s3:
     subdomain: "s3"
     port: 3900            # ClusterIP -- irl-garage, S3 API (cluster-internal only)
     internal: true
-    caddy_proxy: false    # No NodePort -- accessed within cluster only
+    caddy_proxy: false    # Accessed within cluster only
   homepage:
     subdomain: "home"
-    port: 30000           # NodePort -- homepage dashboard
+    port: 30000           # Legacy NodePort (kept for reference)
     internal: false
     health_path: "/"
+    cluster_svc: "homepage"
+    cluster_port: 3000
   openviking:
     subdomain: "context"
-    port: 31933           # NodePort -- irl-openviking, API
+    port: 31933           # Legacy NodePort (kept for reference)
     internal: true
+    cluster_svc: "openviking"
+    cluster_port: 1933
 
 # ── Users ────────────────────────────────────────────────────────────
 irl_admin_user: "wes"
@@ -134,7 +152,7 @@ irl_caddy_le_email: "admin@infiniteroomlabs.cloud"
 irl_caddy_le_staging: true          # false for production LE certs
 irl_caddy_image: "irl-caddy:2.11.2-custom"
 irl_k8s_namespace: "irl"
-irl_plane_cluster_svcs: false       # true after Plane ClusterIP migration (WP6)
+irl_plane_cluster_svcs: true         # Use chart-native ClusterIP services for Plane
 
 # ── Services to disable during cleanup ───────────────────────────────
 irl_services_to_disable:

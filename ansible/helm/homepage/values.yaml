@@ -18,11 +18,10 @@ serviceAccount:
 
 service:
   main:
-    type: NodePort
+    type: ClusterIP
     ports:
       http:
         port: 3000
-        nodePort: 30000
 
 # Schedule on homelab node
 nodeSelector:
