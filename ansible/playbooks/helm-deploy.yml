@@ -752,6 +752,32 @@
       no_log: true
       tags: [phase3, plane]
 
+    # The Plane CE chart generates WEB_URL as http:// from ingress.appHost.
+    # Patch it to https:// since Caddy handles TLS termination.
+    - name: "Phase 3: Patch Plane configmap for HTTPS URLs"
+      kubernetes.core.k8s:
+        state: patched
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: plane-app-vars
+            namespace: "{{ k3s_namespace }}"
+          data:
+            WEB_URL: "https://plane.{{ irl_public_domain }}"
+            CORS_ALLOWED_ORIGINS: "https://plane.{{ irl_public_domain }}"
+      tags: [phase3, plane]
+
+    - name: "Phase 3: Restart Plane pods after configmap patch"
+      ansible.builtin.command:
+        cmd: >
+          kubectl rollout restart
+          deployment/plane-api-wl deployment/plane-admin-wl deployment/plane-web-wl
+          -n {{ k3s_namespace }} --kubeconfig {{ kubeconfig }}
+      changed_when: true
+      tags: [phase3, plane]
+
     # Plane CE creates headless services only. Create NodePort services
     # for Caddy path-based routing.
     - name: "Phase 3: Create Plane NodePort services for Caddy"
