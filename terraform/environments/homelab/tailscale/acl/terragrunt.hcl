@@ -17,12 +17,12 @@ inputs = {
     {
       action = "accept"
       src    = ["autogroup:member"]
-      dst    = ["autogroup:member:*", "tag:server:*"]
+      dst    = ["autogroup:member:*", "tag:server:*", "autogroup:internet:*"]
     },
     {
       action = "accept"
       src    = ["tag:server"]
-      dst    = ["autogroup:member:*", "tag:server:*"]
+      dst    = ["autogroup:member:*", "tag:server:*", "autogroup:internet:*"]
     },
   ]
 

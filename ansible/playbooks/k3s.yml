@@ -291,6 +291,10 @@
             ingress:
               - from:
                   - podSelector: {}
+              # Allow NodePort traffic from kube-proxy (masqueraded to pod CIDR)
+              - from:
+                  - ipBlock:
+                      cidr: 10.42.0.0/16
             egress:
               - to:
                   - podSelector: {}

@@ -37,8 +37,11 @@ plane.{{ irl_public_domain }} {
 	handle /spaces/* {
 		reverse_proxy localhost:30084
 	}
+	redir /god-mode /god-mode/ permanent
 	handle /god-mode/* {
-		reverse_proxy localhost:30085
+		reverse_proxy localhost:30085 {
+			header_up X-Forwarded-Proto https
+		}
 	}
 	handle /live/* {
 		reverse_proxy localhost:30086

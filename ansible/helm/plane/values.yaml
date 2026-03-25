@@ -9,7 +9,7 @@
 # Local MinIO for file storage. Local RabbitMQ for async.
 # All Plane pods scheduled on DigitalOcean node via nodeSelector + toleration.
 
-planeVersion: v1.2.0
+planeVersion: v1.2.3
 
 # ── Disable bundled databases -- using dedicated charts ──────────
 postgres:
@@ -37,6 +37,7 @@ minio:
 # ── Ingress disabled -- Caddy handles TLS ────────────────────────
 ingress:
   enabled: false
+  appHost: "plane.lab.infiniteroomlabs.cloud"
 
 # ── Scheduling: all pods on DigitalOcean node ────────────────────
 web:
@@ -144,3 +145,8 @@ env:
   docstore_bucket: "uploads"
   doc_upload_size_limit: "5242880"
   default_cluster_domain: cluster.local
+  cors_allowed_origins: "https://plane.lab.infiniteroomlabs.cloud"
+  app_base_url: "https://plane.lab.infiniteroomlabs.cloud"
+  admin_base_url: "https://plane.lab.infiniteroomlabs.cloud/god-mode/"
+  space_base_url: "https://plane.lab.infiniteroomlabs.cloud/spaces/"
+  live_base_url: "https://plane.lab.infiniteroomlabs.cloud/live/"

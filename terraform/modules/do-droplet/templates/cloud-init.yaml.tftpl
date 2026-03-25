@@ -153,7 +153,6 @@ write_files:
       token: "${k3s_node_token}"
       node-name: "${tailscale_hostname}"
       flannel-iface: tailscale0
-      flannel-mtu: 1230
       node-label:
 %{ for label in k3s_node_labels ~}
         - "${label}"
