@@ -626,6 +626,23 @@
         timeout: "10m0s"
       tags: [phase3, plane]
 
+    # The Plane CE chart creates plane-live-secrets with an empty REDIS_URL.
+    # Patch it with the real value from plane-app-env so plane-live can connect.
+    - name: "Phase 3: Patch plane-live-secrets with REDIS_URL"
+      kubernetes.core.k8s:
+        state: patched
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: plane-live-secrets
+            namespace: "{{ k3s_namespace }}"
+          stringData:
+            REDIS_URL: "redis://:{{ vault_redis_password }}@valkey:6379/3"
+      no_log: true
+      tags: [phase3, plane]
+
     # Plane CE creates headless services only. Create NodePort services
     # for Caddy path-based routing.
     - name: "Phase 3: Create Plane NodePort services for Caddy"
