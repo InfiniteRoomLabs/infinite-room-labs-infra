@@ -149,7 +149,7 @@ irl_pg_databases:
 
 # ── Caddy (in-cluster) ──────────────────────────────────────────────
 irl_caddy_le_email: "admin@infiniteroomlabs.cloud"
-irl_caddy_le_staging: true          # false for production LE certs
+irl_caddy_le_staging: false          # true for staging, false for production LE certs
 irl_caddy_image: "irl-caddy:2.11.2-custom"
 irl_k8s_namespace: "irl"
 irl_plane_cluster_svcs: true         # Use chart-native ClusterIP services for Plane
