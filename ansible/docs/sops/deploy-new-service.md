@@ -2,25 +2,23 @@
 
 ## Prerequisites
 - SSH access to homelab via Tailscale
-- Ansible runner built (`./ansible/run-ansible.sh shell` works)
+- Ansible venv set up (`cd ansible && uv sync`)
 
 ## Steps
 
-1. **Create compose template**: `ansible/templates/compose/{stack}/docker-compose.yml.j2`
-2. **Add variables**: Add any new vars to `inventory/group_vars/all/main.yml`
-3. **Add secrets**: Add any passwords to `inventory/group_vars/all/vault.yml` and re-encrypt
-4. **Create playbook**: `ansible/playbooks/{service}.yml`
-5. **Add to site.yml**: Import the playbook in the correct phase
-6. **Add to Caddyfile**: Update `irl_services` in group_vars if the service needs HTTP access
-7. **Add DNS record**: Update `homelab_dns_records` in `terraform/environments/homelab/env.hcl`
-8. **Dry run**: `./run-ansible.sh playbook playbooks/{service}.yml --check --diff`
-9. **Apply**: `./run-ansible.sh playbook playbooks/{service}.yml`
-10. **Verify**: Check service health at the assigned URL
+1. **Create Helm chart or values file**: If using an IRL chart, add to `helm-charts/charts/irl-{name}/`. If using an upstream chart, create `ansible/helm/{name}/values.yaml` with overrides.
+2. **Add variables**: Add the service to `irl_services` in `inventory/group_vars/all/main.yml` with `subdomain`, `internal`, `health_path`, `cluster_svc`, and `cluster_port`.
+3. **Add secrets**: Create in Bitwarden under `IRL/`, add mapping to `scripts/bw-sync-config.yaml`, run `bw-sync.sh --target both`.
+4. **Add deploy tasks**: Add Helm deploy task to `playbooks/helm-deploy.yml` in the correct phase, tagged with the service name.
+5. **Update Caddy**: The Caddyfile template auto-generates a block from `irl_services`. Re-run `--tags caddy` to update the ConfigMap.
+6. **Add DNS record**: Add subdomain to CoreDNS zone file via `irl_services` (auto-generated). If using a new base domain, update `terraform/environments/homelab/env.hcl`.
+7. **Dry run**: `uv run ansible-playbook playbooks/helm-deploy.yml --tags {service} --check --diff`
+8. **Apply**: `uv run ansible-playbook playbooks/helm-deploy.yml --tags {service},caddy`
+9. **Verify**: `curl https://{subdomain}.lab.infiniteroomlabs.cloud{health_path}`
 
 ## Rollback
 
 ```bash
-ssh wes@homelab
-cd /opt/irl/{stack}
-sudo docker compose down
+helm uninstall {release-name} -n irl --kubeconfig ~/.kube/homelab.yaml
+# Then re-run --tags caddy to regenerate the Caddyfile without the removed service
 ```

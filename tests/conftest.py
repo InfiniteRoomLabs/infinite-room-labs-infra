@@ -4,10 +4,6 @@ import pytest
 import requests
 import dns.resolver
 from kubernetes import client, config
-from urllib3.exceptions import InsecureRequestWarning
-
-# Suppress TLS warnings for Caddy internal CA
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # Constants
 HOMELAB_TAILSCALE_IP = "100.86.213.22"
@@ -63,9 +59,9 @@ def dns_resolver():
 
 @pytest.fixture(scope="session")
 def https():
-    """Requests session with TLS verification disabled (Caddy internal CA)."""
+    """Requests session with TLS verification enabled (Let's Encrypt certs)."""
     session = requests.Session()
-    session.verify = False
+    session.verify = True
     session.timeout = 10
     return session
 
@@ -75,7 +71,6 @@ SERVICES = {
     "gitea": {
         "subdomain": "git",
         "domain": "git.lab.infiniteroomlabs.cloud",
-        "port": 30300,
         "internal": False,
         "health_path": "/api/v1/version",
         "health_status": 200,
@@ -83,7 +78,6 @@ SERVICES = {
     "authentik": {
         "subdomain": "auth",
         "domain": "auth.lab.infiniteroomlabs.cloud",
-        "port": 30080,
         "internal": False,
         "health_path": "/",
         "health_status": [200, 302],
@@ -91,7 +85,6 @@ SERVICES = {
     "grafana": {
         "subdomain": "grafana",
         "domain": "grafana.lab.infiniteroomlabs.cloud",
-        "port": 30001,
         "internal": False,
         "health_path": "/api/health",
         "health_status": 200,
@@ -99,7 +92,6 @@ SERVICES = {
     "vault": {
         "subdomain": "vault",
         "domain": "vault.lab.infiniteroomlabs.cloud",
-        "port": 30200,
         "internal": False,
         "health_path": "/v1/sys/health",
         "health_status": 200,
@@ -107,7 +99,6 @@ SERVICES = {
     "prometheus": {
         "subdomain": "metrics",
         "domain": "metrics.internal.lab.infiniteroomlabs.cloud",
-        "port": 30090,
         "internal": True,
         "health_path": "/-/healthy",
         "health_status": 200,
@@ -115,7 +106,6 @@ SERVICES = {
     "alertmanager": {
         "subdomain": "alerts",
         "domain": "alerts.internal.lab.infiniteroomlabs.cloud",
-        "port": 30093,
         "internal": True,
         "health_path": "/-/healthy",
         "health_status": 200,
@@ -123,7 +113,6 @@ SERVICES = {
     "garage": {
         "subdomain": "storage",
         "domain": "storage.internal.lab.infiniteroomlabs.cloud",
-        "port": 30039,
         "internal": True,
         "health_path": "/",
         "health_status": 200,
@@ -131,7 +120,6 @@ SERVICES = {
     "homepage": {
         "subdomain": "home",
         "domain": "home.lab.infiniteroomlabs.cloud",
-        "port": 30000,
         "internal": False,
         "health_path": "/",
         "health_status": 200,
@@ -139,7 +127,6 @@ SERVICES = {
     "openviking": {
         "subdomain": "context",
         "domain": "context.internal.lab.infiniteroomlabs.cloud",
-        "port": 31933,
         "internal": True,
         "health_path": "/health",
         "health_status": 200,

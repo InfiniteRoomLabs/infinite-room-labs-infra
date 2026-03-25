@@ -19,13 +19,12 @@ admin:
 
 service:
   http:
-    type: NodePort
+    type: ClusterIP
     port: 3000
-    nodePort: 30300
   ssh:
     type: NodePort
     port: 22
-    nodePort: 30022
+    nodePort: 30022  # Keep SSH NodePort for git clone access
 
 # Gitea app.ini configuration
 gitea:

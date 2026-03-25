@@ -55,14 +55,18 @@ sudo docker compose restart postgres
 
 ### Caddy proxy error
 ```bash
-# Check Caddy logs
-sudo journalctl -u caddy --since "30 minutes ago"
+# Check Caddy pod logs (runs in-cluster as hostNetwork pod)
+kubectl logs -n irl -l app.kubernetes.io/name=caddy --tail=50
 
-# Verify upstream is listening
-curl -I http://127.0.0.1:{port}
+# Check pod status
+kubectl get pods -n irl -l app.kubernetes.io/name=caddy
 
-# Reload Caddy
-sudo systemctl reload caddy
+# Restart Caddy pod
+kubectl rollout restart deployment/caddy -n irl
+
+# Verify upstream is reachable from within cluster
+kubectl exec -n irl $(kubectl get pod -n irl -l app.kubernetes.io/name=caddy -o name) -- \
+  wget -qO- http://{svc}.irl.svc.cluster.local:{port}/health
 ```
 
 ## Escalation

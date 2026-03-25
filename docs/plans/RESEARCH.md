@@ -429,6 +429,29 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ---
 
+### R15: Internal TLS via ACME for Homelab Services
+
+- **Status**: done
+- **Roadmap link**: Cross-cutting (TLS for all internal services behind `*.lab.infiniteroomlabs.cloud`)
+- **Key questions**:
+  1. Can Vault PKI (already deployed, v1.17) serve as an ACME CA for Caddy?
+  2. Can Let's Encrypt issue certs for internal-only services via DNS-01 (Cloudflare)?
+  3. Is step-ca worth deploying when Vault is already present?
+  4. What are the CT log implications of using LE for internal subdomains?
+  5. How does Caddy support per-site ACME CA overrides?
+  6. What is the path to removing `verify=False` from the test suite?
+- **Resources**:
+  - [Vault PKI ACME docs](https://developer.hashicorp.com/vault/docs/secrets/pki/acme)
+  - [Vault ACME + Caddy tutorial](https://developer.hashicorp.com/vault/tutorials/secrets-management/pki-acme-caddy)
+  - [caddy-dns/cloudflare](https://github.com/caddy-dns/cloudflare)
+  - [Caddy tls directive](https://caddyserver.com/docs/caddyfile/directives/tls)
+  - [step-ca ACME basics](https://smallstep.com/docs/step-ca/acme-basics/)
+  - [Tailscale HTTPS docs](https://tailscale.com/kb/1153/enabling-https)
+- **Findings**: Three viable paths exist. (1) Vault PKI ACME: Vault 1.17 fully supports ACME (added in 1.14), Caddy uses `acme_ca` global directive to point at `vault.lab.infiniteroomlabs.cloud/v1/pki_int/acme/directory`. Requires distributing the root CA to all clients and solving a chicken-and-egg TLS bootstrap. Main risk: Vault sealing blocks cert renewals. (2) Let's Encrypt DNS-01: Issues publicly-trusted certs via Cloudflare DNS-01 challenge - no CA distribution, no verify=False, no Vault dependency. Requires a custom Caddy binary built with the `caddy-dns/cloudflare` plugin. Internal subdomain names appear in CT logs (low risk for this service set). (3) step-ca: Adds no value over Vault PKI; already deployed CA makes this redundant. Tailscale cert does not apply - it only works for `*.ts.net` domains, not custom `*.lab.infiniteroomlabs.cloud` domains. Full analysis in `docs/plans/resources/2026-03-24-internal-tls-acme-options.md`.
+- **Decision**: Approach 2 (LE + DNS-01 + Cloudflare) is recommended. Publicly-trusted certs eliminate all CA distribution work, no Vault availability dependency, and the CT log disclosure is not a meaningful risk. The cost is building and deploying a custom Caddy binary once. Approach 1 (Vault PKI) is the recommended fallback if public-trust certs are unacceptable for privacy reasons.
+
+---
+
 ### R14: Git DAG — Repo Dependency Graph Engine
 
 - **Status**: open

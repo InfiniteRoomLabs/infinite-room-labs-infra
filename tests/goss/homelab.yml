@@ -33,9 +33,7 @@ service:
   nftables:
     enabled: true
     running: true
-  caddy:
-    enabled: true
-    running: true
+  # caddy: removed -- Caddy now runs in k3s (hostNetwork pod)
 
 # k3s API responding
 http:
@@ -48,8 +46,15 @@ http:
 process:
   k3s:
     running: true
-  caddy:
-    running: true
+  # caddy: removed -- Caddy now runs in k3s (hostNetwork pod)
+
+# Caddy pod health (in-cluster)
+command:
+  caddy-pod-running:
+    exec: "kubectl get pods -n irl -l app.kubernetes.io/name=caddy -o jsonpath='{.items[0].status.phase}' --kubeconfig /etc/rancher/k3s/k3s.yaml"
+    exit-status: 0
+    stdout:
+      - "Running"
 
 # ZFS pool
 command:

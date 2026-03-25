@@ -41,9 +41,8 @@ server:
       }
 
   service:
-    type: NodePort
+    type: ClusterIP
     port: 8200
-    nodePort: 30200
 
   dataStorage:
     enabled: true

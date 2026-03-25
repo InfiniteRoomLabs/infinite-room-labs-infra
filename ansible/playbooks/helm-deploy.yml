@@ -4,13 +4,12 @@
 # Deploys all IRL services to k3s using Helm charts.
 #
 # Charts are sourced from:
-#   - IRL helm-charts repo (irl-postgres, irl-valkey, irl-gitea, irl-monitoring)
+#   - IRL Helm repo (https://infiniteroomlabs.github.io/helm-charts/)
 #   - Upstream repos (vault, authentik, jenkins, plane, ollama)
 #
 # Prerequisites:
 #   - k3s.yml complete (cluster running, namespace created, PVs created)
 #   - k8s-secrets.yml complete (Kubernetes Secrets provisioned)
-#   - IRL helm-charts repo cloned at ~/projects/infinite-room-labs/helm-charts
 #
 # Run full deploy:
 #   ./run-ansible.sh playbook playbooks/helm-deploy.yml
@@ -26,34 +25,9 @@
   vars:
     kubeconfig: /etc/rancher/k3s/k3s.yaml
     k3s_namespace: irl
-    irl_charts_path: "/home/{{ irl_admin_user }}/helm-charts/charts"
     helm_values_path: "/home/{{ irl_admin_user }}/helm-values"
 
   tasks:
-    # ── Sync IRL helm-charts repo to server ──────────────────────
-    - name: Clone or update IRL helm-charts repo
-      ansible.builtin.git:
-        repo: "https://github.com/InfiniteRoomLabs/helm-charts.git"
-        dest: "/home/{{ irl_admin_user }}/helm-charts"
-        version: main
-        force: true
-      become_user: "{{ irl_admin_user }}"
-      tags: [always]
-
-    - name: Build chart dependencies
-      ansible.builtin.command:
-        cmd: helm dependency update
-        chdir: "{{ irl_charts_path }}/{{ item }}"
-      loop:
-        - irl-postgres
-        - irl-valkey
-        - irl-gitea
-        - irl-monitoring
-        - irl-garage
-        - irl-openviking
-      changed_when: true
-      tags: [always]
-
     # ── Upload values override files to server ───────────────────
     - name: Create values override directories
       ansible.builtin.file:
@@ -69,14 +43,16 @@
         - ollama
         - coredns
         - homepage
+        - caddy
       tags: [always]
 
-    # ── Add upstream Helm repos (for non-IRL charts) ─────────────
-    - name: Add upstream Helm repositories
+    # ── Add Helm repositories ─────────────────────────────────────
+    - name: Add Helm repositories
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
         repo_url: "{{ item.url }}"
       loop:
+        - { name: irl, url: "https://infiniteroomlabs.github.io/helm-charts/" }
         - { name: hashicorp, url: "https://helm.releases.hashicorp.com" }
         - { name: cnpg, url: "https://cloudnative-pg.github.io/charts" }
         - { name: goauthentik, url: "https://charts.goauthentik.io" }
@@ -108,7 +84,7 @@
     - name: "Phase 2: Deploy PostgreSQL (irl-postgres chart)"
       kubernetes.core.helm:
         name: postgresql
-        chart_ref: "{{ irl_charts_path }}/irl-postgres"
+        chart_ref: irl/irl-postgres
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -181,7 +157,7 @@
     - name: "Phase 2: Deploy Valkey (irl-valkey chart)"
       kubernetes.core.helm:
         name: valkey
-        chart_ref: "{{ irl_charts_path }}/irl-valkey"
+        chart_ref: irl/irl-valkey
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -320,7 +296,7 @@
     - name: "Phase 2: Deploy Garage (irl-garage chart)"
       kubernetes.core.helm:
         name: garage
-        chart_ref: "{{ irl_charts_path }}/irl-garage"
+        chart_ref: irl/irl-garage
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -370,7 +346,7 @@
     - name: "Phase 2: Deploy OpenViking (irl-openviking chart)"
       kubernetes.core.helm:
         name: openviking
-        chart_ref: "{{ irl_charts_path }}/irl-openviking"
+        chart_ref: irl/irl-openviking
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -413,6 +389,131 @@
       tags: [phase2, vault]
 
     # ══════════════════════════════════════════════════════════════
+    # Phase 2.5: Caddy Reverse Proxy (in-cluster, hostNetwork)
+    # ══════════════════════════════════════════════════════════════
+
+    - name: "Caddy: Create PersistentVolume for cert storage"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolume
+          metadata:
+            name: pv-caddy-data
+            labels:
+              app: caddy
+              storage: local
+          spec:
+            capacity:
+              storage: "1Gi"
+            accessModes:
+              - ReadWriteOnce
+            persistentVolumeReclaimPolicy: Retain
+            storageClassName: zfs-local
+            hostPath:
+              path: /var/lib/rancher/k3s/storage/caddy-data
+              type: DirectoryOrCreate
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Create PersistentVolumeClaim"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: caddy-data-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "1Gi"
+            selector:
+              matchLabels:
+                app: caddy
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Create build directory"
+      ansible.builtin.file:
+        path: /tmp/caddy-build
+        state: directory
+        mode: "0755"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Copy Dockerfile to server"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../docker/caddy/Dockerfile"
+        dest: "/tmp/caddy-build/Dockerfile"
+        mode: "0644"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Build custom image and import to k3s"
+      ansible.builtin.shell: |
+        cd /tmp/caddy-build && \
+        docker build --network host -t {{ irl_caddy_image }} . && \
+        docker save {{ irl_caddy_image }} | k3s ctr images import -
+      changed_when: true
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Template Caddyfile"
+      ansible.builtin.template:
+        src: ../templates/Caddyfile.j2
+        dest: "{{ helm_values_path }}/caddy/Caddyfile"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Read Caddyfile from server"
+      ansible.builtin.slurp:
+        src: "{{ helm_values_path }}/caddy/Caddyfile"
+      register: caddy_caddyfile
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Create Caddyfile ConfigMap"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: caddy-config
+            namespace: "{{ k3s_namespace }}"
+          data:
+            Caddyfile: "{{ caddy_caddyfile.content | b64decode }}"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Deploy irl-caddy chart"
+      kubernetes.core.helm:
+        name: caddy
+        chart_ref: irl/irl-caddy
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values:
+          caddyfile:
+            externalConfigMap: true
+        wait: true
+        timeout: "3m0s"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Restart pod to pick up ConfigMap changes"
+      ansible.builtin.command:
+        cmd: kubectl rollout restart deployment/caddy -n {{ k3s_namespace }} --kubeconfig {{ kubeconfig }}
+      changed_when: true
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Wait for pod to be ready"
+      ansible.builtin.command:
+        cmd: kubectl rollout status deployment/caddy -n {{ k3s_namespace }} --timeout=120s --kubeconfig {{ kubeconfig }}
+      changed_when: false
+      tags: [phase2, caddy]
+
+    # ══════════════════════════════════════════════════════════════
     # Phase 3: Dev Platform + Monitoring
     # ══════════════════════════════════════════════════════════════
 
@@ -436,14 +537,23 @@
       no_log: true
       tags: [phase3, gitea]
 
+    - name: "Phase 3: Upload Gitea values"
+      ansible.builtin.copy:
+        src: ../helm/gitea/values.yaml
+        dest: "{{ helm_values_path }}/gitea/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, gitea]
+
     - name: "Phase 3: Deploy Gitea (irl-gitea chart)"
       kubernetes.core.helm:
         name: gitea
-        chart_ref: "{{ irl_charts_path }}/irl-gitea"
+        chart_ref: irl/irl-gitea
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
         values_files:
+          - "{{ helm_values_path }}/gitea/values.yaml"
           - "{{ helm_values_path }}/gitea-secrets.yaml"
         wait: true
         timeout: "5m0s"
@@ -465,8 +575,7 @@
             bootstrap_password: "{{ vault_authentik_bootstrap_password }}"
           server:
             service:
-              type: NodePort
-              nodePort: 30900
+              type: ClusterIP
             resources:
               limits:
                 memory: "1536Mi"
@@ -504,7 +613,7 @@
     - name: "Phase 3: Deploy monitoring (irl-monitoring chart)"
       kubernetes.core.helm:
         name: monitoring
-        chart_ref: "{{ irl_charts_path }}/irl-monitoring"
+        chart_ref: irl/irl-monitoring
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -624,6 +733,23 @@
           - "{{ helm_values_path }}/plane/secrets.yaml"
         wait: true
         timeout: "10m0s"
+      tags: [phase3, plane]
+
+    # The Plane CE chart creates plane-live-secrets with an empty REDIS_URL.
+    # Patch it with the real value from plane-app-env so plane-live can connect.
+    - name: "Phase 3: Patch plane-live-secrets with REDIS_URL"
+      kubernetes.core.k8s:
+        state: patched
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: plane-live-secrets
+            namespace: "{{ k3s_namespace }}"
+          stringData:
+            REDIS_URL: "redis://:{{ vault_redis_password }}@valkey:6379/3"
+      no_log: true
       tags: [phase3, plane]
 
     # Plane CE creates headless services only. Create NodePort services
@@ -749,6 +875,6 @@
           {{ cnpg_list.stdout }}
           {{ helm_list.stdout }}
 
-          All services deployed via IRL charts or upstream values files.
-          NodePorts defined in chart values, proxied by Caddy.
+          All services deployed via IRL Helm repo or upstream charts.
+          Caddy (in-cluster, hostNetwork) proxies all services.
       tags: [always]

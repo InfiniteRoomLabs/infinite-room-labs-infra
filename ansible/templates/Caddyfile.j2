@@ -1,14 +1,17 @@
 # {{ ansible_managed }}
-# Infinite Room Labs homelab reverse proxy
+# Infinite Room Labs reverse proxy (in-cluster, hostNetwork)
 #
-# All services are proxied through Caddy on the Tailscale interface.
-# Public services use ACME (Let's Encrypt) for valid TLS.
-# Internal services use Caddy's internal CA (self-signed).
+# Let's Encrypt DNS-01 via Cloudflare for all TLS.
+# Proxies to ClusterIP services via k8s DNS.
 
 # Global options
 {
-	# Admin API on localhost only (needed for caddy reload)
-	admin localhost:2019
+	# Admin API on all interfaces (Prometheus scrapes :2019/metrics)
+	admin :2019
+	email {{ irl_caddy_le_email }}
+{% if irl_caddy_le_staging | default(true) %}
+	acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+{% endif %}
 }
 
 {% for svc_name, svc in irl_services.items() %}
@@ -16,13 +19,18 @@
 {% set domain = irl_internal_domain if svc.internal else irl_public_domain %}
 # {{ svc_name | capitalize }}{{ " (internal)" if svc.internal else "" }}
 {{ svc.subdomain }}.{{ domain }} {
-	tls internal
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		resolvers 1.1.1.1
+	}
+{% if svc.cluster_svc is defined %}
+	reverse_proxy {{ svc.cluster_svc }}.{{ irl_k8s_namespace }}.svc.cluster.local:{{ svc.cluster_port }}
+{% else %}
 	reverse_proxy localhost:{{ svc.port }}
+{% endif %}
 	log {
-		output file /var/log/caddy/{{ svc_name }}.log {
-			roll_size 10mb
-			roll_keep 5
-		}
+		output stdout
+		format json
 	}
 }
 
@@ -30,15 +38,41 @@
 {% endfor %}
 # Plane -- path-based routing to multiple backends
 plane.{{ irl_public_domain }} {
-	tls internal
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		resolvers 1.1.1.1
+	}
+{% if irl_plane_cluster_svcs | default(false) %}
+	handle /api/* {
+		reverse_proxy plane-api.{{ irl_k8s_namespace }}.svc.cluster.local:8000
+	}
+	handle /spaces/* {
+		reverse_proxy plane-space.{{ irl_k8s_namespace }}.svc.cluster.local:3000
+	}
+	redir /god-mode /god-mode/ permanent
+	handle /god-mode/* {
+		reverse_proxy plane-admin.{{ irl_k8s_namespace }}.svc.cluster.local:3000 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+	handle /live/* {
+		reverse_proxy plane-live.{{ irl_k8s_namespace }}.svc.cluster.local:3000
+	}
+	handle {
+		reverse_proxy plane-web.{{ irl_k8s_namespace }}.svc.cluster.local:3000
+	}
+{% else %}
 	handle /api/* {
 		reverse_proxy localhost:30083
 	}
 	handle /spaces/* {
 		reverse_proxy localhost:30084
 	}
+	redir /god-mode /god-mode/ permanent
 	handle /god-mode/* {
-		reverse_proxy localhost:30085
+		reverse_proxy localhost:30085 {
+			header_up X-Forwarded-Proto https
+		}
 	}
 	handle /live/* {
 		reverse_proxy localhost:30086
@@ -46,10 +80,9 @@ plane.{{ irl_public_domain }} {
 	handle {
 		reverse_proxy localhost:30082
 	}
+{% endif %}
 	log {
-		output file /var/log/caddy/plane.log {
-			roll_size 10mb
-			roll_keep 5
-		}
+		output stdout
+		format json
 	}
 }
