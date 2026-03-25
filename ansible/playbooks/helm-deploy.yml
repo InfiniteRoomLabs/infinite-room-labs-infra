@@ -437,6 +437,13 @@
                 app: caddy
       tags: [phase2, caddy]
 
+    - name: "Caddy: Create build directory"
+      ansible.builtin.file:
+        path: /tmp/caddy-build
+        state: directory
+        mode: "0755"
+      tags: [phase2, caddy]
+
     - name: "Caddy: Copy Dockerfile to server"
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../docker/caddy/Dockerfile"
@@ -447,7 +454,7 @@
     - name: "Caddy: Build custom image and import to k3s"
       ansible.builtin.shell: |
         cd /tmp/caddy-build && \
-        docker build -t {{ irl_caddy_image }} . && \
+        docker build --network host -t {{ irl_caddy_image }} . && \
         docker save {{ irl_caddy_image }} | k3s ctr images import -
       changed_when: true
       tags: [phase2, caddy]
@@ -458,6 +465,12 @@
         dest: "{{ helm_values_path }}/caddy/Caddyfile"
         owner: "{{ irl_admin_user }}"
         mode: "0640"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Read Caddyfile from server"
+      ansible.builtin.slurp:
+        src: "{{ helm_values_path }}/caddy/Caddyfile"
+      register: caddy_caddyfile
       tags: [phase2, caddy]
 
     - name: "Caddy: Create Caddyfile ConfigMap"
@@ -471,7 +484,7 @@
             name: caddy-config
             namespace: "{{ k3s_namespace }}"
           data:
-            Caddyfile: "{{ lookup('file', helm_values_path + '/caddy/Caddyfile') }}"
+            Caddyfile: "{{ caddy_caddyfile.content | b64decode }}"
       tags: [phase2, caddy]
 
     - name: "Caddy: Deploy irl-caddy chart"
