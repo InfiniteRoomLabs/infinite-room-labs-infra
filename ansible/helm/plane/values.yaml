@@ -7,7 +7,7 @@
 #
 # Uses external PostgreSQL (CNPG) and Redis (Valkey).
 # Local MinIO for file storage. Local RabbitMQ for async.
-# All Plane pods scheduled on DigitalOcean node via nodeSelector + toleration.
+# All Plane pods scheduled on homelab node (data tier).
 
 planeVersion: v1.2.3
 
@@ -23,12 +23,7 @@ rabbitmq:
   storageClass: local-path
   volumeSize: 500Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 # MinIO disabled -- using Garage S3-compatible storage on homelab
 minio:
@@ -39,7 +34,7 @@ ingress:
   enabled: false
   appHost: "plane.lab.infiniteroomlabs.cloud"
 
-# ── Scheduling: all pods on DigitalOcean node ────────────────────
+# ── Scheduling: all pods on homelab data tier ────────────────────
 web:
   replicas: 1
   memoryLimit: 512Mi
@@ -47,12 +42,7 @@ web:
   cpuRequest: 50m
   memoryRequest: 128Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 space:
   replicas: 1
@@ -61,12 +51,7 @@ space:
   cpuRequest: 50m
   memoryRequest: 64Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 admin:
   replicas: 1
@@ -75,12 +60,7 @@ admin:
   cpuRequest: 50m
   memoryRequest: 64Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 live:
   replicas: 1
@@ -89,12 +69,7 @@ live:
   cpuRequest: 50m
   memoryRequest: 64Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 api:
   replicas: 1
@@ -103,12 +78,7 @@ api:
   cpuRequest: 100m
   memoryRequest: 256Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 worker:
   replicas: 1
@@ -117,12 +87,7 @@ worker:
   cpuRequest: 50m
   memoryRequest: 128Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 beatworker:
   replicas: 1
@@ -131,12 +96,7 @@ beatworker:
   cpuRequest: 50m
   memoryRequest: 64Mi
   nodeSelector:
-    irl.dev/provider: digitalocean
-  tolerations:
-    - key: "irl.dev/cloud"
-      operator: "Equal"
-      value: "digitalocean"
-      effect: "NoSchedule"
+    irl.dev/tier: data
 
 # ── Environment -- secrets injected via Ansible override file ────
 env:
