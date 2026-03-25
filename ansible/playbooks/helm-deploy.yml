@@ -767,6 +767,7 @@
           data:
             WEB_URL: "https://plane.{{ irl_public_domain }}"
             CORS_ALLOWED_ORIGINS: "https://plane.{{ irl_public_domain }}"
+            CSRF_TRUSTED_ORIGINS: "https://plane.{{ irl_public_domain }}"
       tags: [phase3, plane]
 
     - name: "Phase 3: Restart Plane pods after configmap patch"
