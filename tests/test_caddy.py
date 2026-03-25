@@ -1,5 +1,7 @@
-"""Caddy reverse proxy tests: HTTPS endpoints via internal TLS."""
+"""Caddy reverse proxy tests: HTTPS endpoints with Let's Encrypt TLS."""
 
+import ssl
+import socket
 import pytest
 from conftest import SERVICES
 
@@ -30,16 +32,40 @@ class TestCaddy:
     def test_plane_api_path_routing(self, https):
         """Plane API path routing works through Caddy."""
         resp = https.get("https://plane.lab.infiniteroomlabs.cloud/api/")
-        # API should return JSON or a redirect, not the web frontend HTML
         content_type = resp.headers.get("content-type", "")
         assert resp.status_code in (200, 301, 302, 404), (
             f"Plane API returned {resp.status_code}"
         )
 
-    def test_tls_internal_ca(self, https):
-        """All services use Caddy's internal CA (not Let's Encrypt)."""
-        # If we can connect with verify=False and get a response,
-        # the cert is self-signed (internal CA). Public CA certs
-        # would work with verify=True.
-        resp = https.get("https://git.lab.infiniteroomlabs.cloud/api/v1/version")
-        assert resp.status_code == 200
+    def test_tls_lets_encrypt(self):
+        """All services use Let's Encrypt (publicly trusted) certificates."""
+        ctx = ssl.create_default_context()
+        with ctx.wrap_socket(
+            socket.socket(), server_hostname="home.lab.infiniteroomlabs.cloud"
+        ) as s:
+            s.settimeout(10)
+            s.connect(("home.lab.infiniteroomlabs.cloud", 443))
+            cert = s.getpeercert()
+
+        issuer = dict(x[0] for x in cert["issuer"])
+        assert issuer.get("organizationName") == "Let's Encrypt", (
+            f"Expected Let's Encrypt issuer, got: {issuer}"
+        )
+
+    def test_cert_not_expiring_soon(self):
+        """Certificate has more than 7 days until expiry."""
+        import datetime
+
+        ctx = ssl.create_default_context()
+        with ctx.wrap_socket(
+            socket.socket(), server_hostname="home.lab.infiniteroomlabs.cloud"
+        ) as s:
+            s.settimeout(10)
+            s.connect(("home.lab.infiniteroomlabs.cloud", 443))
+            cert = s.getpeercert()
+
+        not_after = datetime.datetime.strptime(
+            cert["notAfter"], "%b %d %H:%M:%S %Y %Z"
+        ).replace(tzinfo=datetime.timezone.utc)
+        days_left = (not_after - datetime.datetime.now(datetime.timezone.utc)).days
+        assert days_left > 7, f"Certificate expires in {days_left} days"

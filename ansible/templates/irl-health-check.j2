@@ -3,7 +3,7 @@
 # Service health checker for Infinite Room Labs homelab
 # Outputs JSON array for agent consumption
 #
-# Ports and services are derived from irl_services in group_vars.
+# Services are checked via their HTTPS endpoints (Let's Encrypt TLS).
 
 set -euo pipefail
 
@@ -22,7 +22,8 @@ check_service() {
 RESULTS=()
 {% for svc_name, svc in irl_services.items() %}
 {% if svc.health_path is defined %}
-RESULTS+=("$(check_service "{{ svc_name }}" "http://127.0.0.1:{{ svc.port }}{{ svc.health_path }}")")
+{% set domain = irl_internal_domain if svc.internal else irl_public_domain %}
+RESULTS+=("$(check_service "{{ svc_name }}" "https://{{ svc.subdomain }}.{{ domain }}{{ svc.health_path }}")")
 {% endif %}
 {% endfor %}
 
