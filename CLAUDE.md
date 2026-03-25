@@ -17,8 +17,34 @@ This is a multi-tool IaC monorepo. Each IaC tool has its own top-level directory
 |-----------|------|---------|
 | `terraform/` | Terraform + Terragrunt | Cloud resource provisioning (domains, DNS, zones) |
 | `ansible/` | Ansible | Homelab server configuration and service deployment |
+| `helm-charts/` | Helm (git submodule) | IRL custom Helm charts (`irl-caddy`, `irl-garage`, etc.) |
+| `docker/` | Docker | Custom container image builds (Dockerfiles only, no compose) |
 
 Do NOT put Terraform files at the repo root -- they live under `terraform/`. Do NOT put Ansible files at the repo root -- they live under `ansible/`.
+
+### Helm Charts (submodule)
+
+`helm-charts/` is a **git submodule** pointing to `InfiniteRoomLabs/helm-charts`. Charts live in `helm-charts/charts/irl-{name}/`.
+
+**Reading charts**: The submodule is always available at `./helm-charts/`. Read chart templates and values from there.
+
+**Modifying charts**: Changes to charts must be committed in the submodule repo, then the submodule pointer updated in this repo:
+```bash
+cd helm-charts/
+# make changes, commit, push to helm-charts remote
+git add . && git commit -m "..." && git push origin main
+cd ..
+# update the submodule pointer in infra repo
+git add helm-charts && git commit -m "Update helm-charts submodule"
+```
+
+**After cloning**: Run `git submodule update --init` to populate `helm-charts/`.
+
+**Syncing**: If the submodule is behind, run `cd helm-charts && git pull origin main && cd .. && git add helm-charts`.
+
+**Ansible references charts via**: `chart_ref` pointing to the local submodule path (e.g., `{{ playbook_dir }}/../../helm-charts/charts/irl-caddy`) or via the Helm repo (`helm repo add irl https://infiniteroomlabs.github.io/helm-charts/`).
+
+**Values overrides**: Chart default values live in `helm-charts/charts/irl-{name}/values.yaml`. Environment-specific overrides live in `ansible/helm/{name}/values.yaml` (these are NOT charts -- just values files for `helm upgrade -f`).
 
 ### Terraform layout
 
