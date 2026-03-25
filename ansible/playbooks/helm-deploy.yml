@@ -43,6 +43,7 @@
         - ollama
         - coredns
         - homepage
+        - caddy
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -386,6 +387,106 @@
 
           See docs/runbooks/vault-sealed.md for the full procedure.
       tags: [phase2, vault]
+
+    # ══════════════════════════════════════════════════════════════
+    # Phase 2.5: Caddy Reverse Proxy (in-cluster, hostNetwork)
+    # ══════════════════════════════════════════════════════════════
+
+    - name: "Caddy: Create PersistentVolume for cert storage"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolume
+          metadata:
+            name: pv-caddy-data
+            labels:
+              app: caddy
+              storage: local
+          spec:
+            capacity:
+              storage: "1Gi"
+            accessModes:
+              - ReadWriteOnce
+            persistentVolumeReclaimPolicy: Retain
+            storageClassName: zfs-local
+            hostPath:
+              path: /var/lib/rancher/k3s/storage/caddy-data
+              type: DirectoryOrCreate
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Create PersistentVolumeClaim"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: caddy-data-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "1Gi"
+            selector:
+              matchLabels:
+                app: caddy
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Copy Dockerfile to server"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../docker/caddy/Dockerfile"
+        dest: "/tmp/caddy-build/Dockerfile"
+        mode: "0644"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Build custom image and import to k3s"
+      ansible.builtin.shell: |
+        cd /tmp/caddy-build && \
+        docker build -t {{ irl_caddy_image }} . && \
+        docker save {{ irl_caddy_image }} | k3s ctr images import -
+      changed_when: true
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Template Caddyfile"
+      ansible.builtin.template:
+        src: ../templates/Caddyfile.j2
+        dest: "{{ helm_values_path }}/caddy/Caddyfile"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Create Caddyfile ConfigMap"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: caddy-config
+            namespace: "{{ k3s_namespace }}"
+          data:
+            Caddyfile: "{{ lookup('file', helm_values_path + '/caddy/Caddyfile') }}"
+      tags: [phase2, caddy]
+
+    - name: "Caddy: Deploy irl-caddy chart"
+      kubernetes.core.helm:
+        name: caddy
+        chart_ref: irl/irl-caddy
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values:
+          caddyfile:
+            externalConfigMap: true
+        wait: true
+        timeout: "3m0s"
+      tags: [phase2, caddy]
 
     # ══════════════════════════════════════════════════════════════
     # Phase 3: Dev Platform + Monitoring
@@ -741,6 +842,6 @@
           {{ cnpg_list.stdout }}
           {{ helm_list.stdout }}
 
-          All services deployed via IRL charts or upstream values files.
-          NodePorts defined in chart values, proxied by Caddy.
+          All services deployed via IRL Helm repo or upstream charts.
+          Caddy (in-cluster, hostNetwork) proxies all services.
       tags: [always]

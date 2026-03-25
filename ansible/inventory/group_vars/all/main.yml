@@ -52,8 +52,9 @@ irl_public_domain: "lab.infiniteroomlabs.cloud"
 irl_internal_domain: "internal.lab.infiniteroomlabs.cloud"
 
 # ── Service subdomains (used in Caddyfile + DNS records) ─────────────
-# Ports are k3s NodePorts. Caddy proxies localhost:{nodePort} -> k3s service.
-# NodePort assignments match helm/{service}/values.yaml service.nodePort fields.
+# Service dictionary. Caddy proxies each service via either ClusterIP DNS name
+# (cluster_svc + cluster_port) or NodePort fallback (port). During migration,
+# services without cluster_svc still use localhost:{nodePort}.
 irl_services:
   gitea:
     subdomain: "git"
@@ -128,8 +129,12 @@ irl_pg_databases:
   - name: authentik
   - name: grafana
 
-# ── Caddy ────────────────────────────────────────────────────────────
-irl_caddy_bind_interface: "tailscale0"
+# ── Caddy (in-cluster) ──────────────────────────────────────────────
+irl_caddy_le_email: "admin@infiniteroomlabs.cloud"
+irl_caddy_le_staging: true          # false for production LE certs
+irl_caddy_image: "irl-caddy:2.11.2-custom"
+irl_k8s_namespace: "irl"
+irl_plane_cluster_svcs: false       # true after Plane ClusterIP migration (WP6)
 
 # ── Services to disable during cleanup ───────────────────────────────
 irl_services_to_disable:
