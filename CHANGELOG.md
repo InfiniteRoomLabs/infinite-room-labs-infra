@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Tests: `.gitignore` to exclude `__pycache__/` and `results/` from version control
+
 ### Fixed
 - Homepage Kubernetes widget: NaN errors caused by NetworkPolicy blocking API access
 - Homepage service widgets: DNS resolution failures from ndots:5 FQDN expansion (use short names)
