@@ -5,7 +5,7 @@
 #
 # Charts are sourced from:
 #   - IRL Helm repo (https://infiniteroomlabs.github.io/helm-charts/)
-#   - Upstream repos (vault, authentik, jenkins, plane, ollama)
+#   - Upstream repos (vault, authentik, jenkins, ollama)
 #
 # Prerequisites:
 #   - k3s.yml complete (cluster running, namespace created, PVs created)
@@ -39,7 +39,6 @@
       loop:
         - ""
         - vault
-        - plane
         - ollama
         - coredns
         - homepage
@@ -56,7 +55,7 @@
         - { name: hashicorp, url: "https://helm.releases.hashicorp.com" }
         - { name: cnpg, url: "https://cloudnative-pg.github.io/charts" }
         - { name: goauthentik, url: "https://charts.goauthentik.io" }
-        - { name: makeplane, url: "https://helm.plane.so/" }
+
         - { name: jenkins, url: "https://charts.jenkins.io" }
         - { name: ollama-helm, url: "https://otwld.github.io/ollama-helm/" }
       tags: [always]
@@ -654,159 +653,6 @@
         wait: true
         timeout: "3m0s"
       tags: [phase3, homepage]
-
-    - name: "Phase 3: Upload Plane base values"
-      ansible.builtin.copy:
-        src: ../helm/plane/values.yaml
-        dest: "{{ helm_values_path }}/plane/values.yaml"
-        owner: "{{ irl_admin_user }}"
-        mode: "0640"
-      tags: [phase3, plane]
-
-    # Plane CE chart templates service URLs with FQDNs that fail during
-    # pod startup DNS race conditions (musl libc + ndots:5 + headless svc).
-    # Fix: inject our own app-env secret with short hostnames, then tell
-    # the chart to use it via external_secrets.app_env_existingSecret.
-    - name: "Phase 3: Create Plane app-env secret (short hostnames)"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: plane-app-env
-            namespace: "{{ k3s_namespace }}"
-          type: Opaque
-          stringData:
-            DATABASE_URL: "postgresql://plane:{{ vault_pg_passwords.plane }}@postgresql-rw:5432/plane"
-            REDIS_URL: "redis://:{{ vault_redis_password }}@valkey:6379/3"
-            AMQP_URL: "amqp://plane:plane@plane-rabbitmq:5672/"
-            SECRET_KEY: "{{ vault_plane_secret_key }}"
-            LIVE_SERVER_SECRET_KEY: "{{ vault_plane_live_secret_key }}"
-      no_log: true
-      tags: [phase3, plane]
-
-    - name: "Phase 3: Create Plane doc-store secret (Garage S3)"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: plane-doc-store-env
-            namespace: "{{ k3s_namespace }}"
-          type: Opaque
-          stringData:
-            USE_MINIO: "0"
-            AWS_ACCESS_KEY_ID: "{{ vault_garage_plane_access_key }}"
-            AWS_SECRET_ACCESS_KEY: "{{ vault_garage_plane_secret_key }}"
-            AWS_S3_ENDPOINT_URL: "http://garage:3900"
-            AWS_S3_BUCKET_NAME: "plane-uploads"
-            AWS_REGION: "garage"
-            FILE_SIZE_LIMIT: "5242880"
-      no_log: true
-      tags: [phase3, plane]
-
-    - name: "Phase 3: Write Plane secrets override"
-      ansible.builtin.copy:
-        content: |
-          external_secrets:
-            app_env_existingSecret: "plane-app-env"
-            doc_store_existingSecret: "plane-doc-store-env"
-        dest: "{{ helm_values_path }}/plane/secrets.yaml"
-        owner: root
-        mode: "0600"
-      no_log: true
-      tags: [phase3, plane]
-
-    - name: "Phase 3: Deploy Plane CE"
-      kubernetes.core.helm:
-        name: plane
-        chart_ref: makeplane/plane-ce
-        release_namespace: "{{ k3s_namespace }}"
-        create_namespace: false
-        kubeconfig: "{{ kubeconfig }}"
-        values_files:
-          - "{{ helm_values_path }}/plane/values.yaml"
-          - "{{ helm_values_path }}/plane/secrets.yaml"
-        wait: true
-        timeout: "10m0s"
-      tags: [phase3, plane]
-
-    # The Plane CE chart creates plane-live-secrets with an empty REDIS_URL.
-    # Patch it with the real value from plane-app-env so plane-live can connect.
-    - name: "Phase 3: Patch plane-live-secrets with REDIS_URL"
-      kubernetes.core.k8s:
-        state: patched
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: plane-live-secrets
-            namespace: "{{ k3s_namespace }}"
-          stringData:
-            REDIS_URL: "redis://:{{ vault_redis_password }}@valkey:6379/3"
-      no_log: true
-      tags: [phase3, plane]
-
-    # The Plane CE chart generates WEB_URL as http:// from ingress.appHost.
-    # Patch it to https:// since Caddy handles TLS termination.
-    - name: "Phase 3: Patch Plane configmap for HTTPS URLs"
-      kubernetes.core.k8s:
-        state: patched
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: plane-app-vars
-            namespace: "{{ k3s_namespace }}"
-          data:
-            WEB_URL: "https://plane.{{ irl_public_domain }}"
-            CORS_ALLOWED_ORIGINS: "https://plane.{{ irl_public_domain }}"
-            CSRF_TRUSTED_ORIGINS: "https://plane.{{ irl_public_domain }}"
-      tags: [phase3, plane]
-
-    - name: "Phase 3: Restart Plane pods after configmap patch"
-      ansible.builtin.command:
-        cmd: >
-          kubectl rollout restart
-          deployment/plane-api-wl deployment/plane-admin-wl deployment/plane-web-wl
-          -n {{ k3s_namespace }} --kubeconfig {{ kubeconfig }}
-      changed_when: true
-      tags: [phase3, plane]
-
-    # Plane CE creates headless services only. Create NodePort services
-    # for Caddy path-based routing.
-    - name: "Phase 3: Create Plane NodePort services for Caddy"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: "plane-{{ item.name }}-np"
-            namespace: "{{ k3s_namespace }}"
-          spec:
-            type: NodePort
-            selector:
-              app.name: "irl-plane-{{ item.name }}"
-            ports:
-              - name: http
-                port: "{{ item.port }}"
-                targetPort: "{{ item.port }}"
-                nodePort: "{{ item.nodePort }}"
-      loop:
-        - { name: web,   port: 3000, nodePort: 30082 }
-        - { name: api,   port: 8000, nodePort: 30083 }
-        - { name: space, port: 3000, nodePort: 30084 }
-        - { name: admin, port: 3000, nodePort: 30085 }
-        - { name: live,  port: 3000, nodePort: 30086 }
-      tags: [phase3, plane]
 
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,

@@ -18,7 +18,6 @@ EXPECTED_PVS = [
 ]
 
 EXPECTED_SECRETS = [
-    "plane-app-env", "plane-doc-store-env", "plane-live-secrets",
     "garage-rpc-secret", "garage-admin-secret", "openviking-api-key",
 ]
 

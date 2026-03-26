@@ -9,8 +9,8 @@ from conftest import NAMESPACE, HOMELAB_TAILSCALE_IP
 @pytest.mark.acceptance
 class TestPostgreSQL:
     def test_databases_exist(self, k8s):
-        """All 5 service databases exist in CNPG PostgreSQL."""
-        expected_dbs = ["gitea", "plane", "vault", "authentik", "grafana"]
+        """All 4 service databases exist in CNPG PostgreSQL."""
+        expected_dbs = ["gitea", "vault", "authentik", "grafana"]
         result = subprocess.run(
             ["kubectl", "exec", "-n", NAMESPACE, "postgresql-1", "-c", "postgres",
              "--", "psql", "-U", "postgres", "-t", "-A", "-c",

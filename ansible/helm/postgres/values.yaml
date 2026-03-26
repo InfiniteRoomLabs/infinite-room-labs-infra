@@ -58,7 +58,6 @@ initdb:
   scripts:
     create_databases.sql: |
       CREATE DATABASE gitea;
-      CREATE DATABASE plane;
       CREATE DATABASE vault;
       CREATE DATABASE authentik;
       CREATE DATABASE grafana;

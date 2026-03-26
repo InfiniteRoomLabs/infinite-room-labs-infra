@@ -23,11 +23,6 @@ secrets:
     k8s_secret: "postgres-gitea"
     k8s_key: "password"
 
-  - bw_item: "pg-plane"
-    ansible_var: "vault_pg_passwords.plane"
-    k8s_secret: "postgres-plane"
-    k8s_key: "password"
-
   - bw_item: "pg-vault"
     ansible_var: "vault_pg_passwords.vault"
     k8s_secret: "postgres-vault"
@@ -68,21 +63,6 @@ secrets:
     k8s_secret: "grafana-admin"
     k8s_key: "admin-password"
 
-  - bw_item: "plane-secret-key"
-    ansible_var: "vault_plane_secret_key"
-    k8s_secret: "plane-secrets"
-    k8s_key: "secret-key"
-
-  - bw_item: "plane-minio"
-    ansible_var: "vault_plane_minio_password"
-    k8s_secret: "plane-secrets"
-    k8s_key: "minio-root-password"
-
-  - bw_item: "plane-live-secret-key"
-    ansible_var: "vault_plane_live_secret_key"
-    k8s_secret: "plane-secrets"
-    k8s_key: "live-secret-key"
-
   - bw_item: "garage-rpc-secret"
     ansible_var: "vault_garage_rpc_secret"
     k8s_secret: "garage-rpc-secret"
@@ -97,16 +77,6 @@ secrets:
     ansible_var: "vault_garage_metrics_token"
     k8s_secret: "garage-admin-secret"
     k8s_key: "metrics-token"
-
-  - bw_item: "garage-plane-access-key"
-    ansible_var: "vault_garage_plane_access_key"
-    k8s_secret: "garage-plane-key"
-    k8s_key: "access-key"
-
-  - bw_item: "garage-plane-secret-key"
-    ansible_var: "vault_garage_plane_secret_key"
-    k8s_secret: "garage-plane-key"
-    k8s_key: "secret-key"
 
   - bw_item: "openviking-api-key"
     ansible_var: "vault_openviking_api_key"

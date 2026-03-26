@@ -15,7 +15,7 @@
 }
 
 {% for svc_name, svc in irl_services.items() %}
-{% if svc.get('caddy_proxy', true) and svc_name != 'plane' %}
+{% if svc.get('caddy_proxy', true) %}
 {% set domain = irl_internal_domain if svc.internal else irl_public_domain %}
 # {{ svc_name | capitalize }}{{ " (internal)" if svc.internal else "" }}
 {{ svc.subdomain }}.{{ domain }} {
@@ -36,53 +36,3 @@
 
 {% endif %}
 {% endfor %}
-# Plane -- path-based routing to multiple backends
-plane.{{ irl_public_domain }} {
-	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-		resolvers 1.1.1.1
-	}
-{% if irl_plane_cluster_svcs | default(false) %}
-	handle /api/* {
-		reverse_proxy plane-api.{{ irl_k8s_namespace }}.svc.cluster.local:8000
-	}
-	handle /spaces/* {
-		reverse_proxy plane-space.{{ irl_k8s_namespace }}.svc.cluster.local:3000
-	}
-	redir /god-mode /god-mode/ permanent
-	handle /god-mode/* {
-		reverse_proxy plane-admin.{{ irl_k8s_namespace }}.svc.cluster.local:3000 {
-			header_up X-Forwarded-Proto https
-		}
-	}
-	handle /live/* {
-		reverse_proxy plane-live.{{ irl_k8s_namespace }}.svc.cluster.local:3000
-	}
-	handle {
-		reverse_proxy plane-web.{{ irl_k8s_namespace }}.svc.cluster.local:3000
-	}
-{% else %}
-	handle /api/* {
-		reverse_proxy localhost:30083
-	}
-	handle /spaces/* {
-		reverse_proxy localhost:30084
-	}
-	redir /god-mode /god-mode/ permanent
-	handle /god-mode/* {
-		reverse_proxy localhost:30085 {
-			header_up X-Forwarded-Proto https
-		}
-	}
-	handle /live/* {
-		reverse_proxy localhost:30086
-	}
-	handle {
-		reverse_proxy localhost:30082
-	}
-{% endif %}
-	log {
-		output stdout
-		format json
-	}
-}

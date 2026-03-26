@@ -2,7 +2,7 @@
 # playbooks/authentik.yml
 # ========================
 # Deploys Authentik SSO provider as its own Docker Compose stack.
-# Provides OIDC authentication for Gitea, Plane, Grafana, Vault, Jenkins.
+# Provides OIDC authentication for Gitea, Grafana, Vault, Jenkins.
 #
 # Requires: data stack (PostgreSQL + Redis) running on irl-backend network.
 #
@@ -59,4 +59,3 @@
           2. Grafana (grafana.{{ irl_public_domain }})
           3. Vault (vault.{{ irl_public_domain }})
           4. Jenkins (ci.{{ irl_public_domain }})
-          5. Plane (plane.{{ irl_public_domain }})

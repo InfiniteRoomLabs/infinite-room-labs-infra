@@ -17,7 +17,7 @@ DNS resolution is handled automatically via Tailscale Split DNS. CoreDNS runs on
 | Node | Location | Tailscale IP | Spec | Role |
 |------|----------|--------------|------|------|
 | HP Z600 (homelab) | On-prem | 100.86.213.22 | Dual Xeon, 48GB RAM, ZFS | k3s server, stateful workloads |
-| DigitalOcean (do-agent) | NYC3 | Via Tailscale | 4 vCPU, 8GB RAM ($48/mo) | k3s agent, Plane |
+| DigitalOcean (do-agent) | NYC3 | Via Tailscale | 4 vCPU, 8GB RAM ($48/mo) | k3s agent |
 
 ## Service Access Table
 
@@ -29,7 +29,6 @@ All services are accessed via Caddy reverse proxy with internal TLS (Tailscale-o
 | **Grafana** (dashboards) | https://grafana.lab.infiniteroomlabs.cloud | Homelab | Admin: `admin` / password in BW `IRL/Services/Grafana` |
 | **Vault** (secrets mgmt) | https://vault.lab.infiniteroomlabs.cloud | Homelab | Root token in BW `IRL/Services/Vault` |
 | **Authentik** (SSO) | https://auth.lab.infiniteroomlabs.cloud | Homelab | Bootstrap password in BW `IRL/Services/Authentik` |
-| **Plane** (project mgmt) | https://plane.lab.infiniteroomlabs.cloud | DO agent | First-run setup wizard |
 | **Garage** (S3 storage) | https://garage.internal.lab.infiniteroomlabs.cloud | Homelab | Admin token in BW `IRL/Services/Garage` |
 | **OpenViking** (agent memory/RAG) | https://openviking.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
 | **Prometheus** (metrics) | https://metrics.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
@@ -77,7 +76,7 @@ vault secrets list
 
 ## Garage S3 Access
 
-Garage provides S3-compatible object storage, primarily used for Plane file uploads. Data is ZFS-backed on the homelab node.
+Garage provides S3-compatible object storage. Data is ZFS-backed on the homelab node.
 
 ```bash
 # Configure AWS CLI or s3cmd with Garage credentials from Bitwarden

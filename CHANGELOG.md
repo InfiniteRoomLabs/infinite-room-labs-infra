@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+- Plane: removed self-hosted deployment (CE and Enterprise charts) from k8s cluster
+- Plane: removed all Ansible tasks, Helm values, Caddy routes, DNS records, secrets, and tests
+- Plane: migrated to SaaS at https://app.plane.so/infinite-room-labs/
+
 ### Added
 - Tests: `.gitignore` to exclude `__pycache__/` and `results/` from version control
 

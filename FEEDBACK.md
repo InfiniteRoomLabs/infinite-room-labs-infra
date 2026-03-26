@@ -62,22 +62,6 @@
   - Fix: Remove --volumes from the prune command:
   /usr/bin/docker system prune -af --filter 'until=168h' > /dev/null 2>&1
 
-  C5. Plane SECRET_KEY reuses Authentik's secret key
-
-  - File: ansible/templates/compose/plane/docker-compose.yml.j2, line 30
-  - Problem: SECRET_KEY={{ vault_authentik_secret_key }} -- Plane is using Authentik's secret key. Every service must have its own independent secret key.
-  - Fix:
-    a. Add vault_plane_secret_key: "CHANGEME_encrypt_this_file" to inventory/group_vars/all/vault.yml
-    b. Change line 30 to: SECRET_KEY={{ vault_plane_secret_key }}
-
-  C6. Plane MinIO credentials reuse PostgreSQL password
-
-  - File: ansible/templates/compose/plane/docker-compose.yml.j2, lines 32-36, 81-82
-  - Problem: MinIO root password is {{ vault_pg_passwords.plane }} -- same as Plane's database password. Each credential must be unique.
-  - Fix:
-    a. Add vault_plane_minio_password: "CHANGEME_encrypt_this_file" to vault.yml
-    b. Replace all {{ vault_pg_passwords.plane }} references for MinIO with {{ vault_plane_minio_password }}
-
   ---
   Important (Fix Before Commit/Deploy)
 
@@ -141,9 +125,8 @@
   1. C3 (task ordering) -- 30-second fix, swap two task blocks
   2. C4 (docker prune) -- 30-second fix, remove --volumes
   3. C2 (gitea depends_on) -- 5 min, delete dummy service + depends_on
-  4. C5 + C6 (secret reuse) -- 5 min, add new vault vars + update template
-  5. C1 (Authentik missing) -- 30-60 min, write full Authentik compose services
-  6. I1 (SSH key placeholder) -- add assertion, actual key is operator's responsibility
-  7. I2 (vault.yml encryption) -- 1 min, rename to .example
-  8. I3 (missing deliverables) -- separate work item, Terraform modules are Phase 2+
-  9. I4 (Ollama bind) -- 1 min, change 0.0.0.0 to 127.0.0.1
+  4. C1 (Authentik missing) -- 30-60 min, write full Authentik compose services
+  5. I1 (SSH key placeholder) -- add assertion, actual key is operator's responsibility
+  6. I2 (vault.yml encryption) -- 1 min, rename to .example
+  7. I3 (missing deliverables) -- separate work item, Terraform modules are Phase 2+
+  8. I4 (Ollama bind) -- 1 min, change 0.0.0.0 to 127.0.0.1

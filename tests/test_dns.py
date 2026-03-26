@@ -10,7 +10,6 @@ EXPECTED_RECORDS = [
     "auth.lab.infiniteroomlabs.cloud",
     "grafana.lab.infiniteroomlabs.cloud",
     "vault.lab.infiniteroomlabs.cloud",
-    "plane.lab.infiniteroomlabs.cloud",
     "storage.internal.lab.infiniteroomlabs.cloud",
     "metrics.internal.lab.infiniteroomlabs.cloud",
     "alerts.internal.lab.infiniteroomlabs.cloud",

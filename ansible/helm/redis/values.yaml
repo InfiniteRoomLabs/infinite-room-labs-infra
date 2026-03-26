@@ -5,7 +5,7 @@
 # Docs: https://github.com/bitnami/charts/tree/main/bitnami/redis
 #
 # Memory limit from irl_mem_limits.redis: 256m
-# Shared by: Authentik, Plane
+# Shared by: Authentik
 # Secret: redis-auth (created by k8s-secrets.yml)
 
 architecture: standalone

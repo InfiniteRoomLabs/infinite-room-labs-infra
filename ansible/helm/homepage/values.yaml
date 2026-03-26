@@ -139,12 +139,6 @@ config:
               type: gitea
               url: "http://gitea-http:3000"
               key: "{{HOMEPAGE_VAR_GITEA_KEY}}"
-        - Plane:
-            icon: plane
-            href: "https://plane.lab.infiniteroomlabs.cloud"
-            description: "Project management (on DO node)"
-            namespace: irl
-            podSelector: "app.name in (irl-plane-api, irl-plane-web, irl-plane-admin, irl-plane-live, irl-plane-space, irl-plane-worker, irl-plane-beat-worker, irl-plane-rabbitmq)"
         - Authentik:
             icon: authentik
             href: "https://auth.lab.infiniteroomlabs.cloud"

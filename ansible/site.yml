@@ -65,7 +65,6 @@
 #   --tags vault      (Phase 2)
 #   --tags gitea      (Phase 3)
 #   --tags authentik  (Phase 3)
-#   --tags plane      (Phase 3)
 #   --tags monitoring (Phase 3)
 #   --tags loki       (Phase 3)
 #   --tags jenkins    (Phase 4)

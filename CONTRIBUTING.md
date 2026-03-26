@@ -9,7 +9,7 @@ This document covers everything you need to know to work on the Infinite Room La
 | Node | Location | Role | Spec |
 |------|----------|------|------|
 | `home` | On-prem (HP Z600) | k3s server, stateful workloads | Dual Xeon, 40GB RAM, ZFS RAIDZ1 |
-| `do-k3s-agent-01` | DigitalOcean NYC3 | k3s agent, Plane | 4 vCPU, 8GB RAM, $48/mo |
+| `do-k3s-agent-01` | DigitalOcean NYC3 | k3s agent | 4 vCPU, 8GB RAM, $48/mo |
 
 All services live in the `irl` namespace. Flannel VXLAN over Tailscale for cross-node networking.
 
@@ -193,7 +193,6 @@ task validate   # Full: Goss + pytest + report
 
 - **Vault re-seals on k3s restart**: Need 3 of 5 unseal keys from BW `IRL/Services/Vault`
 - **Ansible runner TTY**: `run-ansible.sh` auto-detects TTY. Non-interactive contexts (CI, agents) work fine.
-- **Plane DNS race**: Plane CE chart templates FQDNs that fail during pod startup. Fixed via `external_secrets.app_env_existingSecret` with short hostnames.
 - **CoreDNS needs hostNetwork**: Tailscale Split DNS only works on port 53. Apply `hostNetwork: true` patch after Helm deploy.
 - **CHANGELOG guard**: Every commit to master must include a CHANGELOG.md change. Stage it before committing.
 - **bw-sync.sh slow**: Iterates all BW folders. For quick vault updates, decrypt/edit/re-encrypt directly.

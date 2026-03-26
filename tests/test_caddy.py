@@ -23,20 +23,6 @@ class TestCaddy:
                 f"{name}: {url} returned {resp.status_code}, expected {expected}"
             )
 
-    def test_plane_web_frontend(self, https):
-        """Plane web frontend returns HTML."""
-        resp = https.get("https://plane.lab.infiniteroomlabs.cloud/")
-        assert resp.status_code == 200
-        assert "text/html" in resp.headers.get("content-type", "")
-
-    def test_plane_api_path_routing(self, https):
-        """Plane API path routing works through Caddy."""
-        resp = https.get("https://plane.lab.infiniteroomlabs.cloud/api/")
-        content_type = resp.headers.get("content-type", "")
-        assert resp.status_code in (200, 301, 302, 404), (
-            f"Plane API returned {resp.status_code}"
-        )
-
     def test_tls_lets_encrypt(self):
         """All services use Let's Encrypt (publicly trusted) certificates."""
         ctx = ssl.create_default_context()

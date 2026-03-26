@@ -16,7 +16,6 @@ locals {
   # ── DNS records (IP content comes from env var at leaf level) ───
   homelab_dns_records = [
     { name = "git.lab",     type = "A", proxied = false },
-    { name = "plane.lab",   type = "A", proxied = false },
     { name = "auth.lab",    type = "A", proxied = false },
     { name = "grafana.lab", type = "A", proxied = false },
     { name = "vault.lab",   type = "A", proxied = false },
