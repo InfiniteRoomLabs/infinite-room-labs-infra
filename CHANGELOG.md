@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- SendGrid: domain authentication DNS records (DKIM, DMARC, link branding) via Cloudflare Terraform
+- SendGrid: reusable `sendgrid-config` Terraform module (sender verification, scoped API key, unsubscribe group)
+- SendGrid: Terragrunt leaf at `prod/sendgrid/config/` with local state
+- SendGrid: verified sender `no-reply@infiniteroomlabs.com` (auto-verified via domain auth)
+- SendGrid: scoped `irl-mail-send` API key (mail.send only)
+- SendGrid: default unsubscribe group for CAN-SPAM compliance
+- Cloudflare: `prod/cloudflare/dns-records/` Terragrunt leaf for production DNS records
+- Cloudflare: DNS read/write permissions added to bootstrap API token
+- Secrets: SendGrid admin API key and mail-send key in Bitwarden and bw-sync-config
+- Secrets: `SENDGRID_API_KEY` env var in .envrc and .env.example
+- Skill: `manage-secrets` -- full lifecycle secrets management (create, rotate, edit, move, delete)
+
 ### Removed
 - Plane: removed self-hosted deployment (CE and Enterprise charts) from k8s cluster
 - Plane: removed all Ansible tasks, Helm values, Caddy routes, DNS records, secrets, and tests

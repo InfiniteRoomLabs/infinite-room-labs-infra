@@ -42,6 +42,8 @@ generate "main" {
     locals {
       perm_zone_read  = "c8fed203ed3043cba015a93ad1616f1f"
       perm_zone_write = "e6d2666161e84845a636613608cee8d5"
+      perm_dns_read   = "82e64a83756745bbbb1c9c2701bf816b"
+      perm_dns_write  = "4755a26eedb94da69e1066d98aa820be"
     }
 
     resource "cloudflare_account_token" "infra" {
@@ -54,6 +56,8 @@ generate "main" {
           permission_groups = [
             { id = local.perm_zone_read },
             { id = local.perm_zone_write },
+            { id = local.perm_dns_read },
+            { id = local.perm_dns_write },
           ]
           resources = jsonencode({
             "com.cloudflare.api.account.$${var.account_id}" = "*"

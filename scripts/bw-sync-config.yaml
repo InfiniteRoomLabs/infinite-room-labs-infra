@@ -110,3 +110,14 @@ secrets:
     ansible_var: "vault_cloudflare_caddy_dns01_token"
     k8s_secret: "caddy-cloudflare-token"
     k8s_key: "api-token"
+
+  # ── SendGrid (transactional email) ──────────────────────────
+  - bw_item: "sendgrid-api-key"
+    ansible_var: "vault_sendgrid_api_key"
+    k8s_secret: "sendgrid-credentials"
+    k8s_key: "api-key"
+
+  - bw_item: "sendgrid-mail-send-key"
+    ansible_var: "vault_sendgrid_mail_send_key"
+    k8s_secret: "sendgrid-credentials"
+    k8s_key: "mail-send-key"

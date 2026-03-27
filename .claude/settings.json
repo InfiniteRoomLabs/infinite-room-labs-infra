@@ -22,6 +22,24 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/deny-env-bash.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/deny-vault-edit.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/deny-vault-edit.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -31,6 +49,24 @@
           {
             "type": "command",
             "command": "ccsm-check-output"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/terraform-fmt.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/terraform-fmt.py"
           }
         ]
       }
