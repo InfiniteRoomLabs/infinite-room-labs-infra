@@ -105,6 +105,17 @@ secrets:
     k8s_secret: null
     k8s_key: null
 
+  # ── Vaultwarden (password manager) ─────────────────────────
+  - bw_item: "pg-vaultwarden"
+    ansible_var: "vault_pg_passwords.vaultwarden"
+    k8s_secret: "postgres-vaultwarden"
+    k8s_key: "password"
+
+  - bw_item: "vaultwarden-admin-token"
+    ansible_var: "vault_vaultwarden_admin_token"
+    k8s_secret: "vaultwarden-admin"
+    k8s_key: "admin-token"
+
   # ── Caddy (in-cluster reverse proxy) ──────────────────────────
   - bw_item: "cloudflare-caddy-dns01-token"
     ansible_var: "vault_cloudflare_caddy_dns01_token"

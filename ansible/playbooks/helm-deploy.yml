@@ -43,6 +43,7 @@
         - coredns
         - homepage
         - caddy
+        - vaultwarden
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -58,6 +59,7 @@
 
         - { name: jenkins, url: "https://charts.jenkins.io" }
         - { name: ollama-helm, url: "https://otwld.github.io/ollama-helm/" }
+        - { name: guerzon, url: "https://guerzon.github.io/vaultwarden" }
       tags: [always]
 
     - name: Update Helm repo cache
@@ -653,6 +655,29 @@
         wait: true
         timeout: "3m0s"
       tags: [phase3, homepage]
+
+    # ── Vaultwarden (Password Manager) ──────────────────────────────
+
+    - name: "Phase 3: Upload Vaultwarden values"
+      ansible.builtin.copy:
+        src: ../helm/vaultwarden/values.yaml
+        dest: "{{ helm_values_path }}/vaultwarden/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, vaultwarden]
+
+    - name: "Phase 3: Deploy Vaultwarden (irl-vaultwarden chart)"
+      kubernetes.core.helm:
+        name: vaultwarden
+        chart_ref: irl/irl-vaultwarden
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/vaultwarden/values.yaml"
+        wait: true
+        timeout: "5m0s"
+      tags: [phase3, vaultwarden]
 
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,

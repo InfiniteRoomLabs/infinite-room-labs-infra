@@ -16,6 +16,15 @@ All notable changes to this project will be documented in this file.
 - Secrets: SendGrid admin API key and mail-send key in Bitwarden and bw-sync-config
 - Secrets: `SENDGRID_API_KEY` env var in .envrc and .env.example
 - Skill: `manage-secrets` -- full lifecycle secrets management (create, rotate, edit, move, delete)
+- Vaultwarden: irl-vaultwarden Helm chart wrapper (guerzon/vaultwarden@0.35.1) with CNPG PostgreSQL, SendGrid SMTP, admin panel
+- Vaultwarden: Ansible deployment at Phase 3, service at passwords.lab.infiniteroomlabs.cloud
+- Vaultwarden: Bitwarden items and bw-sync mappings for DB password and admin token
+- Skill: `vault-unlock` -- unseal HashiCorp Vault via Bitwarden unseal keys
+- Hook: `deny-vault-edit.py` -- blocks direct edits to vault.yml (PreToolUse)
+- Hook: `terraform-fmt.py` -- auto-formats .tf files after edits (PostToolUse)
+- Skill: `helm-deploy` -- deploy services via Ansible Helm playbook
+- Skill: `tg-plan` -- run Terragrunt plan for leaf modules
+- Agent: `infra-reviewer` -- infrastructure code review subagent
 
 ### Removed
 - Plane: removed self-hosted deployment (CE and Enterprise charts) from k8s cluster

@@ -120,6 +120,12 @@ irl_services:
     health_path: "/"
     cluster_svc: "homepage"
     cluster_port: 3000
+  vaultwarden:
+    subdomain: "passwords"
+    internal: false
+    health_path: "/alive"
+    cluster_svc: "vaultwarden"
+    cluster_port: 80
   openviking:
     subdomain: "context"
     port: 31933           # Legacy NodePort (kept for reference)
@@ -141,6 +147,7 @@ irl_pg_databases:
   - name: vault
   - name: authentik
   - name: grafana
+  - name: vaultwarden
 
 # ── Caddy (in-cluster) ──────────────────────────────────────────────
 irl_caddy_le_email: "admin@infiniteroomlabs.cloud"

@@ -65,9 +65,10 @@
 #   --tags vault      (Phase 2)
 #   --tags gitea      (Phase 3)
 #   --tags authentik  (Phase 3)
-#   --tags monitoring (Phase 3)
-#   --tags loki       (Phase 3)
-#   --tags jenkins    (Phase 4)
+#   --tags monitoring    (Phase 3)
+#   --tags loki          (Phase 3)
+#   --tags vaultwarden   (Phase 3)
+#   --tags jenkins       (Phase 4)
 #   --tags ollama     (Phase 5)
 - name: "Phase 2-5: Helm service deployments"
   ansible.builtin.import_playbook: playbooks/helm-deploy.yml

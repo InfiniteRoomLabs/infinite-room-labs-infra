@@ -1,0 +1,101 @@
+# helm/vaultwarden/values.yaml
+# ==============================
+# Vaultwarden chart values for the IRL homelab.
+# Chart: guerzon/vaultwarden (wrapped by irl-vaultwarden)
+# Docs: https://github.com/guerzon/vaultwarden
+#
+# Memory limit from irl_mem_limits: 256Mi
+# Domain: passwords.lab.infiniteroomlabs.cloud
+# Service: ClusterIP -> Caddy proxies at https://passwords.lab.infiniteroomlabs.cloud
+#
+# Values nested under 'vaultwarden:' because irl-vaultwarden is a wrapper chart
+# that includes guerzon/vaultwarden as a dependency.
+
+vaultwarden:
+  image:
+    registry: docker.io
+    repository: vaultwarden/server
+    tag: "1.35.4-alpine"
+
+  domain: "https://passwords.lab.infiniteroomlabs.cloud"
+
+  # -- Registration & access control
+  signupsAllowed: false
+  invitationsAllowed: true
+  showPassHint: false
+
+  # -- Admin panel (token from K8s Secret)
+  adminToken:
+    existingSecret: "vaultwarden-admin"
+    existingSecretKey: "admin-token"
+
+  # -- Database: external PostgreSQL via CNPG
+  database:
+    type: "postgresql"
+    existingSecret: "postgres-vaultwarden"
+    existingSecretKey: "password"
+    host: "postgresql-rw"
+    port: "5432"
+    dbName: "vaultwarden"
+    username: "vaultwarden"
+
+  # -- SMTP: SendGrid relay
+  # existingSecret explicitly empty to override chart default -- password only via password.existingSecret
+  smtp:
+    existingSecret: ""
+    host: "smtp.sendgrid.net"
+    from: "no-reply@infiniteroomlabs.com"
+    fromName: "Vaultwarden"
+    port: 587
+    security: "starttls"
+    username:
+      value: "apikey"
+    password:
+      existingSecret: "sendgrid-credentials"
+      existingSecretKey: "mail-send-key"
+
+  # -- WebSocket on same port (v1.29+)
+  websocket:
+    enabled: true
+
+  # -- Rocket web server
+  rocket:
+    port: "8080"
+
+  # -- Persistence for attachments, sends, RSA keys, icon cache
+  data:
+    name: "vaultwarden-data"
+    size: "2Gi"
+    class: "local-path"
+    path: "/data"
+
+  # -- Service: ClusterIP (Caddy handles TLS + ingress)
+  service:
+    type: ClusterIP
+    port: 80
+
+  # -- Resource limits
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+  # -- Health probes via /alive endpoint
+  livenessProbe:
+    enabled: true
+    path: "/alive"
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  readinessProbe:
+    enabled: true
+    path: "/alive"
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  # -- Ingress disabled (Caddy handles it)
+  ingress:
+    enabled: false
