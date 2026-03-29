@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - `.claude/`: commit agents, hooks, skills, and settings to version control
 - `.idea/`: commit JetBrains project config with `.gitignore` for transient files
+- Cloudflare: DNS read/write permissions added to bootstrap API token
 - Terraform lock files for prod dns-records and sendgrid/config
 
 ### Fixed
