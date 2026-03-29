@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Vaultwarden Helm chart: move `existingSecret` to correct `smtp.password` block (submodule updated)
+- Vaultwarden SMTP: use FQDN trailing dot (`smtp.sendgrid.net.`) to bypass k8s `ndots:5` + musl resolver failure
 
 ### Added
 - SendGrid: domain authentication DNS records (DKIM, DMARC, link branding) via Cloudflare Terraform

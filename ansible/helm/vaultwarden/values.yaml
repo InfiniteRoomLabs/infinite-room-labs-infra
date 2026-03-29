@@ -43,7 +43,7 @@ vaultwarden:
   # existingSecret explicitly empty to override chart default -- password only via password.existingSecret
   smtp:
     existingSecret: ""
-    host: "smtp.sendgrid.net"
+    host: "smtp.sendgrid.net."
     from: "no-reply@infiniteroomlabs.com"
     fromName: "Vaultwarden"
     port: 587
