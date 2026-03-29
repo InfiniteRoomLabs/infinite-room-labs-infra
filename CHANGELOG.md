@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 - Terraform lock files for prod dns-records and sendgrid/config
 
 ### Fixed
-- Vaultwarden Helm chart: move `existingSecret` to correct `smtp.password` block (submodule update)
+- Vaultwarden Helm chart: move `existingSecret` to correct `smtp.password` block (submodule updated)
 
 ### Added
 - SendGrid: domain authentication DNS records (DKIM, DMARC, link branding) via Cloudflare Terraform
