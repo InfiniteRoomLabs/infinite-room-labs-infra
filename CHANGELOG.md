@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- README: rewritten to reflect multi-tool monorepo (Ansible, Helm, Docker, secrets sync sections; homelab environment; all modules and workspaces)
+
 ### Added
 - SendGrid: domain authentication DNS records (DKIM, DMARC, link branding) via Cloudflare Terraform
 - SendGrid: reusable `sendgrid-config` Terraform module (sender verification, scoped API key, unsubscribe group)
