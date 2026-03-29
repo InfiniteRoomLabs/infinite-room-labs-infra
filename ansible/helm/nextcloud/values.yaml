@@ -1,0 +1,143 @@
+# helm/nextcloud/values.yaml
+# ==============================
+# Nextcloud chart values for the IRL homelab.
+# Chart: nextcloud/nextcloud v9.0.3 (upstream)
+# Docs: https://github.com/nextcloud/helm
+#
+# Domain: cloud.lab.infiniteroomlabs.cloud
+# Service: ClusterIP -> Caddy proxies at https://cloud.lab.infiniteroomlabs.cloud
+#
+# Secrets (DB password, Redis password, admin password) are injected via
+# a separate secrets override file written by helm-deploy.yml, NOT here.
+
+image:
+  repository: library/nextcloud
+  flavor: apache
+  pullPolicy: IfNotPresent
+
+nextcloud:
+  host: "cloud.lab.infiniteroomlabs.cloud"
+  username: admin
+  # password injected via secrets override file
+
+  trustedDomains:
+    - "cloud.lab.infiniteroomlabs.cloud"
+
+  # -- Custom config: set Redis DB index to 3 (Gitea uses 0-2)
+  configs:
+    redis-dbindex.config.php: |-
+      <?php
+      $CONFIG = array(
+        'redis' => array(
+          'dbindex' => 3,
+        ),
+      );
+
+  # -- Default configs (chart-provided auto-configuration)
+  defaultConfigs:
+    .htaccess: true
+    apache-pretty-urls.config.php: true
+    apcu.config.php: true
+    apps.config.php: true
+    autoconfig.php: true
+    redis.config.php: true
+    reverse-proxy.config.php: true
+    s3.config.php: false
+    smtp.config.php: true
+    swift.config.php: false
+    upgrade-disable-web.config.php: true
+    helm-metrics.config.php: true
+    imaginary.config.php: false
+
+# -- HTTPS behind reverse proxy (Caddy terminates TLS)
+phpClientHttpsFix:
+  enabled: true
+  protocol: https
+
+# -- Database: external PostgreSQL via CNPG
+internalDatabase:
+  enabled: false
+
+externalDatabase:
+  enabled: true
+  type: postgresql
+  host: "postgresql-rw"
+  user: nextcloud
+  database: nextcloud
+  # password injected via secrets override file
+
+# -- Disable bundled database subcharts
+postgresql:
+  enabled: false
+mariadb:
+  enabled: false
+
+# -- Cache/locking: external Valkey (Redis-compatible)
+redis:
+  enabled: false
+
+externalRedis:
+  enabled: true
+  host: "valkey"
+  port: "6379"
+  # password injected via secrets override file
+
+# -- Disable bundled Collabora
+collabora:
+  enabled: false
+
+# -- Cron: sidecar container for background tasks
+cronjob:
+  enabled: true
+  type: sidecar
+
+# -- Service: ClusterIP (Caddy handles TLS + ingress)
+service:
+  type: ClusterIP
+  port: 8080
+
+# -- Ingress disabled (Caddy handles it)
+ingress:
+  enabled: false
+
+# -- Persistence for Nextcloud application data (/var/www/html)
+persistence:
+  enabled: true
+  storageClass: "local-path"
+  size: 10Gi
+  # Separate PVC for user data (on ZFS for durability)
+  nextcloudData:
+    enabled: true
+    storageClass: "zfs-local"
+    size: 100Gi
+
+# -- Resource limits
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "200m"
+  limits:
+    memory: "2Gi"
+    cpu: "2000m"
+
+# -- Liveness/readiness probes
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30

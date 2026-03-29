@@ -44,6 +44,7 @@
         - homepage
         - caddy
         - vaultwarden
+        - nextcloud
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -60,6 +61,7 @@
         - { name: jenkins, url: "https://charts.jenkins.io" }
         - { name: ollama-helm, url: "https://otwld.github.io/ollama-helm/" }
         - { name: guerzon, url: "https://guerzon.github.io/vaultwarden" }
+        - { name: nextcloud, url: "https://nextcloud.github.io/helm/" }
       tags: [always]
 
     - name: Update Helm repo cache
@@ -678,6 +680,45 @@
         wait: true
         timeout: "5m0s"
       tags: [phase3, vaultwarden]
+
+    # ── Nextcloud (File Sharing) ──────────────────────────────────
+
+    - name: "Phase 3: Write Nextcloud secrets override"
+      ansible.builtin.copy:
+        content: |
+          nextcloud:
+            password: "{{ vault_nextcloud_admin_password }}"
+          externalDatabase:
+            password: "{{ vault_pg_passwords.nextcloud }}"
+          externalRedis:
+            password: "{{ vault_redis_password }}"
+        dest: "{{ helm_values_path }}/nextcloud-secrets.yaml"
+        owner: root
+        mode: "0600"
+      no_log: true
+      tags: [phase3, nextcloud]
+
+    - name: "Phase 3: Upload Nextcloud values"
+      ansible.builtin.copy:
+        src: ../helm/nextcloud/values.yaml
+        dest: "{{ helm_values_path }}/nextcloud/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, nextcloud]
+
+    - name: "Phase 3: Deploy Nextcloud"
+      kubernetes.core.helm:
+        name: nextcloud
+        chart_ref: nextcloud/nextcloud
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/nextcloud/values.yaml"
+          - "{{ helm_values_path }}/nextcloud-secrets.yaml"
+        wait: true
+        timeout: "10m0s"
+      tags: [phase3, nextcloud]
 
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,

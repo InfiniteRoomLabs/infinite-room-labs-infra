@@ -116,6 +116,17 @@ secrets:
     k8s_secret: "vaultwarden-admin"
     k8s_key: "admin-token"
 
+  # ── Nextcloud (file sharing) ──────────────────────────────────
+  - bw_item: "pg-nextcloud"
+    ansible_var: "vault_pg_passwords.nextcloud"
+    k8s_secret: "postgres-nextcloud"
+    k8s_key: "password"
+
+  - bw_item: "nextcloud-admin"
+    ansible_var: "vault_nextcloud_admin_password"
+    k8s_secret: null
+    k8s_key: null
+
   # ── Caddy (in-cluster reverse proxy) ──────────────────────────
   - bw_item: "cloudflare-caddy-dns01-token"
     ansible_var: "vault_cloudflare_caddy_dns01_token"

@@ -132,6 +132,12 @@ irl_services:
     internal: true
     cluster_svc: "openviking"
     cluster_port: 1933
+  nextcloud:
+    subdomain: "cloud"
+    internal: false
+    health_path: "/status.php"
+    cluster_svc: "nextcloud"
+    cluster_port: 8080
 
 # ── Users ────────────────────────────────────────────────────────────
 irl_admin_user: "wes"
@@ -148,6 +154,7 @@ irl_pg_databases:
   - name: authentik
   - name: grafana
   - name: vaultwarden
+  - name: nextcloud
 
 # ── Caddy (in-cluster) ──────────────────────────────────────────────
 irl_caddy_le_email: "admin@infiniteroomlabs.cloud"

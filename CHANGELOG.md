@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.gitignore`: fix double CRLF line endings
 
 ### Added
+- Nextcloud 33.0.0: deploy via upstream Helm chart with external PostgreSQL (CNPG), Valkey (Redis DB 3), ZFS-backed user data storage (100Gi), Caddy reverse proxy at `cloud.lab.infiniteroomlabs.cloud`, and cron sidecar
+- Nextcloud: bw-sync-config entries for `pg-nextcloud` and `nextcloud-admin` secrets
 - `.claude/`: commit agents, hooks, skills, and settings to version control
 - `.idea/`: commit JetBrains project config with `.gitignore` for transient files
 - Cloudflare: DNS read/write permissions added to bootstrap API token
