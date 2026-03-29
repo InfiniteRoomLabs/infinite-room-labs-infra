@@ -1,0 +1,23 @@
+{
+  "skill_name": "manage-secrets",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I just got a Postmark API token for transactional emails, dropped it in ~/.secrets/.postmark-api-token. Can you store it in bitwarden and wire it up? It'll need a k8s secret called postmark-credentials with key api-token, and an ansible var vault_postmark_api_token. I'll also need it as POSTMARK_API_TOKEN env var for terraform.",
+      "expected_output": "Creates BW folder IRL/Services/Postmark, creates secure note, adds entry to bw-sync-config.yaml with all mappings, updates .envrc (required list + comment), adds to .env.example, appends to .env, verifies without printing the value, offers to run bw-sync.sh",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "The grafana admin password got compromised, I've already generated a new one at ~/.secrets/.grafana-admin-new. Rotate it please.",
+      "expected_output": "Finds existing grafana-admin BW item, updates the notes field with new value piped from the file (never displayed), updates .env if applicable, offers to sync to push new value to ansible vault and k8s",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "We decommissioned Jenkins a while back, can you clean up the jenkins secret from everywhere?",
+      "expected_output": "Finds jenkins-related entries in bw-sync-config.yaml, confirms with user before deleting, removes from bw-sync-config.yaml, removes env var entries if any exist in .envrc/.env.example/.env, deletes BW item after confirmation, offers to sync, asks about cleaning up source file in ~/.secrets/",
+      "files": []
+    }
+  ]
+}

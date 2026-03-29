@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - README: rewritten to reflect multi-tool monorepo (Ansible, Helm, Docker, secrets sync sections; homelab environment; all modules and workspaces)
+- `.gitignore`: un-ignore `.claude/` directory (`.claude/.gitignore` handles `settings.local.json`)
+- `.gitignore`: fix double CRLF line endings
+
+### Added
+- `.claude/`: commit agents, hooks, skills, and settings to version control
+- `.idea/`: commit JetBrains project config with `.gitignore` for transient files
+- Terraform lock files for prod dns-records and sendgrid/config
+
+### Fixed
+- Vaultwarden Helm chart: move `existingSecret` to correct `smtp.password` block (submodule update)
 
 ### Added
 - SendGrid: domain authentication DNS records (DKIM, DMARC, link branding) via Cloudflare Terraform

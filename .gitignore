@@ -1,16 +1,15 @@
-# Added by Spec Kitty CLI (auto-managed)
-.claude/
-.codex/
-.opencode/
-.windsurf/
-.gemini/
-.cursor/
-.qwen/
-.kilocode/
-.augment/
-.roo/
-.amazonq/
-.github/copilot/
+# Added by Spec Kitty CLI (auto-managed)
+.codex/
+.opencode/
+.windsurf/
+.gemini/
+.cursor/
+.qwen/
+.kilocode/
+.augment/
+.roo/
+.amazonq/
+.github/copilot/
 .kittify/.dashboard
 
 # Terraform
@@ -46,4 +45,4 @@ ansible/inventory/group_vars/all/vault.yml
 
 # Ansible runtime
 ansible/.venv/
-ansible/facts_cache/
+ansible/facts_cache/
