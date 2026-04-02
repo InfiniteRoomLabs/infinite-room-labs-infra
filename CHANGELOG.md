@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Homepage: switch Plane from self-hosted to SaaS (`https://app.plane.so/infinite-room-labs/`)
 - README: rewritten to reflect multi-tool monorepo (Ansible, Helm, Docker, secrets sync sections; homelab environment; all modules and workspaces)
 - `.gitignore`: un-ignore `.claude/` directory (`.claude/.gitignore` handles `settings.local.json`)
 - `.gitignore`: fix double CRLF line endings

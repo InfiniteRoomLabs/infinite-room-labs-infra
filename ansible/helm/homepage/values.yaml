@@ -149,6 +149,10 @@ config:
               type: authentik
               url: "http://authentik-server"
               key: "{{HOMEPAGE_VAR_AUTHENTIK_KEY}}"
+        - Plane:
+            icon: plane
+            href: "https://app.plane.so/infinite-room-labs/"
+            description: "Project management (SaaS)"
 
     - Monitoring:
         - Grafana:
