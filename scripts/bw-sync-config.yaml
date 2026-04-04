@@ -141,3 +141,9 @@ secrets:
     ansible_var: "vault_sendgrid_mail_send_key"
     k8s_secret: "sendgrid-credentials"
     k8s_key: "mail-send-key"
+
+  # ── Gemini (Google AI) ──────────────────────────────────────
+  - bw_item: "gemini-api-key"
+    ansible_var: "vault_gemini_api_key"
+    k8s_secret: "gemini-api-key"
+    k8s_key: "api-key"

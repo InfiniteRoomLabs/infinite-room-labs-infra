@@ -346,6 +346,22 @@
       no_log: true
       tags: [phase2, openviking]
 
+    - name: "Phase 2: Create Gemini API key secret"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gemini-api-key
+            namespace: "{{ k3s_namespace }}"
+          type: Opaque
+          stringData:
+            api-key: "{{ vault_gemini_api_key }}"
+      no_log: true
+      tags: [phase2, openviking]
+
     - name: "Phase 2: Deploy OpenViking (irl-openviking chart)"
       kubernetes.core.helm:
         name: openviking
