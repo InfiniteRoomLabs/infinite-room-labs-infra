@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homepage: switch Plane from self-hosted to SaaS (`https://app.plane.so/infinite-room-labs/`)
 - OpenViking: revert Ollama endpoints from laptop Tailscale IP to in-cluster service (helm-charts submodule updated)
 - OpenViking: switch VLM from Ollama smollm2 to Gemini 3.1 Pro Preview, with secret injection for API key
+- OpenViking: switch embeddings from Ollama nomic-embed-text (768d) to Gemini gemini-embedding-001 (3072d)
 - README: rewritten to reflect multi-tool monorepo (Ansible, Helm, Docker, secrets sync sections; homelab environment; all modules and workspaces)
 - `.gitignore`: un-ignore `.claude/` directory (`.claude/.gitignore` handles `settings.local.json`)
 - `.gitignore`: fix double CRLF line endings
