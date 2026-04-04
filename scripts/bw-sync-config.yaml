@@ -83,9 +83,7 @@ secrets:
     k8s_secret: "openviking-api-key"
     k8s_key: "root-api-key"
 
-  # TODO: Rename BW items to homepage-gitea-token and homepage-authentik-token
-  # when Bitwarden UI is accessible. Current names are non-standard.
-  - bw_item: "git.lab.infiniteroomlabs.cloud"
+  - bw_item: "homepage-gitea-token"
     ansible_var: "vault_homepage_gitea_token"
     k8s_secret: "homepage-api-keys"
     k8s_key: "gitea-token"

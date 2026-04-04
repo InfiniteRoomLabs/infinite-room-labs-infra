@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.gitignore`: fix double CRLF line endings
 
 ### Added
+- `scripts/bw-notes-to-login.py`: convert BW Secure Notes to Login items via safe three-step swap
+- `scripts/bw-organize.py`: sort misplaced BW items into proper IRL folder tree
 - Nextcloud 33.0.0: deploy via upstream Helm chart with external PostgreSQL (CNPG), Valkey (Redis DB 3), ZFS-backed user data storage (100Gi), Caddy reverse proxy at `cloud.lab.infiniteroomlabs.cloud`, and cron sidecar
 - Nextcloud: bw-sync-config entries for `pg-nextcloud` and `nextcloud-admin` secrets
 - `.claude/`: commit agents, hooks, skills, and settings to version control
@@ -23,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Terraform lock files for prod dns-records and sendgrid/config
 
 ### Fixed
+- `bw-sync.sh`: skip `--vault-password-file` when `ANSIBLE_VAULT_PASSWORD_FILE` env var is set to avoid duplicate vault-id error
+- `bw-sync-config.yaml`: rename `git.lab.infiniteroomlabs.cloud` to `homepage-gitea-token` (matches BW rename)
 - Vaultwarden Helm chart: move `existingSecret` to correct `smtp.password` block (submodule updated)
 - Vaultwarden SMTP: use FQDN trailing dot (`smtp.sendgrid.net.`) to bypass k8s `ndots:5` + musl resolver failure
 

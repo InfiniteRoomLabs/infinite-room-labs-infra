@@ -611,10 +611,13 @@ run_sync_ansible() {
 
   # Encrypt and write. ansible-vault encrypt reads from file, writes encrypted in-place.
   mkdir -p "$(dirname "$output_file")"
-  ansible-vault encrypt \
-    --vault-password-file "$VAULT_PASS_FILE" \
-    --output "$output_file" \
-    "$ANSIBLE_PLAIN_FILE"
+  local encrypt_args=(--output "$output_file")
+  # Only pass --vault-password-file if ANSIBLE_VAULT_PASSWORD_FILE is not already set,
+  # otherwise ansible-vault sees two "default" vault-ids and refuses to encrypt.
+  if [[ -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
+    encrypt_args+=(--vault-password-file "$VAULT_PASS_FILE")
+  fi
+  ansible-vault encrypt "${encrypt_args[@]}" "$ANSIBLE_PLAIN_FILE"
 
   # Save checksums only after successful write
   for ((i=0; i<n; i++)); do
