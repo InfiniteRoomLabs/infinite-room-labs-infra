@@ -57,25 +57,10 @@ table inet filter {
     chain output {
         type filter hook output priority filter; policy accept;
 
-        # Compensating controls for Traefik hostNetwork pod (UID 65532).
-        # hostNetwork pods bypass k8s NetworkPolicy, so we restrict
-        # outbound at the nftables level.
-        # Note: Traefik's stock image runs as UID 65532 (nonroot).
-        #
-        # Allow Traefik -> k8s ClusterIP CIDR (upstream services)
-        meta skuid 65532 ip daddr 10.43.0.0/16 accept
-        # Allow Traefik -> pod CIDR (for direct pod routing)
-        meta skuid 65532 ip daddr 10.42.0.0/16 accept
-        # Allow Traefik -> DNS (cluster DNS + public resolvers for ACME)
-        meta skuid 65532 udp dport 53 accept
-        meta skuid 65532 tcp dport 53 accept
-        # Allow Traefik -> HTTPS (Cloudflare API + LE ACME servers)
-        meta skuid 65532 tcp dport 443 accept
-        # Allow Traefik -> HTTP (LE HTTP-01 fallback, cert status checks)
-        meta skuid 65532 tcp dport 80 accept
-        # Allow Traefik -> loopback (health probes, metrics)
-        meta skuid 65532 oif "lo" accept
-        # Drop all other outbound from Traefik
-        meta skuid 65532 log prefix "traefik-blocked: " level info drop
+        # NOTE: Traefik runs as root (UID 0) because the official image
+        # lacks setcap file capabilities. UID-based outbound restrictions
+        # (like the old Caddy rules) can't be applied to UID 0 without
+        # blocking all root processes. Revisit when switching to a custom
+        # Traefik image with setcap or host-level sysctl.
     }
 }

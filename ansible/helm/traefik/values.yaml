@@ -28,12 +28,12 @@ ports:
     port: 9101
     exposedPort: 9101
   web:
-    port: 8880
-    exposedPort: 8880
+    port: 80
+    exposedPort: 80
     protocol: TCP
   websecure:
-    port: 8443
-    exposedPort: 8443
+    port: 443
+    exposedPort: 443
     protocol: TCP
     http:
       tls:
@@ -109,15 +109,23 @@ resources:
 nodeSelector:
   irl.dev/tier: data
 
-# -- Security context (Traefik image runs as UID 65532)
+# -- Pod-level security context
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+
+# -- Container-level security context
+# Traefik binary lacks setcap file capabilities, so NET_BIND_SERVICE
+# alone doesn't work for privileged ports. Running as root.
 securityContext:
   capabilities:
     add:
       - NET_BIND_SERVICE
     drop:
       - ALL
+  allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
-  runAsNonRoot: true
 
 # -- Deployment strategy
 updateStrategy:
