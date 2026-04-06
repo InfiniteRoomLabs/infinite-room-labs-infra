@@ -16,7 +16,17 @@ deployment:
   dnsPolicy: ClusterFirstWithHostNet
 
 # -- Entrypoints (listeners)
+# Note: With hostNetwork, container ports bind directly on the host.
+# The built-in 'traefik' entrypoint (health/dashboard) defaults to 8080
+# and 'metrics' defaults to 9100 -- both conflict with existing services
+# (coredns on 8080, node_exporter on 9100). Override them here.
 ports:
+  traefik:
+    port: 9000
+    exposedPort: 9000
+  metrics:
+    port: 9101
+    exposedPort: 9101
   web:
     port: 8880
     exposedPort: 8880
