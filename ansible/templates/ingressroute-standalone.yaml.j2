@@ -4,7 +4,7 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: {{ svc_name }}
-  namespace: {{ irl_k8s_namespace }}
+  namespace: {{ irl_k3s_namespace }}
   labels:
     app.kubernetes.io/name: {{ svc_name }}
     app.kubernetes.io/managed-by: ansible

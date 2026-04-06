@@ -42,6 +42,7 @@
         - ollama
         - coredns
         - homepage
+        - traefik
         - vaultwarden
         - nextcloud
       tags: [always]
@@ -411,6 +412,14 @@
     # Phase 2.5: Traefik Reverse Proxy (in-cluster, hostNetwork)
     # ══════════════════════════════════════════════════════════════
 
+    - name: "Traefik: Upload values file"
+      ansible.builtin.copy:
+        src: ../helm/traefik/values.yaml
+        dest: "{{ helm_values_path }}/traefik/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase2, traefik]
+
     - name: "Traefik: Deploy traefik chart"
       kubernetes.core.helm:
         name: traefik
@@ -419,7 +428,7 @@
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
         values_files:
-          - "{{ playbook_dir }}/../../ansible/helm/traefik/values.yaml"
+          - "{{ helm_values_path }}/traefik/values.yaml"
         wait: true
         timeout: "3m0s"
       tags: [phase2, traefik]
@@ -755,5 +764,5 @@
           {{ helm_list.stdout }}
 
           All services deployed via IRL Helm repo or upstream charts.
-          Caddy (in-cluster, hostNetwork) proxies all services.
+          Traefik (in-cluster, hostNetwork) routes all services via IngressRoute CRDs.
       tags: [always]
