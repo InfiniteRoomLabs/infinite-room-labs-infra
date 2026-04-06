@@ -19,11 +19,11 @@ deployment:
 ports:
   web:
     port: 8880
-    exposedPort: 80
+    exposedPort: 8880
     protocol: TCP
   websecure:
     port: 8443
-    exposedPort: 443
+    exposedPort: 8443
     protocol: TCP
     http:
       tls:
