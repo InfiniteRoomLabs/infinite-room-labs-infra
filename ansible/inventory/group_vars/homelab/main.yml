@@ -6,8 +6,9 @@
 # Firewall (nftables)
 irl_firewall_allowed_tcp_ports:
   - 22     # SSH
-  - 80     # HTTP (Caddy)
-  - 443    # HTTPS (Caddy)
+  - 80     # HTTP (Traefik)
+  - 443    # HTTPS (Traefik)
+  - 2222   # Gitea SSH (Traefik TCP)
   - 6443   # k3s API server
   - 41641  # Tailscale direct connections
 
