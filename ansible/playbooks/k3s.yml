@@ -143,7 +143,7 @@
         mode: "0600"
       when: not k3s_binary.stat.exists
 
-    - name: Install k3s (hardened, stock Flannel CNI, Caddy as ingress)
+    - name: Install k3s (hardened, stock Flannel CNI, Traefik as ingress)
       ansible.builtin.command: >
         /tmp/k3s-install.sh
         --node-ip {{ k3s_node_lan_ip }}
