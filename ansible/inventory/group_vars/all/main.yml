@@ -8,8 +8,8 @@
 irl_company_name: "Infinite Room Labs"
 
 # ── k3s / Kubernetes ─────────────────────────────────────────────────
-# Single-node k3s. Traefik disabled -- Caddy (bare-metal) handles ingress.
-# Services exposed as NodePorts; Caddy proxies localhost:{nodePort}.
+# Single-node k3s. Traefik deployed via Helm (hostNetwork, LE DNS-01).
+# Services use ClusterIP; Traefik routes via IngressRoute CRDs.
 irl_k3s_namespace: "irl"
 irl_k3s_kubeconfig: "/etc/rancher/k3s/k3s.yaml"
 irl_helm_values_base: "/home/{{ irl_admin_user }}/helm-values"
@@ -51,91 +51,70 @@ irl_zfs_datasets:
 irl_public_domain: "lab.infiniteroomlabs.cloud"
 irl_internal_domain: "internal.lab.infiniteroomlabs.cloud"
 
-# ── Service subdomains (used in Caddyfile + DNS records) ─────────────
-# Service dictionary. Caddy proxies each service via either ClusterIP DNS name
-# (cluster_svc + cluster_port) or NodePort fallback (port). During migration,
-# services without cluster_svc still use localhost:{nodePort}.
+# ── Service subdomains (used in DNS records) ─────────────────────────
+# Service dictionary. Used by CoreDNS zone template for DNS record generation.
+# Routing is handled by Traefik IngressRoutes (in Helm charts or Ansible).
 irl_services:
   gitea:
     subdomain: "git"
-    port: 30300           # Legacy NodePort (kept for reference)
     internal: false
-    health_path: "/api/v1/version"
     cluster_svc: "gitea-http"
     cluster_port: 3000
   authentik:
     subdomain: "auth"
-    port: 30080           # Legacy NodePort (kept for reference)
     internal: false
     cluster_svc: "authentik-server"
     cluster_port: 80
   grafana:
     subdomain: "grafana"
-    port: 30001           # Legacy NodePort (kept for reference)
     internal: false
-    health_path: "/api/health"
     cluster_svc: "monitoring-grafana"
     cluster_port: 80
   vault:
     subdomain: "vault"
-    port: 30200           # Legacy NodePort (kept for reference)
     internal: false
-    health_path: "/v1/sys/health"
     cluster_svc: "vault"
     cluster_port: 8200
   # jenkins:                   # SKIPPED -- plugin version incompatibility
   #   subdomain: "ci"
-  #   port: 30080
   #   internal: false
   prometheus:
     subdomain: "metrics"
-    port: 30090           # Legacy NodePort (kept for reference)
     internal: true
-    health_path: "/-/healthy"
     cluster_svc: "monitoring-kube-prometheus-prometheus"
     cluster_port: 9090
   alertmanager:
     subdomain: "alerts"
-    port: 30093           # Legacy NodePort (kept for reference)
     internal: true
-    health_path: "/-/healthy"
     cluster_svc: "monitoring-kube-prometheus-alertmanager"
     cluster_port: 9093
   garage:
     subdomain: "storage"
-    port: 30039           # Legacy NodePort (kept for reference)
     internal: true
-    health_path: "/"
     cluster_svc: "garage-webui"
     cluster_port: 3909
   garage-s3:
     subdomain: "s3"
-    port: 3900            # ClusterIP -- irl-garage, S3 API (cluster-internal only)
     internal: true
-    caddy_proxy: false    # Accessed within cluster only
+    cluster_only: true  # No external routing, cluster-internal only
   homepage:
     subdomain: "home"
-    port: 30000           # Legacy NodePort (kept for reference)
     internal: false
-    health_path: "/"
     cluster_svc: "homepage"
     cluster_port: 3000
   vaultwarden:
     subdomain: "passwords"
     internal: false
-    health_path: "/alive"
     cluster_svc: "vaultwarden"
     cluster_port: 80
   openviking:
     subdomain: "context"
-    port: 31933           # Legacy NodePort (kept for reference)
     internal: true
     cluster_svc: "openviking"
     cluster_port: 1933
   nextcloud:
     subdomain: "cloud"
     internal: false
-    health_path: "/status.php"
     cluster_svc: "nextcloud"
     cluster_port: 8080
 
@@ -156,11 +135,36 @@ irl_pg_databases:
   - name: vaultwarden
   - name: nextcloud
 
-# ── Caddy (in-cluster) ──────────────────────────────────────────────
-irl_caddy_le_email: "admin@infiniteroomlabs.cloud"
-irl_caddy_le_staging: false          # true for staging, false for production LE certs
-irl_caddy_image: "irl-caddy:2.11.2-custom"
-irl_k8s_namespace: "irl"
+# ── Traefik (in-cluster reverse proxy) ──────────────────────────────
+irl_traefik_le_email: "admin@infiniteroomlabs.cloud"
+# Services that need standalone IngressRoutes (no IRL-owned chart).
+# Services with their own irl-* chart define IngressRoutes in the chart.
+irl_traefik_standalone_services:
+  authentik:
+    subdomain: "auth"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "authentik-server"
+    cluster_port: 80
+  vault:
+    subdomain: "vault"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "vault"
+    cluster_port: 8200
+  homepage:
+    subdomain: "home"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "homepage"
+    cluster_port: 3000
+  vaultwarden:
+    subdomain: "passwords"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "vaultwarden"
+    cluster_port: 80
+  nextcloud:
+    subdomain: "cloud"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "nextcloud"
+    cluster_port: 8080
 
 # ── Services to disable during cleanup ───────────────────────────────
 irl_services_to_disable:
