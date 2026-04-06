@@ -12,5 +12,7 @@ irl_firewall_allowed_tcp_ports:
   - 6443   # k3s API server
   - 41641  # Tailscale direct connections
 
-# NFS -- restrict to specific hosts after Tailscale is up
-irl_nfs_allowed_subnet: "192.168.2.0/24"
+# NFS -- allowed networks (LAN + Tailscale)
+irl_nfs_allowed_subnets:
+  - "192.168.2.0/24"   # LAN
+  - "100.64.0.0/10"    # Tailscale CGNAT range
