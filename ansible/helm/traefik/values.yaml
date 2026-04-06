@@ -18,7 +18,7 @@ deployment:
 # -- Entrypoints (listeners)
 ports:
   web:
-    port: 8080
+    port: 8880
     exposedPort: 80
     protocol: TCP
   websecure:
@@ -80,6 +80,7 @@ metrics:
     addEntryPointsLabels: true
     addRoutersLabels: true
     addServicesLabels: true
+    disableAPICheck: true
     serviceMonitor:
       enabled: true
       additionalLabels:
