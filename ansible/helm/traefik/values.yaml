@@ -9,7 +9,11 @@
 
 # -- hostNetwork binds entrypoint ports directly on the node
 hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
+
+deployment:
+  replicas: 1
+  # -- Custom pod DNS policy. Required when hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
 
 # -- Entrypoints (listeners)
 ports:
@@ -21,29 +25,32 @@ ports:
     port: 8443
     exposedPort: 443
     protocol: TCP
-    tls:
-      enabled: true
-      certResolver: letsencrypt
-      domains:
-        - main: "lab.infiniteroomlabs.cloud"
-          sans:
-            - "*.lab.infiniteroomlabs.cloud"
-            - "*.internal.lab.infiniteroomlabs.cloud"
+    http:
+      tls:
+        enabled: true
+        certResolver: letsencrypt
+        domains:
+          - main: "lab.infiniteroomlabs.cloud"
+            sans:
+              - "*.lab.infiniteroomlabs.cloud"
+              - "*.internal.lab.infiniteroomlabs.cloud"
   gitssh:
     port: 2222
     exposedPort: 2222
     protocol: TCP
 
 # -- ACME / Let's Encrypt certificate resolver
-certResolvers:
+# Ref: https://doc.traefik.io/traefik/https/acme/#certificate-resolvers
+certificatesResolvers:
   letsencrypt:
-    email: admin@infiniteroomlabs.cloud
-    caServer: https://acme-v02.api.letsencrypt.org/directory
-    dnsChallenge:
-      provider: cloudflare
-      resolvers:
-        - "1.1.1.1:53"
-    storage: /data/acme.json
+    acme:
+      email: admin@infiniteroomlabs.cloud
+      caServer: https://acme-v02.api.letsencrypt.org/directory
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+      storage: /data/acme.json
 
 # -- Cloudflare API token from Kubernetes secret
 env:
@@ -61,10 +68,10 @@ persistence:
   storageClass: local-path
   path: /data
 
-# -- Enable Traefik CRDs (IngressRoute, Middleware, etc.)
+# -- Disable Traefik dashboard IngressRoute
 ingressRoute:
   dashboard:
-    enabled: false  # We don't expose the Traefik dashboard
+    enabled: false
 
 # -- Prometheus metrics
 metrics:
@@ -73,17 +80,10 @@ metrics:
     addEntryPointsLabels: true
     addRoutersLabels: true
     addServicesLabels: true
-
-# -- Service for Prometheus scraping
-service:
-  enabled: true
-  type: ClusterIP
-
-# -- ServiceMonitor for kube-prometheus-stack
-serviceMonitor:
-  enabled: true
-  additionalLabels:
-    release: monitoring
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
 
 # -- Resource limits
 resources:
@@ -107,9 +107,6 @@ securityContext:
       - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
-
-# -- Single replica (single-node homelab)
-replicas: 1
 
 # -- Deployment strategy
 updateStrategy:
