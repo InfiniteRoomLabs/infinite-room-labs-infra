@@ -1,0 +1,141 @@
+# ansible/helm/traefik/values.yaml
+# =================================
+# Traefik reverse proxy with Let's Encrypt DNS-01 via Cloudflare.
+# Deployed via upstream traefik/traefik chart.
+#
+# During initial deployment, web/websecure use temporary ports (8080/8443)
+# to allow pre-validation while Caddy still serves production traffic.
+# After validation, update to ports 80/443 and re-deploy.
+
+# -- hostNetwork binds entrypoint ports directly on the node
+hostNetwork: true
+
+deployment:
+  replicas: 1
+  # -- Custom pod DNS policy. Required when hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+
+# -- Entrypoints (listeners)
+# Note: With hostNetwork, container ports bind directly on the host.
+# The built-in 'traefik' entrypoint (health/dashboard) defaults to 8080
+# and 'metrics' defaults to 9100 -- both conflict with existing services
+# (coredns on 8080, node_exporter on 9100). Override them here.
+ports:
+  traefik:
+    port: 9000
+    exposedPort: 9000
+  metrics:
+    port: 9101
+    exposedPort: 9101
+  web:
+    port: 80
+    exposedPort: 80
+    protocol: TCP
+  websecure:
+    port: 443
+    exposedPort: 443
+    protocol: TCP
+    http:
+      tls:
+        enabled: true
+        certResolver: letsencrypt
+        domains:
+          - main: "lab.infiniteroomlabs.cloud"
+            sans:
+              - "*.lab.infiniteroomlabs.cloud"
+              - "*.internal.lab.infiniteroomlabs.cloud"
+  gitssh:
+    port: 2222
+    exposedPort: 2222
+    protocol: TCP
+
+# -- ACME / Let's Encrypt certificate resolver
+# Ref: https://doc.traefik.io/traefik/https/acme/#certificate-resolvers
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@infiniteroomlabs.cloud
+      caServer: https://acme-v02.api.letsencrypt.org/directory
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+      storage: /data/acme.json
+
+# -- Cloudflare API token from Kubernetes secret
+env:
+  - name: CF_DNS_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: traefik-cloudflare-token
+        key: api-token
+
+# -- Persistence for ACME cert storage
+persistence:
+  enabled: true
+  name: traefik-data
+  size: 1Gi
+  storageClass: local-path
+  path: /data
+
+# -- Disable Traefik dashboard IngressRoute
+ingressRoute:
+  dashboard:
+    enabled: false
+
+# -- Prometheus metrics
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    disableAPICheck: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
+
+# -- Resource limits
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+# -- Node scheduling
+nodeSelector:
+  irl.dev/tier: data
+
+# -- Pod-level security context
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+
+# -- Container-level security context
+# Traefik binary lacks setcap file capabilities, so NET_BIND_SERVICE
+# alone doesn't work for privileged ports. Running as root.
+securityContext:
+  capabilities:
+    add:
+      - NET_BIND_SERVICE
+    drop:
+      - ALL
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+# -- Deployment strategy
+updateStrategy:
+  type: Recreate
+
+# -- Logging
+logs:
+  general:
+    level: INFO
+    format: json
+  access:
+    enabled: true
+    format: json

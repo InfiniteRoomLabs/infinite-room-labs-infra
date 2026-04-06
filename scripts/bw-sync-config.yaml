@@ -125,10 +125,10 @@ secrets:
     k8s_secret: null
     k8s_key: null
 
-  # ── Caddy (in-cluster reverse proxy) ──────────────────────────
+  # ── Traefik (in-cluster reverse proxy) ────────────────────────
   - bw_item: "cloudflare-caddy-dns01-token"
-    ansible_var: "vault_cloudflare_caddy_dns01_token"
-    k8s_secret: "caddy-cloudflare-token"
+    ansible_var: "vault_cloudflare_traefik_dns01_token"
+    k8s_secret: "traefik-cloudflare-token"
     k8s_key: "api-token"
 
   # ── SendGrid (transactional email) ──────────────────────────

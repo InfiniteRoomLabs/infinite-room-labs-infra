@@ -42,7 +42,7 @@
         - ollama
         - coredns
         - homepage
-        - caddy
+        - traefik
         - vaultwarden
         - nextcloud
       tags: [always]
@@ -62,6 +62,7 @@
         - { name: ollama-helm, url: "https://otwld.github.io/ollama-helm/" }
         - { name: guerzon, url: "https://guerzon.github.io/vaultwarden" }
         - { name: nextcloud, url: "https://nextcloud.github.io/helm/" }
+        - { name: traefik, url: "https://traefik.github.io/charts" }
       tags: [always]
 
     - name: Update Helm repo cache
@@ -408,129 +409,61 @@
       tags: [phase2, vault]
 
     # ══════════════════════════════════════════════════════════════
-    # Phase 2.5: Caddy Reverse Proxy (in-cluster, hostNetwork)
+    # Phase 2.5: Traefik Reverse Proxy (in-cluster, hostNetwork)
     # ══════════════════════════════════════════════════════════════
 
-    - name: "Caddy: Create PersistentVolume for cert storage"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: PersistentVolume
-          metadata:
-            name: pv-caddy-data
-            labels:
-              app: caddy
-              storage: local
-          spec:
-            capacity:
-              storage: "1Gi"
-            accessModes:
-              - ReadWriteOnce
-            persistentVolumeReclaimPolicy: Retain
-            storageClassName: zfs-local
-            hostPath:
-              path: /var/lib/rancher/k3s/storage/caddy-data
-              type: DirectoryOrCreate
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Create PersistentVolumeClaim"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: caddy-data-pvc
-            namespace: "{{ k3s_namespace }}"
-          spec:
-            accessModes: ["ReadWriteOnce"]
-            storageClassName: zfs-local
-            resources:
-              requests:
-                storage: "1Gi"
-            selector:
-              matchLabels:
-                app: caddy
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Create build directory"
-      ansible.builtin.file:
-        path: /tmp/caddy-build
-        state: directory
-        mode: "0755"
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Copy Dockerfile to server"
+    - name: "Traefik: Upload values file"
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../docker/caddy/Dockerfile"
-        dest: "/tmp/caddy-build/Dockerfile"
-        mode: "0644"
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Build custom image and import to k3s"
-      ansible.builtin.shell: |
-        cd /tmp/caddy-build && \
-        docker build --network host -t {{ irl_caddy_image }} . && \
-        docker save {{ irl_caddy_image }} | k3s ctr images import -
-      changed_when: true
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Template Caddyfile"
-      ansible.builtin.template:
-        src: ../templates/Caddyfile.j2
-        dest: "{{ helm_values_path }}/caddy/Caddyfile"
+        src: ../helm/traefik/values.yaml
+        dest: "{{ helm_values_path }}/traefik/values.yaml"
         owner: "{{ irl_admin_user }}"
         mode: "0640"
-      tags: [phase2, caddy]
+      tags: [phase2, traefik]
 
-    - name: "Caddy: Read Caddyfile from server"
-      ansible.builtin.slurp:
-        src: "{{ helm_values_path }}/caddy/Caddyfile"
-      register: caddy_caddyfile
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Create Caddyfile ConfigMap"
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-        definition:
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: caddy-config
-            namespace: "{{ k3s_namespace }}"
-          data:
-            Caddyfile: "{{ caddy_caddyfile.content | b64decode }}"
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Deploy irl-caddy chart"
+    - name: "Traefik: Deploy traefik chart"
       kubernetes.core.helm:
-        name: caddy
-        chart_ref: irl/irl-caddy
+        name: traefik
+        chart_ref: traefik/traefik
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
-        values:
-          caddyfile:
-            externalConfigMap: true
+        values_files:
+          - "{{ helm_values_path }}/traefik/values.yaml"
         wait: true
         timeout: "3m0s"
-      tags: [phase2, caddy]
+      tags: [phase2, traefik]
 
-    - name: "Caddy: Restart pod to pick up ConfigMap changes"
+    - name: "Traefik: Wait for pod to be ready"
       ansible.builtin.command:
-        cmd: kubectl rollout restart deployment/caddy -n {{ k3s_namespace }} --kubeconfig {{ kubeconfig }}
-      changed_when: true
-      tags: [phase2, caddy]
-
-    - name: "Caddy: Wait for pod to be ready"
-      ansible.builtin.command:
-        cmd: kubectl rollout status deployment/caddy -n {{ k3s_namespace }} --timeout=120s --kubeconfig {{ kubeconfig }}
+        cmd: >
+          kubectl rollout status deployment/traefik
+          -n {{ k3s_namespace }} --timeout=120s
+          --kubeconfig {{ kubeconfig }}
       changed_when: false
-      tags: [phase2, caddy]
+      tags: [phase2, traefik]
+
+    - name: "Traefik: Deploy HTTPS redirect middleware"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        template: ../templates/middleware-redirect-https.yaml.j2
+      tags: [phase2, traefik]
+
+    - name: "Traefik: Deploy standalone IngressRoutes"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        template: ../templates/ingressroute-standalone.yaml.j2
+      vars:
+        svc_name: "{{ item.key }}"
+        svc_subdomain: "{{ item.value.subdomain }}"
+        svc_domain: "{{ item.value.domain }}"
+        svc_cluster_svc: "{{ item.value.cluster_svc }}"
+        svc_cluster_port: "{{ item.value.cluster_port }}"
+      loop: "{{ irl_traefik_standalone_services | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      tags: [phase2, traefik]
 
     # ══════════════════════════════════════════════════════════════
     # Phase 3: Dev Platform + Monitoring
@@ -831,5 +764,5 @@
           {{ helm_list.stdout }}
 
           All services deployed via IRL Helm repo or upstream charts.
-          Caddy (in-cluster, hostNetwork) proxies all services.
+          Traefik (in-cluster, hostNetwork) routes all services via IngressRoute CRDs.
       tags: [always]
