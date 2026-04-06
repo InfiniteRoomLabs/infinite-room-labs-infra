@@ -1,0 +1,125 @@
+# ansible/helm/traefik/values.yaml
+# =================================
+# Traefik reverse proxy with Let's Encrypt DNS-01 via Cloudflare.
+# Deployed via upstream traefik/traefik chart.
+#
+# During initial deployment, web/websecure use temporary ports (8080/8443)
+# to allow pre-validation while Caddy still serves production traffic.
+# After validation, update to ports 80/443 and re-deploy.
+
+# -- hostNetwork binds entrypoint ports directly on the node
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+# -- Entrypoints (listeners)
+ports:
+  web:
+    port: 8080
+    exposedPort: 80
+    protocol: TCP
+  websecure:
+    port: 8443
+    exposedPort: 443
+    protocol: TCP
+    tls:
+      enabled: true
+      certResolver: letsencrypt
+      domains:
+        - main: "lab.infiniteroomlabs.cloud"
+          sans:
+            - "*.lab.infiniteroomlabs.cloud"
+            - "*.internal.lab.infiniteroomlabs.cloud"
+  gitssh:
+    port: 2222
+    exposedPort: 2222
+    protocol: TCP
+
+# -- ACME / Let's Encrypt certificate resolver
+certResolvers:
+  letsencrypt:
+    email: admin@infiniteroomlabs.cloud
+    caServer: https://acme-v02.api.letsencrypt.org/directory
+    dnsChallenge:
+      provider: cloudflare
+      resolvers:
+        - "1.1.1.1:53"
+    storage: /data/acme.json
+
+# -- Cloudflare API token from Kubernetes secret
+env:
+  - name: CF_DNS_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: traefik-cloudflare-token
+        key: api-token
+
+# -- Persistence for ACME cert storage
+persistence:
+  enabled: true
+  name: traefik-data
+  size: 1Gi
+  storageClass: local-path
+  path: /data
+
+# -- Enable Traefik CRDs (IngressRoute, Middleware, etc.)
+ingressRoute:
+  dashboard:
+    enabled: false  # We don't expose the Traefik dashboard
+
+# -- Prometheus metrics
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+
+# -- Service for Prometheus scraping
+service:
+  enabled: true
+  type: ClusterIP
+
+# -- ServiceMonitor for kube-prometheus-stack
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: monitoring
+
+# -- Resource limits
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+# -- Node scheduling
+nodeSelector:
+  irl.dev/tier: data
+
+# -- Security context (Traefik image runs as UID 65532)
+securityContext:
+  capabilities:
+    add:
+      - NET_BIND_SERVICE
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+
+# -- Single replica (single-node homelab)
+replicas: 1
+
+# -- Deployment strategy
+updateStrategy:
+  type: Recreate
+
+# -- Logging
+logs:
+  general:
+    level: INFO
+    format: json
+  access:
+    enabled: true
+    format: json
