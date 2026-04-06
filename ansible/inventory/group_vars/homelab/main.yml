@@ -14,5 +14,5 @@ irl_firewall_allowed_tcp_ports:
 
 # NFS -- allowed networks (LAN + Tailscale)
 irl_nfs_allowed_subnets:
-  - "192.168.2.0/24"   # LAN
-  - "100.64.0.0/10"    # Tailscale CGNAT range
+  - { cidr: "192.168.2.0/24", mode: "ro" }    # LAN (read-only)
+  - { cidr: "100.64.0.0/10", mode: "rw" }     # Tailscale (read-write)

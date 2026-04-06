@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenViking: switch VLM from Ollama smollm2 to Gemini 3.1 Pro Preview, with secret injection for API key
 - OpenViking: switch embeddings from Ollama nomic-embed-text (768d) to Gemini gemini-embedding-001 (3072d) via OpenAI-compatible endpoint
 - OpenViking: switch VLM from Gemini 3.1 Pro Preview to Gemini 2.5 Flash (250/day -> 10,000/day rate limit)
-- NFS: add Tailscale CIDR (100.64.0.0/10) to allowed subnets, rename `irl_nfs_allowed_subnet` to `irl_nfs_allowed_subnets` (list)
+- NFS: add Tailscale CIDR (100.64.0.0/10) with rw access, LAN stays ro. Restructure `irl_nfs_allowed_subnets` to per-subnet `{cidr, mode}` objects
 - README: rewritten to reflect multi-tool monorepo (Ansible, Helm, Docker, secrets sync sections; homelab environment; all modules and workspaces)
 - `.gitignore`: un-ignore `.claude/` directory (`.claude/.gitignore` handles `settings.local.json`)
 - `.gitignore`: fix double CRLF line endings
