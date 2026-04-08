@@ -45,33 +45,40 @@ helm-charts/                          # New repo: infinite-room-labs/helm-charts
 
 ```mermaid
 graph TD
-    PLATFORM["irl-platform<br/>(umbrella)"]
-    PG["irl-postgres<br/>(CNPG operator + Cluster CR)"]
-    VK["irl-valkey<br/>(Valkey standalone)"]
-    GITEA["irl-gitea<br/>(wrapper)"]
-    AUTH["goauthentik/authentik<br/>(direct, no wrapper needed)"]
-    MON["irl-monitoring<br/>(umbrella)"]
-    JENKINS["jenkins/jenkins<br/>(direct, no wrapper needed)"]
-    VAULT["hashicorp/vault<br/>(direct, no wrapper needed)"]
-    PLANE["makeplane/plane-ce<br/>(direct, DO node)"]
-    OLLAMA["ollama-helm/ollama<br/>(direct, no wrapper needed)"]
-    GARAGE["Garage S3<br/>(direct, ZFS-backed)"]
-    OPENVIKING["OpenViking<br/>(direct, context DB)"]
-    COREDNS["CoreDNS Internal<br/>(Split DNS resolver)"]
+    subgraph "IRL Cluster (homelab node)"
+        PG["irl-postgres<br/>(CNPG operator + Cluster CR)"]
+        VK["irl-valkey<br/>(Valkey standalone)"]
+        GITEA["irl-gitea<br/>(wrapper)"]
+        AUTH["goauthentik/authentik<br/>(direct)"]
+        MON["irl-monitoring<br/>(umbrella)"]
+        VAULT["hashicorp/vault<br/>(direct)"]
+        OLLAMA["ollama-helm/ollama<br/>(direct)"]
+        GARAGE["Garage S3<br/>(direct, ZFS-backed)"]
+        OPENVIKING["OpenViking<br/>(direct, Gemini-backed)"]
+        COREDNS["CoreDNS Internal<br/>(Split DNS resolver)"]
+        TRAEFIK["traefik/traefik<br/>(direct, hostNetwork)"]
+        VAULTWARDEN["Vaultwarden<br/>(direct, password manager)"]
+        NEXTCLOUD["Nextcloud<br/>(direct, cloud storage)"]
+        HOMEPAGE["Homepage<br/>(direct, dashboard)"]
+    end
 
-    PLATFORM --> PG
-    PLATFORM --> VK
-    PLATFORM --> GITEA
-    PLATFORM --> AUTH
-    PLATFORM --> MON
-    PLATFORM --> JENKINS
-    PLATFORM --> VAULT
-    PLATFORM --> PLANE
-    PLATFORM --> OLLAMA
-    PLATFORM --> GARAGE
-    PLATFORM --> OPENVIKING
-    PLATFORM --> COREDNS
-    PLANE --> GARAGE
+    subgraph "DO Node (public-internet only)"
+        DO_NOTE["Reserved for future<br/>public-facing services<br/>(tainted NoSchedule)"]
+    end
+
+    subgraph "External SaaS"
+        PLANE_SAAS["Plane SaaS<br/>(app.plane.so)"]
+    end
+
+    TRAEFIK -->|IngressRoutes| GITEA
+    TRAEFIK -->|IngressRoutes| AUTH
+    TRAEFIK -->|IngressRoutes| MON
+    TRAEFIK -->|IngressRoutes| VAULT
+    TRAEFIK -->|IngressRoutes| HOMEPAGE
+    TRAEFIK -->|IngressRoutes| VAULTWARDEN
+    TRAEFIK -->|IngressRoutes| NEXTCLOUD
+    TRAEFIK -->|IngressRoutes| OPENVIKING
+    TRAEFIK -->|IngressRoutes| GARAGE
 
     PG --> CNPG["cnpg/cloudnative-pg<br/>(upstream)"]
     VK --> VALKEY["valkey/valkey<br/>(upstream)"]
@@ -84,21 +91,24 @@ graph TD
 
 ### What Gets Its Own IRL Chart vs Direct Upstream
 
-| Service | Why IRL chart? | Chart name |
-|---------|----------------|------------|
-| PostgreSQL | Bitnami dead. CNPG operator needs a Cluster CR template. | `irl-postgres` |
-| Redis/Valkey | Bitnami dead. Valkey chart needs auth + tuning defaults. | `irl-valkey` |
-| Gitea | Needs external PG/Redis config + LFS PVC wiring. | `irl-gitea` |
-| Monitoring | Umbrella: kube-prometheus-stack + Loki + dashboards. | `irl-monitoring` |
-| Platform | Umbrella: entire stack as one release. | `irl-platform` |
-| Authentik | Official chart works, just needs values. | Direct (values only) |
-| Vault | Official chart works. | Direct (values only) |
-| Jenkins | **SKIPPED** -- plugin version incompatibility, parking until needed. | Deferred |
-| Plane | Official chart works. Runs on DO node (nodeSelector). | Direct (values only) |
-| Ollama | Community chart works. | Direct (values only) |
-| Garage | S3-compatible object storage for Plane files. ZFS-backed on homelab node. | Direct (PV + Deployment) |
-| OpenViking | Agent memory/RAG context database. Phase 1 deployment. | Direct (PV + Deployment) |
-| CoreDNS Internal | Tailscale Split DNS resolver. hostNetwork port 53. | Direct (Deployment) |
+| Service | Why IRL chart? | Chart name | Status |
+|---------|----------------|------------|--------|
+| PostgreSQL | Bitnami dead. CNPG operator needs a Cluster CR template. | `irl-postgres` | Deployed |
+| Redis/Valkey | Bitnami dead. Valkey chart needs auth + tuning defaults. | `irl-valkey` | Deployed |
+| Gitea | Needs external PG/Redis config + LFS PVC wiring. | `irl-gitea` | Deployed |
+| Monitoring | Umbrella: kube-prometheus-stack + Loki + Tempo + OTel Collector. | `irl-monitoring` | Deployed (Phase 1); Phase 2 in progress |
+| Traefik | Upstream chart works. hostNetwork, DNS-01 via Cloudflare. | Direct (values only) | Deployed |
+| Authentik | Official chart works, just needs values. | Direct (values only) | Deployed |
+| Vault | Official chart works. | Direct (values only) | Deployed |
+| Jenkins | **SKIPPED** -- plugin version incompatibility, parking until needed. | Deferred | -- |
+| Plane | **REMOVED** -- migrated to SaaS at `app.plane.so/infinite-room-labs/`. | N/A (external) | SaaS |
+| Ollama | Community chart works. | Direct (values only) | Deployed |
+| Garage | S3-compatible object storage. ZFS-backed on homelab node. | Direct (PV + Deployment) | Deployed |
+| OpenViking | Agent memory/RAG context database. Gemini embeddings + VLM. | Direct (PV + Deployment) | Deployed |
+| CoreDNS Internal | Tailscale Split DNS resolver. hostNetwork port 53. | Direct (Deployment) | Deployed |
+| Vaultwarden | Self-hosted password manager. SendGrid email. | Direct (values only) | Deployed |
+| Nextcloud | Self-hosted cloud storage. ZFS-backed user data. | Direct (values only) | Deployed |
+| Homepage | Homelab dashboard. | Direct (values only) | Deployed |
 
 ## File Changes
 
@@ -156,13 +166,17 @@ Add `helm-charts/` repo entry to the Current Repositories section.
 
 ## Implementation Order
 
-1. **Create the repo** from template-repo, add CLAUDE.md + CI workflows
-2. **irl-postgres chart** -- CNPG operator + Cluster CR (unblocks PG deployment)
-3. **irl-valkey chart** -- Valkey standalone with auth (unblocks Redis deployment)
-4. **Update infra repo** -- swap Bitnami refs for IRL chart repo
-5. **Test** -- `helm install` both charts on the live k3s cluster
-6. **irl-gitea, irl-monitoring** -- wrapper charts (can be done after core data is running)
-7. **irl-platform umbrella** -- last, once individual charts are proven
+1. ~~**Create the repo** from template-repo, add CLAUDE.md + CI workflows~~ DONE
+2. ~~**irl-postgres chart** -- CNPG operator + Cluster CR~~ DONE
+3. ~~**irl-valkey chart** -- Valkey standalone with auth~~ DONE
+4. ~~**Update infra repo** -- swap Bitnami refs for IRL chart repo~~ DONE
+5. ~~**Test** -- `helm install` both charts on the live k3s cluster~~ DONE
+6. ~~**irl-gitea, irl-monitoring** -- wrapper charts~~ DONE
+7. ~~**Reverse proxy migration** -- Caddy into k8s, then replaced by Traefik with DNS-01~~ DONE (PR #4, PR #7)
+8. ~~**Additional services** -- Vaultwarden, Nextcloud, Homepage~~ DONE
+9. **Observability Phase 2** -- Add Tempo + OTel Collector to irl-monitoring (IN PROGRESS)
+10. **Observability Phase 3** -- Enable Traefik tracing, document app instrumentation status
+11. **irl-platform umbrella** -- deferred, individual charts are proven and working
 
 ## Decisions Log
 
@@ -185,6 +199,16 @@ Add `helm-charts/` repo entry to the Current Repositories section.
 | 2026-03-22 | OpenViking deployed for agent memory/RAG (Phase 1) | Context database for AI agent persistent memory and RAG retrieval. Deployed alongside nomic-embed-text model in Ollama. |
 | 2026-03-22 | Node label taxonomy (irl.dev/*) for workload scheduling | Labels: provider, tier, storage, network, cost, persistence, gpu, memory-class. Enables nodeSelector-based scheduling across homelab and cloud nodes. |
 | 2026-03-22 | Acceptance test suite added | Task + pytest + Goss framework. `task smoke` runs 17 smoke tests, `task validate` runs full suite with Goss system checks and HTML report generation. |
+| 2026-03-24 | Caddy moved into k8s (PR #4) | Eliminate bare-metal dependency, enable LE DNS-01 via Cloudflare. Two Deployments: Caddy + config ConfigMap. |
+| 2026-03-25 | k8s ndots:5 + Alpine/musl DNS workaround | Alpine pods fail external DNS resolution due to musl resolver + k8s default ndots:5. Workaround: use FQDN trailing dot for external hosts. |
+| 2026-03-25 | Plane moved from DO node to homelab | Reduce cross-node latency to PG/Valkey. DO node reserved for future public-internet services. |
+| 2026-03-27 | Plane removed, migrated to SaaS | Reduce homelab resource usage. Plane SaaS free for small teams. Dashboard link at `app.plane.so/infinite-room-labs/`. |
+| 2026-03-29 | Vaultwarden added to stack | Self-hosted Bitwarden-compatible password manager. SendGrid for email delivery. FQDN workaround for SMTP (ndots:5 issue). |
+| 2026-03-29 | Nextcloud added to stack | Self-hosted cloud storage. ZFS-backed user data PVC. External PG + Valkey. |
+| 2026-04-04 | OpenViking switched to Gemini embeddings + VLM | Google AI API replaces local Ollama models. gemini-embedding-001 (3072d) for embeddings, Gemini 2.5 Flash for VLM. Lower latency, higher quality, no local GPU needed. |
+| 2026-04-06 | Caddy replaced by Traefik (PR #7) | Native IngressRoute CRD, better k8s integration, built-in ACME DNS-01, ServiceMonitor for Prometheus, native OTel tracing support. irl-caddy chart deprecated. |
+| 2026-04-06 | DO node reserved for public-internet services only | Taint `irl.dev/cloud=digitalocean:NoSchedule` prevents all scheduling. Only DaemonSets (node-exporter) run there. Future: public-facing services with tolerations. |
+| 2026-04-06 | NFS exports extended to Tailscale CIDR | `100.64.0.0/10` added to NFS exports for cross-node access over Tailscale. Per-subnet mode config (rw for Tailscale, ro for LAN). |
 
 ## Observability Architecture (Decided 2026-03-21)
 
@@ -220,9 +244,25 @@ graph LR
     TEMPO --> GRAFANA
 ```
 
-**Phase 1 (deploy now)**: kube-prometheus-stack (Prometheus + Grafana + Alertmanager) + Loki + Promtail
-**Phase 2 (after services running)**: OTel Collector (DaemonSet) + Tempo (traces backend)
-**Phase 3 (app instrumentation)**: Add OTLP SDKs to IRL apps, trace Jenkins pipelines end-to-end
+**Phase 1 (COMPLETE)**: kube-prometheus-stack v65.8.1 (Prometheus + Grafana + Alertmanager) + Loki v6.24.1 + Promtail
+**Phase 2 (IN PROGRESS)**: Tempo v1.24.4 (traces backend, single-binary, 7d retention) + OTel Collector v0.147.1 (Deployment mode, OTLP receiver, fan-out to Tempo/Prometheus/Loki)
+**Phase 3 (PARTIAL)**: Traefik native OTel tracing (zero app changes). OpenViking Python SDK instrumentation (future). Most off-the-shelf services lack OTLP support -- see instrumentation table below.
+
+### Phase 3 Instrumentation Assessment
+
+| Service | OTLP Support | Effort | Priority | Status |
+|---------|-------------|--------|----------|--------|
+| Traefik | Native | Values only | High | Done |
+| OpenViking | Python OTel SDK | App code changes | Medium | Future |
+| Grafana | Built-in toggle | Values only | Low | Future |
+| Gitea | None | Custom build required | Skip | -- |
+| Nextcloud | None | PHP OTel extension | Skip | -- |
+| Vaultwarden | None | Rust, no OTel crate | Skip | -- |
+| Authentik | Django (theoretically possible) | Custom image | Skip | -- |
+| Vault | None native | Audit log only | Skip | -- |
+| Ollama | None | No tracing support | Skip | -- |
+
+**OpenViking instrumentation** (when ready): Add `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp` to Python deps. Set env vars `OTEL_EXPORTER_OTLP_ENDPOINT=http://monitoring-opentelemetry-collector.irl.svc.cluster.local:4317` and `OTEL_SERVICE_NAME=openviking`.
 
 ## Verification
 

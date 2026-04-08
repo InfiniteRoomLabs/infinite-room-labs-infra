@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Observability Phase 2: Tempo v1.24.4 (distributed tracing, 7d retention) and OTel Collector v0.147.1 (OTLP receiver, fan-out to Tempo/Prometheus/Loki) via irl-monitoring v0.3.2
+- Traefik native OTel tracing: zero-code-change distributed tracing for all HTTP requests
+- Deployment plan: 11 new decisions log entries, Phase 3 instrumentation assessment table
+
 ### Changed
+- Monitoring values restructured for umbrella chart (kube-prometheus-stack key nesting), Tempo Grafana datasource added, Prometheus remote write receiver enabled
+- Deployment plan updated to reflect Traefik migration, Plane SaaS, new services, DO node policy
 - Homepage: switch Plane from self-hosted to SaaS (`https://app.plane.so/infinite-room-labs/`)
 - OpenViking: revert Ollama endpoints from laptop Tailscale IP to in-cluster service (helm-charts submodule updated)
 - OpenViking: switch VLM from Ollama smollm2 to Gemini 3.1 Pro Preview, with secret injection for API key

@@ -131,6 +131,14 @@ securityContext:
 updateStrategy:
   type: Recreate
 
+# -- OpenTelemetry tracing
+tracing:
+  otlp:
+    enabled: true
+    grpc:
+      endpoint: "monitoring-opentelemetry-collector.irl.svc.cluster.local:4317"
+      insecure: true
+
 # -- Logging
 logs:
   general:
