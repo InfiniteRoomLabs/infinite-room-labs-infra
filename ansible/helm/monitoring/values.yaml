@@ -46,6 +46,17 @@ kube-prometheus-stack:
       serviceMonitorSelectorNilUsesHelmValues: false
       podMonitorSelectorNilUsesHelmValues: false
 
+      # Static scrape for hostNetwork services that can't be reached via ClusterIP.
+      # Traefik metrics: pods can't reach 192.168.2.2 (nftables blocks cni0->eth0),
+      # but can reach the Tailscale IP (nftables allows tailscale0).
+      additionalScrapeConfigs:
+        - job_name: traefik
+          static_configs:
+            - targets: ["100.86.213.22:9101"]
+              labels:
+                app: traefik
+                instance: home
+
     service:
       type: ClusterIP
 

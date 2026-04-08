@@ -27,6 +27,8 @@ ports:
   metrics:
     port: 9101
     exposedPort: 9101
+    expose:
+      default: true
   web:
     port: 80
     exposedPort: 80
@@ -92,9 +94,9 @@ metrics:
     addServicesLabels: true
     disableAPICheck: true
     serviceMonitor:
-      enabled: true
-      additionalLabels:
-        release: monitoring
+      enabled: false  # Disabled: hostNetwork breaks ClusterIP-based scraping.
+      # Traefik metrics scraped via additionalScrapeConfigs in Prometheus
+      # targeting the Tailscale IP (nftables allows tailscale0).
 
 # -- Resource limits
 resources:

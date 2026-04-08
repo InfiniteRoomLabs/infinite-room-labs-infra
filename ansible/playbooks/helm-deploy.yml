@@ -45,6 +45,7 @@
         - traefik
         - vaultwarden
         - nextcloud
+        - monitoring
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -430,7 +431,7 @@
         values_files:
           - "{{ helm_values_path }}/traefik/values.yaml"
         wait: true
-        timeout: "3m0s"
+        timeout: "5m0s"  # hostNetwork + Recreate strategy needs extra time
       tags: [phase2, traefik]
 
     - name: "Traefik: Wait for pod to be ready"
@@ -562,6 +563,14 @@
         timeout: "5m0s"
       tags: [phase3, authentik]
 
+    - name: "Phase 3: Upload monitoring values file"
+      ansible.builtin.copy:
+        src: ../helm/monitoring/values.yaml
+        dest: "{{ helm_values_path }}/monitoring/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, monitoring]
+
     - name: "Phase 3: Deploy monitoring (irl-monitoring chart)"
       kubernetes.core.helm:
         name: monitoring
@@ -569,6 +578,8 @@
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/monitoring/values.yaml"
         values:
           kube-prometheus-stack:
             grafana:

@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Observability Phase 2: Tempo v1.24.4 (distributed tracing, 7d retention) and OTel Collector v0.147.1 (OTLP receiver, fan-out to Tempo/Prometheus/Loki) via irl-monitoring v0.3.2
 - Traefik native OTel tracing: zero-code-change distributed tracing for all HTTP requests
 - Deployment plan: 11 new decisions log entries, Phase 3 instrumentation assessment table
+- Grafana dashboards: cluster overview, Traefik ingress, PostgreSQL (CNPG). Replaces pre-k8s dashboards
+- Traefik metrics scraping via Tailscale IP (workaround for hostNetwork + nftables blocking pod->host traffic)
+- Monitoring values file upload in helm-deploy playbook (was previously inline-only)
 
 ### Changed
 - Monitoring values restructured for umbrella chart (kube-prometheus-stack key nesting), Tempo Grafana datasource added, Prometheus remote write receiver enabled
