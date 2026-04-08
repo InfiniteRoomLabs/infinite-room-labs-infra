@@ -178,3 +178,15 @@ kube-prometheus-stack:
 
   kubeProxy:
     enabled: false
+
+# ── OpenTelemetry Collector (external access) ────────────────────
+# Expose OTLP HTTP as NodePort so Claude Code on the laptop can
+# ship metrics/logs/traces over Tailscale to the collector.
+opentelemetry-collector:
+  service:
+    type: NodePort
+  ports:
+    otlp:
+      nodePort: 30417
+    otlp-http:
+      nodePort: 30418

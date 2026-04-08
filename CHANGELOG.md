@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Claude Code telemetry: Grafana dashboard (tokens, cost, code edits, active time, sessions, Loki logs) and OTel Collector NodePort exposure (30417 gRPC, 30418 HTTP) for laptop-to-cluster OTLP export
 - Observability Phase 2: Tempo v1.24.4 (distributed tracing, 7d retention) and OTel Collector v0.147.1 (OTLP receiver, fan-out to Tempo/Prometheus/Loki) via irl-monitoring v0.3.2
 - Traefik native OTel tracing: zero-code-change distributed tracing for all HTTP requests
 - Deployment plan: 11 new decisions log entries, Phase 3 instrumentation assessment table
