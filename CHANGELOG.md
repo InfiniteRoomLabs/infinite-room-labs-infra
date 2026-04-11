@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Homepage dashboard: new "Productivity" row with a Paperless-ngx service entry linking to `docs.lab.infiniteroomlabs.cloud`. Widget wiring is deferred until paperless is deployed and an API token is minted.
 - Bump helm-charts submodule to include irl-paperless v0.1.0 (paperless-ngx for the homelab). Wrapper around gabe565/paperless-ngx 0.24.1 with shared CNPG Postgres + Valkey, Traefik IngressRoute at docs.lab.infiniteroomlabs.cloud, Authentik OIDC, Tika + Gotenberg, and nightly Garage S3 backup CronJob. Infra-side edits (ansible playbook/values, PV manifests, NFS export, bw-sync mappings, homepage entry) to follow in subsequent commits.
 - Claude Code telemetry: Grafana dashboard (tokens, cost, code edits, active time, sessions, Loki logs) and OTel Collector NodePort exposure (30417 gRPC, 30418 HTTP) for laptop-to-cluster OTLP export
 - Observability Phase 2: Tempo v1.24.4 (distributed tracing, 7d retention) and OTel Collector v0.147.1 (OTLP receiver, fan-out to Tempo/Prometheus/Loki) via irl-monitoring v0.3.2

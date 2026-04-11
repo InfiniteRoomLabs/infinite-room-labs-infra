@@ -74,6 +74,9 @@ config:
       Dev Platform:
         style: row
         columns: 3
+      Productivity:
+        style: row
+        columns: 3
       Monitoring:
         style: row
         columns: 3
@@ -153,6 +156,22 @@ config:
             icon: plane
             href: "https://app.plane.so/infinite-room-labs/"
             description: "Project management (SaaS)"
+
+    - Productivity:
+        - Paperless-ngx:
+            icon: paperless-ngx
+            href: "https://docs.lab.infiniteroomlabs.cloud"
+            description: "Document management + OCR (scanbridge inbox)"
+            namespace: irl
+            app: paperless
+            # TODO: wire paperless-ngx widget once deployed and a paperless
+            # API token is generated in the UI. Widget needs:
+            #   widget:
+            #     type: paperlessngx
+            #     url: "http://paperless:8000"
+            #     username: "admin"    # or a service account
+            #     password: "{{HOMEPAGE_VAR_PAPERLESS_KEY}}"   # or key: ... for token
+            # Token goes in the homepage-api-keys secret as paperless-token.
 
     - Monitoring:
         - Grafana:
