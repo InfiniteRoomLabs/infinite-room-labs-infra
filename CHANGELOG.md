@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Documentation: four new SOPs / runbooks under `ansible/docs/`:
+- Documentation: nine new SOPs / runbooks under `ansible/docs/` capturing patterns and procedures from the paperless-ngx + samba bringup:
+  - `sops/garage-bucket-iam-management.md` -- canonical reference for the Garage admin HTTP API: bucket creation, IAM key minting, permission grants, deletion. Includes the full port-forward + token-extraction + curl workflow.
+  - `sops/authentik-oidc-via-ak-shell.md` -- create + update Authentik OAuth2/OIDC providers via the Django shell inside the worker pod, bypassing TOTP-protected admin auth. Generic across any OIDC client, not paperless-specific. Includes safe credential extraction patterns.
+  - `sops/rotate-paperless-credentials.md` -- per-secret rotation procedures for all 8 paperless credentials. Calls out the SECRET_KEY destructive rotation, the OIDC client_secret coordinated rotation (Authentik first, then BW + JSON blob), and the Garage S3 key rotation with grant-then-delete sequencing.
+  - `runbooks/bw-sync-troubleshooting.md` -- diagnostic runbook for `bw-sync.sh` failures. Documents the two real bugs caught during the paperless bringup (yq lexer error on JSON values, state file collision between ansible/k8s targets) as recognition patterns for future similar bugs, plus general failure modes (BW session expiry, vault password drift, missing kubectl, item-name mismatches).
+- Documentation: five new SOPs / runbooks under `ansible/docs/` from the initial paperless bringup:
   - `sops/setup-windows-paperless-ingestion.md` -- end-user walkthrough for mapping the SMB share on a Windows 10/11 machine, including the `AllowInsecureGuestAuth` registry tweak and the `RequireSecuritySignature` workaround for Windows 11 24H2+, with troubleshooting for the common failure modes.
   - `sops/restore-paperless.md` -- DR procedure to restore Paperless-ngx from a `document_exporter` zip in the Garage `paperless-backups` bucket. Covers truncate, kubectl-cp, and a one-shot Job alternative for crash-loop scenarios.
   - `sops/samba-add-auth.md` -- forward-looking hardening recipe to replace the current guest-mode Samba share with a dedicated `paperlessscan` system user + Bitwarden-managed password. Referenced inline as a TODO in `group_vars/homelab/main.yml` and `smb.conf.j2`.
