@@ -589,9 +589,12 @@ run_sync_ansible() {
     # Write into the plaintext YAML using yq.
     # Dot notation in ansible_var (e.g., vault_pg_passwords.gitea) maps to nested YAML.
     # Convert dot-path to yq path expression.
+    # Use strenv() to pass the value via environment variable -- interpolating
+    # into the yq expression string would break on values containing double
+    # quotes or other yq-syntax characters (e.g., JSON blobs).
     local yq_path
     yq_path=".$(echo "$ansible_var" | sed 's/\./\./g')"
-    yq e -i "${yq_path} = \"${value}\"" "$ANSIBLE_PLAIN_FILE"
+    YQ_VALUE="$value" yq e -i "${yq_path} = strenv(YQ_VALUE)" "$ANSIBLE_PLAIN_FILE"
 
     # Clear value from memory as soon as possible
     unset value

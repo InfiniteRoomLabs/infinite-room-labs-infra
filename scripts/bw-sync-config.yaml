@@ -104,17 +104,6 @@ secrets:
     k8s_key: null
 
   # ── Paperless-ngx (document management) ──────────────────────
-  # Populated in two passes: the three entries below are generated secrets
-  # (ready to sync). The five entries for Authentik OIDC + Garage S3 backup
-  # credentials are pending manual setup:
-  #   - paperless-oidc-client-id
-  #   - paperless-oidc-client-secret
-  #   - paperless-socialaccount-providers
-  #   - paperless-backup-s3-access-key
-  #   - paperless-backup-s3-secret-key
-  # Create them in Bitwarden under IRL/Services/Paperless after the Authentik
-  # provider and Garage `paperless-backups` bucket credentials exist, then
-  # append matching bw-sync entries here and re-sync.
   - bw_item: "pg-paperless"
     ansible_var: "vault_pg_passwords.paperless"
     k8s_secret: "postgres-paperless"
@@ -129,6 +118,34 @@ secrets:
     ansible_var: "vault_paperless_admin_password"
     k8s_secret: "paperless-secrets"
     k8s_key: "admin-password"
+
+  # Authentik OIDC provider bundle (app slug "paperless", provider_id "authentik")
+  - bw_item: "paperless-oidc-client-id"
+    ansible_var: "vault_paperless_oidc_client_id"
+    k8s_secret: "paperless-oidc"
+    k8s_key: "client-id"
+
+  - bw_item: "paperless-oidc-client-secret"
+    ansible_var: "vault_paperless_oidc_client_secret"
+    k8s_secret: "paperless-oidc"
+    k8s_key: "client-secret"
+
+  # Rendered PAPERLESS_SOCIALACCOUNT_PROVIDERS JSON embedding the two above
+  - bw_item: "paperless-socialaccount-providers"
+    ansible_var: "vault_paperless_socialaccount_providers_json"
+    k8s_secret: "paperless-secrets"
+    k8s_key: "PAPERLESS_SOCIALACCOUNT_PROVIDERS"
+
+  # Garage S3 IAM keys for the paperless-backups bucket (CronJob uploader)
+  - bw_item: "paperless-backup-s3-access-key"
+    ansible_var: "vault_paperless_backup_s3_access_key"
+    k8s_secret: "paperless-backup-s3"
+    k8s_key: "AWS_ACCESS_KEY_ID"
+
+  - bw_item: "paperless-backup-s3-secret-key"
+    ansible_var: "vault_paperless_backup_s3_secret_key"
+    k8s_secret: "paperless-backup-s3"
+    k8s_key: "AWS_SECRET_ACCESS_KEY"
 
   # ── Vaultwarden (password manager) ─────────────────────────
   - bw_item: "pg-vaultwarden"

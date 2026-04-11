@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `scripts/bw-sync.sh`: pass values to yq via `strenv()` instead of shell-interpolating them into the expression. The old form (`yq e -i ".path = \"$value\"" ...`) broke the lexer on any value containing double quotes or other yq-syntax characters, silently producing a parser error + missing vault entry. This was latent until the new `PAPERLESS_SOCIALACCOUNT_PROVIDERS` JSON blob triggered it.
+
 ### Added
+- `bw-sync-config.yaml`: five additional paperless secret mappings (Authentik OIDC client id/secret, rendered PAPERLESS_SOCIALACCOUNT_PROVIDERS JSON, Garage S3 backup access/secret keys) bringing paperless to 8 of 8 entries.
 - Paperless-ngx ansible scaffolding: `helm-deploy.yml` Phase 3 task block with 4 PVC creates + helm install against `irl/irl-paperless`; `k3s.yml` hostPath PVs for paperless-consume (under nfs-share), paperless-media, and paperless-data; `k8s-secrets.yml` conditional tasks for `paperless-secrets`, `paperless-oidc`, and `paperless-backup-s3` (gated with `when:` so pending vault vars don't block deploy); `zfs.yml` chown task for paperless-media + paperless-data to UID 1000; `credentials-rotation.yml` paperless-consume sub-export with `anonuid/anongid=1000` so scanbridge writes from the laptop land as UID 1000; `ansible/helm/paperless/values.yaml` environment overrides. Existing hand-managed NFS share at `/media/root/storage1/nfs-share` is reused (no new exports playbook or mount config).
 - `irl_services`, `irl_pg_databases`, and `irl_zfs_datasets` in group_vars extended for paperless (2 ZFS datasets, 1 service entry, 1 DB).
 - `bw-sync-config.yaml`: three new paperless secret mappings (`pg-paperless` -> `postgres-paperless/password`, `paperless-secret-key` -> `paperless-secrets/secret-key`, `paperless-admin` -> `paperless-secrets/admin-password`). Five additional paperless secrets (Authentik OIDC trio, Garage S3 backup access/secret keys) are documented inline as pending manual setup.
