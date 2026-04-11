@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `scripts/bw-sync.sh`: pass values to yq via `strenv()` instead of shell-interpolating them into the expression. The old form (`yq e -i ".path = \"$value\"" ...`) broke the lexer on any value containing double quotes or other yq-syntax characters, silently producing a parser error + missing vault entry. This was latent until the new `PAPERLESS_SOCIALACCOUNT_PROVIDERS` JSON blob triggered it.
+- `scripts/bw-sync.sh`: namespace the checksum state file by target (`ansible:` and `k8s:` prefixes). The previous unscoped state caused `--target both` to mark new K8s Secrets as "unchanged" and skip `kubectl apply` -- the ansible sync would `save_checksum` for every item, then the subsequent k8s sync would see the matching checksum and assume the Secret was already synced even though it had never been written to k8s. Falls back to the legacy unscoped lookup for state files written before this fix.
 
 ### Added
 - `bw-sync-config.yaml`: five additional paperless secret mappings (Authentik OIDC client id/secret, rendered PAPERLESS_SOCIALACCOUNT_PROVIDERS JSON, Garage S3 backup access/secret keys) bringing paperless to 8 of 8 entries.

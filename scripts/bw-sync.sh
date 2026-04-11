@@ -339,17 +339,31 @@ load_state() {
 }
 
 get_stored_checksum() {
+  # State keys are namespaced by target so the ansible and k8s sync paths
+  # don't trample each other. The legacy unscoped form (item_name only) is
+  # kept as a fallback for state files written before this change.
   local item_name="$1"
-  load_state | jq -r --arg k "$item_name" '.[$k] // empty'
+  local target="${2:-}"
+  local state
+  state=$(load_state)
+  if [[ -n "$target" ]]; then
+    local scoped
+    scoped=$(echo "$state" | jq -r --arg k "${target}:${item_name}" '.[$k] // empty')
+    [[ -n "$scoped" ]] && { echo "$scoped"; return; }
+  fi
+  echo "$state" | jq -r --arg k "$item_name" '.[$k] // empty'
 }
 
 save_checksum() {
   local item_name="$1"
   local checksum="$2"
+  local target="${3:-}"
   mkdir -p "$STATE_DIR"
+  local key="$item_name"
+  [[ -n "$target" ]] && key="${target}:${item_name}"
   local current
   current=$(load_state)
-  echo "$current" | jq --arg k "$item_name" --arg v "$checksum" '. + {($k): $v}' \
+  echo "$current" | jq --arg k "$key" --arg v "$checksum" '. + {($k): $v}' \
     > "$STATE_FILE"
 }
 
@@ -575,7 +589,7 @@ run_sync_ansible() {
     local new_checksum
     new_checksum=$(printf '%s' "$value" | compute_checksum)
     local old_checksum
-    old_checksum=$(get_stored_checksum "$item_name")
+    old_checksum=$(get_stored_checksum "$item_name" "ansible")
 
     if [[ "$new_checksum" == "$old_checksum" && -f "$output_file" ]]; then
       log "  [unchanged] $item_name"
@@ -634,7 +648,7 @@ run_sync_ansible() {
     [[ -z "$value" ]] && continue
     local new_checksum
     new_checksum=$(printf '%s' "$value" | compute_checksum)
-    save_checksum "$item_name" "$new_checksum"
+    save_checksum "$item_name" "$new_checksum" "ansible"
     unset value
     audit_log "$item_name" "ansible" "updated"
   done
@@ -712,7 +726,7 @@ run_sync_k8s() {
       local new_checksum
       new_checksum=$(printf '%s' "$value" | compute_checksum)
       local old_checksum
-      old_checksum=$(get_stored_checksum "$item_name")
+      old_checksum=$(get_stored_checksum "$item_name" "k8s")
       [[ "$new_checksum" != "$old_checksum" ]] && secret_changed=true
 
       from_literal_args+=("--from-literal=${k8s_key}=${value}")
@@ -757,7 +771,7 @@ run_sync_k8s() {
       for entry in "${item_names_for_secret[@]}"; do
         local iname="${entry%%:*}"
         local cksum="${entry##*:}"
-        save_checksum "$iname" "$cksum"
+        save_checksum "$iname" "$cksum" "k8s"
         audit_log "$iname" "k8s" "updated"
       done
       ((synced++)) || true
