@@ -46,6 +46,7 @@
         - vaultwarden
         - nextcloud
         - monitoring
+        - paperless
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -679,6 +680,127 @@
         wait: true
         timeout: "10m0s"
       tags: [phase3, nextcloud]
+
+    # ── Paperless-ngx (document management) ──────────────────────
+    # Prerequisites (in order):
+    #   1. zfs.yml has created + chowned the paperless-media and
+    #      paperless-data ZFS datasets
+    #   2. credentials-rotation.yml has created the paperless-consume
+    #      directory under nfs-share and added the sub-export with
+    #      anonuid/anongid=1000
+    #   3. k3s.yml has created the three hostPath PVs
+    #   4. bw-sync has populated vault_pg_passwords.paperless,
+    #      vault_paperless_secret_key, vault_paperless_admin_password
+    #   5. k8s-secrets.yml has created the postgres-paperless and
+    #      paperless-secrets K8s Secrets
+    #   6. Phase 2 Postgres bootstrap has auto-provisioned the
+    #      `paperless` DB + role from irl_pg_databases
+    #   7. helm-charts submodule change (irl-paperless 0.1.0) is
+    #      PUBLISHED to the chart-releaser GitHub Pages repo --
+    #      deploy will fail with "chart not found" until push+publish
+
+    - name: "Phase 3: Create Paperless consume PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: paperless-consume-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "50Gi"
+            selector:
+              matchLabels:
+                app: paperless
+      tags: [phase3, paperless]
+
+    - name: "Phase 3: Create Paperless media PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: paperless-media-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "500Gi"
+            selector:
+              matchLabels:
+                app: paperless
+      tags: [phase3, paperless]
+
+    - name: "Phase 3: Create Paperless data PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: paperless-data-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            resources:
+              requests:
+                storage: "20Gi"
+            selector:
+              matchLabels:
+                app: paperless
+      tags: [phase3, paperless]
+
+    - name: "Phase 3: Create Paperless export PVC (ephemeral, backup CronJob)"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: paperless-export-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: local-path
+            resources:
+              requests:
+                storage: "20Gi"
+      tags: [phase3, paperless]
+
+    - name: "Phase 3: Upload Paperless values"
+      ansible.builtin.copy:
+        src: ../helm/paperless/values.yaml
+        dest: "{{ helm_values_path }}/paperless/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, paperless]
+
+    - name: "Phase 3: Deploy Paperless-ngx (irl-paperless chart)"
+      kubernetes.core.helm:
+        name: paperless
+        chart_ref: irl/irl-paperless
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/paperless/values.yaml"
+        wait: true
+        # Tika + Gotenberg image pulls are slow on first run
+        timeout: "10m0s"
+      tags: [phase3, paperless]
 
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,

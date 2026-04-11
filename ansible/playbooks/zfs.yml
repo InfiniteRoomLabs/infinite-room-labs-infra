@@ -52,6 +52,26 @@
           }}
       loop: "{{ irl_zfs_datasets }}"
 
+    # ── Per-dataset ownership for containerized services ──────────
+    # Paperless-ngx runs as UID/GID 1000 inside its pod. ZFS datasets are
+    # created root-owned by default, which silently breaks the pod's
+    # hostPath mounts. Chown is idempotent and cheap.
+    #
+    # paperless-consume is NOT listed here -- it lives under the existing
+    # nfs-share and is handled by credentials-rotation.yml (which also
+    # owns the NFS export line for that subdir).
+    - name: Chown paperless datasets to UID 1000 (container user)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/{{ item }}"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        recurse: true
+      loop:
+        - paperless-media
+        - paperless-data
+      tags: [paperless]
+
     # ── ZFS scrub schedule ─────────────────────────────────────────
     - name: Schedule weekly ZFS scrub (Sunday 3am)
       ansible.builtin.cron:

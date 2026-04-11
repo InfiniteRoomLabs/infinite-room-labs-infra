@@ -433,6 +433,27 @@
           app: jenkins
           capacity: "20Gi"
           hostPath: /var/lib/rancher/k3s/storage/jenkins-data
+        # ── Paperless-ngx ──
+        # Consume lives under the existing nfs-share subtree so the laptop
+        # can write into it via /mnt/homelab-nfs/paperless-consume (writes
+        # squashed to UID 1000 via anonuid/anongid -- see the sub-export in
+        # credentials-rotation.yml). Media is the searchable document
+        # archive and data is index+thumbnails+task metadata, both on
+        # dedicated ZFS datasets consistent with gitea-lfs / ollama-models.
+        # Export PVC is NOT listed here -- it's ephemeral between backup
+        # CronJob runs and binds to local-path dynamically.
+        - name: pv-paperless-consume
+          app: paperless
+          capacity: "50Gi"
+          hostPath: "{{ irl_zfs_mount }}/nfs-share/paperless-consume"
+        - name: pv-paperless-media
+          app: paperless
+          capacity: "500Gi"
+          hostPath: "{{ irl_zfs_mount }}/paperless-media"
+        - name: pv-paperless-data
+          app: paperless
+          capacity: "20Gi"
+          hostPath: "{{ irl_zfs_mount }}/paperless-data"
 
     - name: Create zfs-local StorageClass
       kubernetes.core.k8s:

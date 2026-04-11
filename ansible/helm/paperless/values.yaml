@@ -1,0 +1,58 @@
+# helm/paperless/values.yaml
+# ============================
+# Environment-specific overrides for the irl-paperless chart on the homelab.
+#
+# The chart's built-in defaults (helm-charts/charts/irl-paperless/values.yaml)
+# already target this cluster specifically -- this file exists to:
+#   1. Surface the load-bearing knobs (ports, host, enabled features) in one
+#      place for operators to scan.
+#   2. Let this environment override the chart without forcing a chart version
+#      bump for homelab-only tweaks.
+#
+# Secrets are NOT in this file. They flow via the paperless-secrets task in
+# helm-deploy.yml which writes paperless-secrets.yaml alongside this file.
+#
+# Chart: irl/irl-paperless >= 0.1.0 (wraps gabe565/paperless-ngx 0.24.1)
+
+# ── Upstream chart (aliased as `paperless` in Chart.yaml dependency) ──
+paperless:
+  service:
+    main:
+      type: NodePort
+      ports:
+        http:
+          port: 8000
+          # Verify free before deploy:
+          # kubectl get svc -A -o jsonpath='{range .items[*]}{.spec.ports[*].nodePort}{"\n"}{end}' | sort -u
+          nodePort: 30800
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+
+# ── Traefik IngressRoute (rendered by chart's own template) ──
+ingress:
+  enabled: true
+  host: "docs.lab.infiniteroomlabs.cloud"
+
+# ── Apache Tika (Office doc parsing) ──
+tika:
+  enabled: true
+
+# ── Gotenberg (headless Chromium for HTML/PDF conversion) ──
+gotenberg:
+  enabled: true
+
+# ── Nightly document_exporter backup to Garage S3 ──
+backup:
+  enabled: true
+  schedule: "0 3 * * *"
+  timeZone: "America/New_York"
+  s3:
+    endpoint: "https://s3.internal.lab.infiniteroomlabs.cloud"
+    bucket: "paperless-backups"
+  retentionDays: 30
