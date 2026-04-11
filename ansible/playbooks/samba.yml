@@ -1,0 +1,126 @@
+---
+# playbooks/samba.yml
+# ====================
+# Installs Samba on the homelab and exposes the paperless-ngx consume
+# directory as a single SMB share. Initial deployment is unauthenticated
+# (guest mode) to keep wife's onboarding friction at zero -- security
+# tightening is documented as a TODO in group_vars/homelab/main.yml.
+#
+# Why a host service instead of a k8s pod:
+#   - Port 445 is non-negotiable for Windows clients (no NodePort tricks)
+#   - Symmetric with the existing host-managed nfs-kernel-server
+#   - Survives k3s outages, simpler debugging, native systemd unit
+#
+# Run standalone:
+#   uv run ansible-playbook playbooks/samba.yml --tags samba
+#
+# After changes, restart via the handler. Validate before install via the
+# `validate: testparm -s %s` hook on the template task -- mirrors the
+# nft -c -f / sshd -t -f pattern used by other playbooks.
+
+- name: Samba host service for paperless-consume
+  hosts: homelab
+  become: true
+  tags: [phase1, samba]
+
+  handlers:
+    - name: restart samba
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - smbd
+        - nmbd
+
+  tasks:
+    - name: Install Samba packages
+      ansible.builtin.apt:
+        name:
+          - samba
+          - samba-common-bin
+        state: present
+        update_cache: true
+
+    # /media/root/ ships as 0750 root:root on this homelab, which is more
+    # restrictive than the conventional /media/* default of 0755. NFS doesn't
+    # care (nfsd runs as root and bypasses POSIX traversal via the export
+    # model) but Samba does -- after fork+setuid to the share's force_user
+    # the worker process can't even cd through /media/root, so all share
+    # operations fail with NT_STATUS_ACCESS_DENIED. Open it to 0755 so the
+    # samba force_user can traverse the path. This matches the upstream
+    # /media/ convention; nothing under /media/root/storage1 changes perms.
+    - name: Ensure /media/root is traversable for non-root users (samba force_user)
+      ansible.builtin.file:
+        path: /media/root
+        state: directory
+        mode: "0755"
+
+    # Idempotent safety net: makes samba.yml self-sufficient when run with
+    # --tags samba in isolation. credentials-rotation.yml also creates this
+    # directory; the duplicate is intentional.
+    - name: Ensure paperless-consume directory exists with correct ownership
+      ansible.builtin.file:
+        path: "{{ irl_paperless_consume_path }}"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        mode: "0775"
+
+    - name: Template /etc/samba/smb.conf
+      ansible.builtin.template:
+        src: ../templates/smb.conf.j2
+        dest: /etc/samba/smb.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+        validate: "testparm -s %s"
+      notify: restart samba
+
+    - name: Enable and start smbd
+      ansible.builtin.systemd:
+        name: smbd
+        enabled: true
+        state: started
+
+    - name: Enable and start nmbd
+      ansible.builtin.systemd:
+        name: nmbd
+        enabled: true
+        state: started
+
+    # nftables rule for port 445 is added via the existing
+    # irl_firewall_allowed_tcp_ports list in group_vars/homelab/main.yml,
+    # which the security-hardening playbook templates into nftables.conf.
+    # If the firewall hasn't been re-applied since adding 445, run:
+    #   ansible-playbook playbooks/security-hardening.yml --tags firewall
+    - name: Verify port 445 is reachable on the homelab interface
+      ansible.builtin.wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: 445
+        timeout: 10
+        state: started
+
+    - name: Show Samba connection info
+      ansible.builtin.debug:
+        msg: |
+          Samba is up. Connection details:
+
+          From a Windows client (wife's laptop):
+            File Explorer address bar: \\{{ ansible_default_ipv4.address }}\paperless-consume
+            Or map as drive:           net use Z: \\{{ ansible_default_ipv4.address }}\paperless-consume
+
+            IMPORTANT: Modern Windows blocks unauthenticated guest SMB by
+            default. If she sees "your organization's security policies
+            block unauthenticated guest access", apply this registry tweak
+            on her laptop (one-time, requires admin):
+
+              reg add HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters /v AllowInsecureGuestAuth /t REG_DWORD /d 1 /f
+
+          From a Linux client (you):
+            smbclient -L //{{ ansible_default_ipv4.address }}/ -N
+            smbclient //{{ ansible_default_ipv4.address }}/paperless-consume -N
+
+          Files written via this share will land as UID 1000:1000 on the
+          backing filesystem and be picked up by paperless-ngx within
+          ~2.5 minutes (30s polling x 5-retry stability window).

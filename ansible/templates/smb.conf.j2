@@ -1,0 +1,75 @@
+{{ ansible_managed | comment }}
+#
+# /etc/samba/smb.conf -- IRL homelab Samba configuration
+#
+# Single-share host service exposing the paperless-ngx consume directory
+# over SMB so Windows clients can drop scanned PDFs into the inbox using
+# native scanner software.
+#
+# Initial deployment is intentionally UNAUTHENTICATED (guest mode). The
+# security model relies on:
+#   1. nftables only opening 445 from the LAN-trusted homelab interface
+#   2. smb.conf hosts allow / hosts deny restricting at the app layer
+#   3. force user/group = 1000 normalizing all writes to the paperless UID
+#
+# To harden later, replace `guest ok = yes` with `valid users = <user>`
+# in the share block and create the system user via the playbook.
+
+[global]
+    workgroup = WORKGROUP
+    server string = IRL Homelab (%h)
+    server role = standalone server
+
+    # Auth: guest mode by default. Maps everything to the share's force-user.
+    # Modern Windows clients require AllowInsecureGuestAuth=1 to connect to
+    # guest shares -- see comments in group_vars/homelab/main.yml.
+    security = user
+    map to guest = Bad User
+    guest account = nobody
+    passdb backend = tdbsam
+
+    # Listen on all interfaces. The LAN side is opened in nftables; the
+    # share-level hosts_allow restricts at the application layer.
+    # When tightening security later, switch to:
+    #   interfaces = tailscale0 lo
+    #   bind interfaces only = yes
+
+    # Disable the printer subsystem entirely -- this node is not a print server
+    load printers = no
+    printing = bsd
+    printcap name = /dev/null
+    disable spoolss = yes
+
+    # Logging
+    log file = /var/log/samba/log.%m
+    max log size = 1000
+    log level = 1
+
+    # Protocol floor: SMB1 is a security footgun. SMB2_10 = Windows 7+,
+    # which covers any HP scanner software released in the last decade.
+    # If wife's laptop or HP scanner ever fails to connect, temporarily
+    # lower this to NT1 to confirm the cause -- then upgrade the client
+    # rather than leaving SMB1 enabled.
+    server min protocol = SMB2_10
+    client min protocol = SMB2
+
+{% for share in irl_samba_shares %}
+[{{ share.name }}]
+    comment = {{ share.comment }}
+    path = {{ share.path }}
+    guest ok = yes
+    guest only = yes
+    force user = {{ share.force_user }}
+    force group = {{ share.force_group }}
+    create mask = 0664
+    directory mask = 0775
+    writable = yes
+    browseable = yes
+    hosts allow = {{ share.hosts_allow | join(' ') }}
+    hosts deny = 0.0.0.0/0
+    # Hide and auto-clean Windows/macOS metadata droppings so they don't
+    # trip the paperless polling consumer with non-PDF junk.
+    veto files = /.DS_Store/._*/Thumbs.db/desktop.ini/
+    delete veto files = yes
+
+{% endfor %}

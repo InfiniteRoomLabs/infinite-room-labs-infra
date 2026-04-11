@@ -8,6 +8,7 @@ irl_firewall_allowed_tcp_ports:
   - 22     # SSH
   - 80     # HTTP (Traefik)
   - 443    # HTTPS (Traefik)
+  - 445    # SMB / Samba (paperless-consume share, LAN access for HP scanner workflow)
   - 2222   # Gitea SSH (Traefik TCP)
   - 6443   # k3s API server
   - 41641  # Tailscale direct connections
@@ -16,3 +17,50 @@ irl_firewall_allowed_tcp_ports:
 irl_nfs_allowed_subnets:
   - { cidr: "192.168.2.0/24", mode: "ro" }    # LAN (read-only)
   - { cidr: "100.64.0.0/10", mode: "rw" }     # Tailscale (read-write)
+
+# Samba / SMB -- single-share host service for paperless-consume.
+#
+# Initial deployment is INTENTIONALLY UNAUTHENTICATED (guest mode) and
+# accessible from the home LAN (192.168.2.0/24). Goal is zero friction
+# for wife to map \\homelab\paperless-consume from her Windows laptop
+# and use the HP scanner software to drop scanned PDFs into paperless.
+#
+# The security tradeoff is acceptable for now because:
+#   1. The home LAN is single-occupant, no untrusted guests on the wifi.
+#   2. force user/group = 1000 means writes always land as the paperless
+#      container UID regardless of which client connects -- so even an
+#      unauthenticated write still respects the paperless ownership model.
+#   3. hosts allow + hosts deny in smb.conf restrict to LAN + Tailscale +
+#      loopback at the application layer (defense in depth on top of nft).
+#
+# HARDENING TODO once the initial doc migration is done:
+#   - Add a dedicated `paperlessscan` system user
+#   - Create `samba-paperless-scan` Bitwarden item + bw-sync mapping
+#   - Remove `guest ok = yes` from smb.conf, add `valid users = paperlessscan`
+#   - Tighten hosts_allow to specific client IPs
+#   - Consider dropping LAN access in favor of Tailscale-only
+# See ansible/docs/sops/samba-add-auth.md (write when hardening).
+#
+# IMPORTANT for Windows clients: modern Windows (10/11) disables
+# unauthenticated guest SMB by default. Users will hit "you can't
+# access this shared folder because your organization's security
+# policies block unauthenticated guest access." Workaround:
+#   gpedit.msc -> Computer Configuration -> Administrative Templates
+#     -> Network -> Lanman Workstation -> Enable insecure guest logons
+# OR registry: HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation
+#     \Parameters\AllowInsecureGuestAuth = 1 (DWORD)
+# Document this in the connection instructions you give to wife.
+irl_samba_shares:
+  - name: "paperless-consume"
+    path: "{{ irl_paperless_consume_path }}"
+    comment: "Paperless-ngx consume directory (HP scanner drop)"
+    # Samba's `force user`/`force group` expect USERNAMES, not UIDs.
+    # On the homelab, UID 1000 is the legacy `dataplicity` system user
+    # (UID 1001 is wes). Paperless container runs as UID 1000, so we
+    # squash all SMB writes to dataplicity (= UID 1000) at the OS layer.
+    force_user: "dataplicity"
+    force_group: "dataplicity"
+    hosts_allow:
+      - "192.168.2.0/24"  # Home LAN (wife's laptop)
+      - "100.64.0.0/10"   # Tailscale CGNAT range (your devices)
+      - "127.0.0.1"       # Loopback for local smbclient testing
