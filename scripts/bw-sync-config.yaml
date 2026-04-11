@@ -103,6 +103,33 @@ secrets:
     k8s_secret: null
     k8s_key: null
 
+  # ── Paperless-ngx (document management) ──────────────────────
+  # Populated in two passes: the three entries below are generated secrets
+  # (ready to sync). The five entries for Authentik OIDC + Garage S3 backup
+  # credentials are pending manual setup:
+  #   - paperless-oidc-client-id
+  #   - paperless-oidc-client-secret
+  #   - paperless-socialaccount-providers
+  #   - paperless-backup-s3-access-key
+  #   - paperless-backup-s3-secret-key
+  # Create them in Bitwarden under IRL/Services/Paperless after the Authentik
+  # provider and Garage `paperless-backups` bucket credentials exist, then
+  # append matching bw-sync entries here and re-sync.
+  - bw_item: "pg-paperless"
+    ansible_var: "vault_pg_passwords.paperless"
+    k8s_secret: "postgres-paperless"
+    k8s_key: "password"
+
+  - bw_item: "paperless-secret-key"
+    ansible_var: "vault_paperless_secret_key"
+    k8s_secret: "paperless-secrets"
+    k8s_key: "secret-key"
+
+  - bw_item: "paperless-admin"
+    ansible_var: "vault_paperless_admin_password"
+    k8s_secret: "paperless-secrets"
+    k8s_key: "admin-password"
+
   # ── Vaultwarden (password manager) ─────────────────────────
   - bw_item: "pg-vaultwarden"
     ansible_var: "vault_pg_passwords.vaultwarden"
