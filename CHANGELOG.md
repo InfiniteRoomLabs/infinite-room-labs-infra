@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Paperless-ngx public hostname renamed from `docs.lab.infiniteroomlabs.cloud` to `archives.lab.infiniteroomlabs.cloud`. Updates `irl_services.paperless.subdomain`, `ansible/helm/paperless/values.yaml ingress.host`, and the matching homepage dashboard entry. Authentik OIDC provider redirect URI and the `paperless-admin` Bitwarden item URL were updated out-of-band to match. Bumps `helm-charts` submodule pointer to pull in `irl-paperless v0.1.1` which carries the matching chart-default rename plus two latent bug fixes (Tika image and PAPERLESS_REDIS env-substitution).
+- `helm-deploy.yml`: new "Phase 3: Write Paperless secrets override" task that materializes `PAPERLESS_REDIS` with the password rendered inline from `vault_redis_password`. The chart can't use the k8s `$(VAR)` substitution syntax because bjw-s/common alphabetizes env vars and would render `PAPERLESS_REDIS` before `PAPERLESS_REDIS_PASSWORD`.
+- `credentials-rotation.yml`: parent `nfs-share` export now sets `anonuid=1000,anongid=1000` (alongside the existing `all_squash`) so writes from the laptop's autofs mount land as UID 1000 instead of `nobody`. Required for paperless to read its own consume folder back through the hostPath PV.
+
+### Deployed
+- Paperless-ngx is live on the homelab as `irl-paperless 0.1.1` at `https://archives.lab.infiniteroomlabs.cloud`. CNPG `paperless` database, Valkey DB index 3, Tika + Gotenberg sidecars, Authentik OIDC application + provider, Garage `paperless-backups` S3 bucket + IAM key pair, all 8 BW secrets synced to vault.yml + irl namespace. End-to-end NFS write verified -- a touch on the laptop at `/mnt/homelab-nfs/paperless-consume/` is visible inside the paperless pod at `/usr/src/paperless/consume/` as UID 1000.
+
 ### Fixed
 - `scripts/bw-sync.sh`: pass values to yq via `strenv()` instead of shell-interpolating them into the expression. The old form (`yq e -i ".path = \"$value\"" ...`) broke the lexer on any value containing double quotes or other yq-syntax characters, silently producing a parser error + missing vault entry. This was latent until the new `PAPERLESS_SOCIALACCOUNT_PROVIDERS` JSON blob triggered it.
 - `scripts/bw-sync.sh`: namespace the checksum state file by target (`ansible:` and `k8s:` prefixes). The previous unscoped state caused `--target both` to mark new K8s Secrets as "unchanged" and skip `kubectl apply` -- the ansible sync would `save_checksum` for every item, then the subsequent k8s sync would see the matching checksum and assume the Secret was already synced even though it had never been written to k8s. Falls back to the legacy unscoped lookup for state files written before this fix.

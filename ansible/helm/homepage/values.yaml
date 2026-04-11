@@ -160,7 +160,7 @@ config:
     - Productivity:
         - Paperless-ngx:
             icon: paperless-ngx
-            href: "https://docs.lab.infiniteroomlabs.cloud"
+            href: "https://archives.lab.infiniteroomlabs.cloud"
             description: "Document management + OCR (scanbridge inbox)"
             namespace: irl
             app: paperless

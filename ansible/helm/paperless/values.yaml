@@ -37,11 +37,17 @@ paperless:
 # ── Traefik IngressRoute (rendered by chart's own template) ──
 ingress:
   enabled: true
-  host: "docs.lab.infiniteroomlabs.cloud"
+  host: "archives.lab.infiniteroomlabs.cloud"
 
 # ── Apache Tika (Office doc parsing) ──
+# Chart default ghcr.io/paperless-ngx/tika:latest returns 403 -- that image
+# isn't published at that path. Upstream paperless docker-compose uses the
+# native Apache Tika image. Override here until the chart default is fixed.
 tika:
   enabled: true
+  image:
+    repository: docker.io/apache/tika
+    tag: "latest"
 
 # ── Gotenberg (headless Chromium for HTML/PDF conversion) ──
 gotenberg:

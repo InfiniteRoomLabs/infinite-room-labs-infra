@@ -788,6 +788,22 @@
         mode: "0640"
       tags: [phase3, paperless]
 
+    # bjw-s/common alphabetizes env vars in the rendered Deployment, so
+    # PAPERLESS_REDIS gets emitted before PAPERLESS_REDIS_PASSWORD and the
+    # k8s $(VAR) substitution silently fails. Render the full URL with the
+    # password embedded at deploy time, same pattern as gitea-secrets above.
+    - name: "Phase 3: Write Paperless secrets override"
+      ansible.builtin.copy:
+        content: |
+          paperless:
+            env:
+              PAPERLESS_REDIS: "redis://:{{ vault_redis_password }}@valkey:6379/3"
+        dest: "{{ helm_values_path }}/paperless-secrets.yaml"
+        owner: root
+        mode: "0600"
+      no_log: true
+      tags: [phase3, paperless]
+
     - name: "Phase 3: Deploy Paperless-ngx (irl-paperless chart)"
       kubernetes.core.helm:
         name: paperless
@@ -797,6 +813,7 @@
         kubeconfig: "{{ kubeconfig }}"
         values_files:
           - "{{ helm_values_path }}/paperless/values.yaml"
+          - "{{ helm_values_path }}/paperless-secrets.yaml"
         wait: true
         # Tika + Gotenberg image pulls are slow on first run
         timeout: "10m0s"
