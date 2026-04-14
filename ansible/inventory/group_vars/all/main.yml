@@ -150,6 +150,11 @@ irl_services:
     internal: false
     cluster_svc: "paperless"
     cluster_port: 8000
+  # qbittorrent:                 # PAUSED -- DNS resolution blocker, see
+  #   subdomain: "torrents"      # ~/projects/infinite-room-labs/qbittorrent-operator/deploy/irl/README.md
+  #   internal: false            # Alpine/musl + k8s ndots:5 breaks tracker hostname resolution.
+  #   cluster_svc: "qbittorrent" # Unblocker: add dnsConfig support to TorrentServer CRD in our fork.
+  #   cluster_port: 8080         # Temporary: eXoDOS downloading on laptop instead.
 
 # ── Users ────────────────────────────────────────────────────────────
 irl_admin_user: "wes"
