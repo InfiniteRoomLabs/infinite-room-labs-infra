@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `credentials-rotation.yml`: parent `nfs-share` export now sets `anonuid=1000,anongid=1000` (alongside the existing `all_squash`) so writes from the laptop's autofs mount land as UID 1000 instead of `nobody`. Required for paperless to read its own consume folder back through the hostPath PV.
 
 ### Deployed
+- Paperless-ngx upgraded in-place to 2.20.14 via `irl-paperless 0.2.0`. Helm release 3, rollout clean, DB migrations applied (latest: `paperless_mail.0029_mailrule_pdf_layout`), Redis/Celery/Index all OK. API v9 handshake verified end-to-end against the freeformz/paperless-ngx-mcp MCP server — 100+ tools now functional. No document impact (2 PDFs preserved, 17,514 chars intact).
 - Paperless-ngx is live on the homelab as `irl-paperless 0.1.1` at `https://archives.lab.infiniteroomlabs.cloud`. CNPG `paperless` database, Valkey DB index 3, Tika + Gotenberg sidecars, Authentik OIDC application + provider, Garage `paperless-backups` S3 bucket + IAM key pair, all 8 BW secrets synced to vault.yml + irl namespace. End-to-end NFS write verified -- a touch on the laptop at `/mnt/homelab-nfs/paperless-consume/` is visible inside the paperless pod at `/usr/src/paperless/consume/` as UID 1000.
 
 ### Fixed
