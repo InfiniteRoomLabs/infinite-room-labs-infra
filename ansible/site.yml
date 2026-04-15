@@ -50,6 +50,10 @@
   ansible.builtin.import_playbook: playbooks/samba.yml
   tags: [phase1, samba]
 
+- name: "Phase 1: Deluge BitTorrent daemon host service"
+  ansible.builtin.import_playbook: playbooks/deluge.yml
+  tags: [phase1, deluge]
+
 # ── Phase 2: k3s + Core Data ─────────────────────────────────────────
 # k3s installs as a systemd service. Caddy runs in-cluster (hostNetwork, LE DNS-01).
 # Kubernetes Secrets are provisioned from Ansible Vault before Helm deploys.

@@ -1,0 +1,138 @@
+---
+# playbooks/deluge.yml
+# =====================
+# Configures the Deluge BitTorrent daemon on the homelab for remote
+# (LAN + Tailscale) access with an admin auth entry.
+#
+# Background:
+#   Debian bookworm ships deluged 2.0.3-4. No newer version is available
+#   from stable repos; pulling from a PPA or pipx would add maintenance
+#   burden for marginal feature gain. We stay on the Debian package.
+#
+#   Previous install (2026-04-08) left the daemon running with
+#   allow_remote=false and the default /var/lib/deluged/Downloads path.
+#   This playbook is the config/auth retrofit to make it usable from
+#   the laptop GTK/console clients.
+#
+# Why a host service instead of k8s:
+#   The planned k3s deploy (InfiniteRoomLabs/qbittorrent-operator) was
+#   blocked on the musl+k8s-ndots:5 DNS bug that makes trackers fail to
+#   resolve from inside an Alpine-based pod. Same class of bug that hit
+#   Vaultwarden SMTP in 2026-03. A single-node stateful BT client
+#   doesn't benefit from orchestration; direct ZFS access and normal
+#   glibc DNS resolution win here.
+#
+# Exposure model:
+#   Daemon port 58846 and web UI 8112 are opened on LAN via
+#   irl_firewall_allowed_tcp_ports. Tailscale access is automatic via
+#   the interface-level allow rule in nftables.conf.j2.
+#
+#   BT peer port 6881 is pinned (no random port) so the firewall rule
+#   is predictable. Both TCP and UDP 6881 are opened for maximum peer
+#   reachability (DHT / uTP benefit from UDP).
+#
+# Prereqs:
+#   1. bw-sync has populated vault_deluge_admin_password in vault.yml
+#      (bw_item: deluge-admin in scripts/bw-sync-config.yaml)
+#   2. security-hardening.yml has been run to re-render nftables with
+#      the deluge ports open (phase0).
+#
+# Run standalone:
+#   uv run ansible-playbook playbooks/deluge.yml --tags deluge
+
+- name: Deluge BitTorrent daemon host service
+  hosts: homelab
+  become: true
+  tags: [phase1, deluge]
+
+  vars:
+    deluge_user: debian-deluged
+    deluge_config_dir: /var/lib/deluged/config
+    deluge_downloads_root: /media/root/storage1/nfs-share/downloads
+    deluge_incomplete_dir: "{{ deluge_downloads_root }}/incomplete"
+    deluge_complete_dir: "{{ deluge_downloads_root }}/complete"
+    deluge_daemon_port: 58846
+    deluge_web_port: 8112
+    deluge_bt_port: 6881
+
+  # No handlers: config edits happen between an explicit `state: stopped`
+  # and `state: started` to dodge deluged's shutdown-flush clobber, so a
+  # notified-handler restart at end-of-play would be both redundant and
+  # would re-introduce the clobber race.
+
+  tasks:
+    - name: Install deluge packages (daemon, web UI, console CLI, common)
+      ansible.builtin.apt:
+        name:
+          - deluged
+          - deluge-web
+          - deluge-console
+          - deluge-common
+        state: present
+        update_cache: true
+
+    - name: Ensure downloads root exists with deluge ownership
+      ansible.builtin.file:
+        path: "{{ deluge_downloads_root }}"
+        state: directory
+        owner: "{{ deluge_user }}"
+        group: "{{ deluge_user }}"
+        mode: "0755"
+
+    - name: Ensure complete/incomplete subdirs exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deluge_user }}"
+        group: "{{ deluge_user }}"
+        mode: "0755"
+      loop:
+        - "{{ deluge_incomplete_dir }}"
+        - "{{ deluge_complete_dir }}"
+
+    # IMPORTANT: deluged writes its in-memory config to core.conf on shutdown,
+    # which would clobber any edits made while the daemon is running. We must
+    # stop it BEFORE touching core.conf, then start it afterwards so it reads
+    # our settings fresh on startup. `systemctl restart` is NOT safe here --
+    # the stop half of a restart still triggers the shutdown-flush.
+    - name: Stop deluged before editing config (avoids shutdown-flush clobber)
+      ansible.builtin.systemd:
+        name: deluged.service
+        state: stopped
+
+    - name: Update core.conf (surgical key updates, preserves other settings)
+      ansible.builtin.script:
+        cmd: "{{ playbook_dir }}/../files/update-deluge-core-conf.py"
+      environment:
+        DELUGE_CORE_CONF: "{{ deluge_config_dir }}/core.conf"
+        DELUGE_DAEMON_PORT: "{{ deluge_daemon_port }}"
+        DELUGE_INCOMPLETE_DIR: "{{ deluge_incomplete_dir }}"
+        DELUGE_COMPLETE_DIR: "{{ deluge_complete_dir }}"
+        DELUGE_BT_PORT: "{{ deluge_bt_port }}"
+      register: deluge_core_result
+      changed_when: "'CHANGED' in deluge_core_result.stdout"
+
+    # auth file format: username:password:level (level 10 = admin).
+    # The existing localclient entry (auto-generated, used by local
+    # deluge-console without a password prompt) is preserved via
+    # lineinfile's regexp-based replacement.
+    - name: Set admin auth entry for remote clients
+      ansible.builtin.lineinfile:
+        path: "{{ deluge_config_dir }}/auth"
+        regexp: '^admin:'
+        line: "admin:{{ vault_deluge_admin_password }}:10"
+        owner: "{{ deluge_user }}"
+        group: "{{ deluge_user }}"
+        mode: "0600"
+
+    - name: Start deluged (reads fresh config)
+      ansible.builtin.systemd:
+        name: deluged.service
+        enabled: true
+        state: started
+
+    - name: Ensure deluge-web is enabled and running
+      ansible.builtin.systemd:
+        name: deluge-web.service
+        enabled: true
+        state: started

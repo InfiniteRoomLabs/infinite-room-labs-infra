@@ -58,6 +58,11 @@ secrets:
     k8s_secret: "authentik-bootstrap"
     k8s_key: "secret-key"
 
+  # Deluge BitTorrent daemon admin password (host-only service, no k8s secret).
+  # Consumed by ansible/playbooks/deluge.yml for the auth file entry.
+  - bw_item: "deluge-admin"
+    ansible_var: "vault_deluge_admin_password"
+
   - bw_item: "grafana-admin"
     ansible_var: "vault_grafana_admin_password"
     k8s_secret: "grafana-admin"

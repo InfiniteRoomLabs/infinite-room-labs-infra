@@ -12,6 +12,14 @@ irl_firewall_allowed_tcp_ports:
   - 2222   # Gitea SSH (Traefik TCP)
   - 6443   # k3s API server
   - 41641  # Tailscale direct connections
+  - 6881   # Deluge BitTorrent peer listen (LAN + Tailscale)
+  - 8112   # Deluge Web UI (LAN + Tailscale)
+  - 58846  # Deluge daemon RPC (LAN + Tailscale)
+
+# UDP ports are accepted unconditionally on the tailscale0 interface
+# (see nftables.conf.j2); this list is for LAN-originated UDP.
+irl_firewall_allowed_udp_ports:
+  - 6881   # Deluge BitTorrent DHT / uTP / UDP trackers
 
 # NFS -- allowed networks (LAN + Tailscale)
 irl_nfs_allowed_subnets:

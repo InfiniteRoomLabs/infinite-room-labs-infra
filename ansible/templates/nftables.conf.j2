@@ -34,6 +34,11 @@ table inet filter {
         tcp dport {{ port }} accept
 {% endfor %}
 
+        # Allow specific UDP ports from any interface (optional)
+{% for port in (irl_firewall_allowed_udp_ports | default([])) %}
+        udp dport {{ port }} accept
+{% endfor %}
+
         # Log dropped packets (rate limited)
         limit rate 5/minute burst 5 packets log prefix "nftables-dropped: " level info
     }
