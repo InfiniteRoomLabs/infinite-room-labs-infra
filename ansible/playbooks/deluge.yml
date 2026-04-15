@@ -85,10 +85,60 @@
         state: directory
         owner: "{{ deluge_user }}"
         group: "{{ deluge_user }}"
-        mode: "0755"
+        mode: "0777"
       loop:
         - "{{ deluge_incomplete_dir }}"
         - "{{ deluge_complete_dir }}"
+
+    # The Debian-shipped deluged.service sets UMask=007, which makes all
+    # downloaded files/dirs owner+group only (0660/0770). The NFS export
+    # squashes client connections to UID/GID 1000 via all_squash+anonuid,
+    # and that squashed identity doesn't match the debian-deluged owner
+    # or group -- so the laptop would fall through to "other" perms on
+    # 0770 dirs and hit access-denied.
+    #
+    # Override to UMask=0000 so completed downloads land world-readable
+    # and -writable. The share is only reachable from LAN + Tailscale
+    # (per nfs exports + firewall rules), both trusted, so this matches
+    # the existing posture. Required for running the eXoDOS launcher
+    # directly over NFS from the laptop -- the launcher writes save
+    # games + per-game config back to disk.
+    - name: Ensure deluged systemd drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/deluged.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Write deluged UMask override drop-in
+      ansible.builtin.copy:
+        content: |
+          # Managed by ansible/playbooks/deluge.yml -- do not edit by hand.
+          # Overrides the Debian-shipped UMask=007 so downloaded files land
+          # world-accessible over NFS. See playbook for full rationale.
+          [Service]
+          UMask=0000
+        dest: /etc/systemd/system/deluged.service.d/override.conf
+        owner: root
+        group: root
+        mode: "0644"
+      register: deluge_umask_override
+
+    - name: Reload systemd so unit override takes effect
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: deluge_umask_override.changed
+
+    # One-time repair: existing downloads that landed before the UMask
+    # override are still 0770/0660 and the laptop can't read them through
+    # NFS squash. Re-chmod'ing recursively is idempotent (second-run is a
+    # no-op at the filesystem level). `a+rwX` adds rwx to dirs and rw to
+    # files without granting execute to regular files.
+    - name: Fix perms on pre-existing downloads (one-time repair, idempotent)
+      ansible.builtin.command:
+        cmd: chmod -R a+rwX {{ deluge_downloads_root }}
+      changed_when: false
 
     # IMPORTANT: deluged writes its in-memory config to core.conf on shutdown,
     # which would clobber any edits made while the daemon is running. We must
