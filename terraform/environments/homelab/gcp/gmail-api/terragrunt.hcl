@@ -5,9 +5,20 @@
 # (no google-provider resource creates a Gmail user-consent installed-app
 # client -- verified against hashicorp/google 7.x). See gmail-ai-broker README.
 
-include "root" {
-  path   = find_in_parent_folders("root.hcl")
-  expose = true
+# Local backend for now -- the TFC org has no workspaces yet and the DO leaf
+# follows the same pattern ("until TFC token refreshed"). Reconcile to the
+# root.hcl TFC backend when TFC is formally adopted. State persists in this
+# leaf dir (gitignored).
+generate "backend" {
+  path      = "backend.tf"
+  if_exists = "overwrite_terragrunt"
+  contents  = <<-EOF
+    terraform {
+      backend "local" {
+        path = "${get_terragrunt_dir()}/terraform.tfstate"
+      }
+    }
+  EOF
 }
 
 include "provider" {

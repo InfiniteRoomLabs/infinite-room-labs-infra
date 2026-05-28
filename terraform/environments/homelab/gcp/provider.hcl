@@ -6,6 +6,16 @@ generate "google_provider" {
   path      = "provider-google.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<-EOF
+    terraform {
+      required_version = ">= 1.5"
+      required_providers {
+        google = {
+          source  = "hashicorp/google"
+          version = "~> 7.0"
+        }
+      }
+    }
+
     variable "gcp_project_id" {
       type        = string
       description = "GCP project the resources belong to."
