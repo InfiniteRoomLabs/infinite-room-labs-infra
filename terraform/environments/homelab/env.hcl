@@ -13,6 +13,10 @@ locals {
   # ── Cloudflare (non-sensitive) ──────────────────────────────────
   cloudflare_domain = "infiniteroomlabs.cloud"
 
+  # ── Google Cloud (non-sensitive) ────────────────────────────────
+  # Provider auths via Application Default Credentials (gcloud login).
+  gcp_project_id = "infinite-room-labs"
+
   # ── DNS records (IP content comes from env var at leaf level) ───
   homelab_dns_records = [
     { name = "git.lab",     type = "A", proxied = false },
