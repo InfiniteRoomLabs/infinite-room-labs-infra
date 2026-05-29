@@ -53,9 +53,10 @@ docs/runbooks/                          # Incident runbooks
 ## Secrets
 
 - **Source of truth**: Bitwarden vault, `IRL/` folder tree.
-- **Sync tool**: `../scripts/bw-sync.sh` — the only authorized write path to `vault.yml`.
+- **Sync tool**: `../scripts/bw-sync.sh` — the only authorized write path to `vault.yml`. Run via `mise run secrets:sync` (wraps it in `fnox exec` so `BW_SESSION` is present).
 - **vault.yml** (`inventory/group_vars/all/vault.yml`): Ansible Vault encrypted. Never edit manually.
-- **Vault password**: repo-local `.vault-password` file (gitignored). Set up with: `bw get notes ansible-vault-password > .vault-password`. direnv auto-exports `ANSIBLE_VAULT_PASSWORD_FILE` pointing to it.
+- **Vault password**: provided by fnox. `ansible.cfg` sets `vault_password_file = ../scripts/vault-pass.sh`, an executable that runs `fnox get ANSIBLE_VAULT_PASSWORD` (Bitwarden item `ansible-vault-password`). No `.vault-password` file, no direnv. Run local ansible from `ansible/` so the relative path resolves. The legacy Docker runner resolves the password on the host via fnox and mounts it (fnox is absent inside the container).
+- **fnox session**: the vault-password client needs `BW_SESSION`, sourced from fnox (age-backed) automatically. If missing, run `bw-unlock` (fish) or seed it: `fnox set BW_SESSION --provider age -g`.
 - **Rotation policy**: 180 days for infra secrets, 365 days for service secrets. Full SOP: `docs/sops/rotate-secrets.md`.
 
 ## SSH Access

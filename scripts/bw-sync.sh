@@ -1,22 +1,24 @@
-#!/usr/bin/env bash
+#!/usr/bin/env -S usage bash
 set -euo pipefail
+
+#USAGE flag "--target <target>" help="Sync target (required unless --check-rotation/--verify-k8s)" {
+#USAGE   choices "ansible" "k8s" "both"
+#USAGE }
+#USAGE flag "--check-rotation" help="Report secrets past their rotation deadline"
+#USAGE flag "--verify-k8s" help="Verify K8s secrets match Bitwarden (read-only)"
+#USAGE flag "--dry-run" help="Preview changes without writing anything"
+#USAGE flag "--quiet" help="Suppress non-error output (for hook usage)"
 
 # scripts/bw-sync.sh
 # Syncs Bitwarden secrets to Ansible Vault and/or Kubernetes Secrets.
 # Uses bw-sync-config.yaml to define the secret-to-target mappings.
 #
-# Usage:
-#   scripts/bw-sync.sh --target ansible|k8s|both [OPTIONS]
+# Bitwarden remains the source of truth. The BW_SESSION token is sourced from
+# fnox (age-backed) -- see load_bw_session below. Arg parsing is handled by the
+# `usage` spec above (auto --help); flags arrive as $usage_target,
+# $usage_check_rotation, $usage_verify_k8s, $usage_dry_run, $usage_quiet.
 #
-# Options:
-#   --target ansible|k8s|both   Sync target(s)
-#   --check-rotation             Report secrets past rotation deadline
-#   --verify-k8s                 Verify K8s secrets match Bitwarden
-#   --dry-run                    Preview changes without writing
-#   --quiet                      Suppress non-error output
-#   -h, --help                   Show this help message and exit
-#
-# Dependencies: bw, jq, yq, sha256sum
+# Dependencies: bw, jq, yq, sha256sum, fnox
 # Optional:     kubectl (for --target k8s), ansible-vault (for --target ansible)
 
 # ---------------------------------------------------------------------------
@@ -25,7 +27,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/bw-sync-config.yaml"
-BW_SESSION_FILE="$HOME/.secrets/bw-session"
+BW_SESSION_FILE="$HOME/.bw_session"   # fish bw-unlock cache (fallback only)
 STATE_DIR="$HOME/.local/share/irl"
 STATE_FILE="$STATE_DIR/bw-sync-state.json"
 LOG_FILE="$STATE_DIR/bw-sync.log"
@@ -39,88 +41,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Defaults
+# Flags (parsed by the usage spec at the top of this file)
 # ---------------------------------------------------------------------------
-TARGET=""
-CHECK_ROTATION=false
-VERIFY_K8S=false
-DRY_RUN=false
-QUIET=false
+TARGET="${usage_target:-}"
+CHECK_ROTATION=false; [[ -n "${usage_check_rotation:-}" ]] && CHECK_ROTATION=true
+VERIFY_K8S=false;     [[ -n "${usage_verify_k8s:-}" ]] && VERIFY_K8S=true
+DRY_RUN=false;        [[ -n "${usage_dry_run:-}" ]] && DRY_RUN=true
+QUIET=false;          [[ -n "${usage_quiet:-}" ]] && QUIET=true
 
-# ---------------------------------------------------------------------------
-# Usage
-# ---------------------------------------------------------------------------
-usage() {
-  cat <<HELP
-Usage: $(basename "$0") --target ansible|k8s|both [OPTIONS]
-
-Sync Bitwarden secrets to Ansible Vault and/or Kubernetes Secrets.
-Reads mappings from: $CONFIG_FILE
-
-Targets:
-  ansible   Write encrypted ansible/inventory/group_vars/all/vault.yml
-  k8s       Apply kubectl secrets in the configured namespace
-  both      Both ansible and k8s
-
-Options:
-  --target ansible|k8s|both   Required unless using --check-rotation or --verify-k8s
-  --check-rotation             Report secrets past their rotation deadline
-  --verify-k8s                 Verify K8s secrets match Bitwarden (read-only)
-  --dry-run                    Show what would change without writing anything
-  --quiet                      Suppress non-error output (for hook usage)
-  -h, --help                   Show this help message and exit
-
-Environment:
-  BW_SESSION   Bitwarden session token (loaded from ~/.secrets/bw-session if unset)
-
-Exit codes:
-  0   All secrets synced successfully
-  1   One or more secrets failed to sync
-  2   Bitwarden is locked or unreachable
-
-Examples:
-  # Sync everything
-  scripts/bw-sync.sh --target both
-
-  # Preview Ansible changes without writing
-  scripts/bw-sync.sh --target ansible --dry-run
-
-  # Check rotation compliance
-  scripts/bw-sync.sh --check-rotation
-
-  # Verify K8s is in sync (no writes)
-  scripts/bw-sync.sh --verify-k8s
-HELP
-}
-
-# ---------------------------------------------------------------------------
-# Parse arguments
-# ---------------------------------------------------------------------------
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -h|--help)           usage; exit 0 ;;
-    --target)            TARGET="${2:-}"; shift 2 ;;
-    --check-rotation)    CHECK_ROTATION=true; shift ;;
-    --verify-k8s)        VERIFY_K8S=true; shift ;;
-    --dry-run)           DRY_RUN=true; shift ;;
-    --quiet)             QUIET=true; shift ;;
-    *)
-      echo "Unknown option: $1" >&2
-      usage >&2
-      exit 1
-      ;;
-  esac
-done
-
-# Validate argument combinations
+# Conditional requirement (usage validates the enum value of --target itself).
 if [[ -z "$TARGET" && "$CHECK_ROTATION" == false && "$VERIFY_K8S" == false ]]; then
   echo "Error: --target is required unless using --check-rotation or --verify-k8s" >&2
-  usage >&2
-  exit 1
-fi
-
-if [[ -n "$TARGET" ]] && [[ "$TARGET" != "ansible" && "$TARGET" != "k8s" && "$TARGET" != "both" ]]; then
-  echo "Error: --target must be ansible, k8s, or both (got: $TARGET)" >&2
   exit 1
 fi
 
@@ -183,17 +114,21 @@ check_deps() {
 # Bitwarden session
 # ---------------------------------------------------------------------------
 load_bw_session() {
-  if [[ -z "${BW_SESSION:-}" ]]; then
-    if [[ -f "$BW_SESSION_FILE" ]]; then
-      # shellcheck source=/dev/null
-      BW_SESSION=$(cat "$BW_SESSION_FILE")
-      export BW_SESSION
-    else
-      log_err "Error: BW_SESSION not set and $BW_SESSION_FILE not found."
-      log_err "Run: bw unlock --raw > ~/.secrets/bw-session"
-      exit 2
-    fi
+  [[ -n "${BW_SESSION:-}" ]] && return 0
+  # Prefer fnox (age-backed BW_SESSION secret).
+  if command -v fnox >/dev/null 2>&1; then
+    BW_SESSION="$(fnox get BW_SESSION 2>/dev/null || true)"
   fi
+  # Fall back to the fish `bw-unlock` session cache.
+  if [[ -z "${BW_SESSION:-}" && -f "$BW_SESSION_FILE" ]]; then
+    BW_SESSION="$(cat "$BW_SESSION_FILE")"
+  fi
+  if [[ -z "${BW_SESSION:-}" ]]; then
+    log_err "Error: BW_SESSION not set; 'fnox get BW_SESSION' failed and $BW_SESSION_FILE absent."
+    log_err "Unlock with: bw-unlock (fish), or seed fnox: fnox set BW_SESSION --provider age -g"
+    exit 2
+  fi
+  export BW_SESSION
 }
 
 # bw_retry CMD [ARGS...]

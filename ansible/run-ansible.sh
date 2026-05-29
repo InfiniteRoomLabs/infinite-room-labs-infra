@@ -1,22 +1,28 @@
-#!/usr/bin/env bash
+#!/usr/bin/env -S usage bash
 set -euo pipefail
+
+#USAGE cmd "playbook" help="Run ansible-playbook" { arg "<args>..." help="ansible-playbook args" }
+#USAGE cmd "galaxy" help="Run ansible-galaxy" { arg "<args>..." help="ansible-galaxy args" }
+#USAGE cmd "vault" help="Run ansible-vault" { arg "<args>..." help="ansible-vault args" }
+#USAGE cmd "helm" help="Run helm" { arg "<args>..." help="helm args" }
+#USAGE cmd "kubectl" help="Run kubectl" { arg "<args>..." help="kubectl args" }
+#USAGE cmd "shell" help="Open an interactive bash shell in the runner container"
 
 # ansible/run-ansible.sh
 # Wrapper that runs Ansible inside a Docker container so the operator's
-# workstation never needs a local Ansible install.
+# workstation never needs a local Ansible install. (Legacy path -- the
+# preferred local path is `cd ansible/ && uv run ansible-playbook ...`, which
+# reads the vault password via scripts/vault-pass.sh.)
 #
-# Usage:
-#   ./ansible/run-ansible.sh playbook site.yml [EXTRA ANSIBLE ARGS ...]
-#   ./ansible/run-ansible.sh galaxy install
-#   ./ansible/run-ansible.sh vault edit inventory/group_vars/all/vault.yml
-#   ./ansible/run-ansible.sh helm list -n irl
-#   ./ansible/run-ansible.sh kubectl get pods -n irl
-#   ./ansible/run-ansible.sh shell
+# Subcommands/args are parsed by the `usage` spec above (auto --help). The vault
+# password is resolved on the HOST via fnox into a temp file and mounted, since
+# fnox is not present inside the container. Run via `mise run ansible -- ...` or
+# `./scripts/with-secrets.sh ./ansible/run-ansible.sh ...` so BW_SESSION exists.
 #
 # Environment:
-#   ANSIBLE_VAULT_PASSWORD_FILE  Path to vault password file (optional)
-#   SSH_KEY                      Path to SSH private key (default: ~/.ssh/id_ed25519)
-#   KUBECONFIG                   Path to kubeconfig (default: ~/.kube/homelab.yaml)
+#   ANSIBLE_VAULT_PASSWORD_FILE  Vault password file (auto-resolved via fnox if unset)
+#   SSH_KEY                      SSH private key (default: ~/.ssh/id_ed25519)
+#   KUBECONFIG                   kubeconfig (default: ~/.kube/homelab.yaml)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -54,6 +60,24 @@ DOCKER_ARGS+=(
 if [[ -f "$KUBECONFIG_PATH" ]]; then
   DOCKER_ARGS+=(-v "$KUBECONFIG_PATH:/root/.kube/config:ro")
   DOCKER_ARGS+=(-e "KUBECONFIG=/root/.kube/config")
+fi
+
+# Resolve the vault password on the host via fnox (the container has no fnox).
+# Writes a locked-down temp file, removed on exit. Mirrors the old mounted
+# .vault-password. Skipped if ANSIBLE_VAULT_PASSWORD_FILE is already set.
+VAULT_PASS_TMP=""
+cleanup_vault_tmp() { [[ -n "$VAULT_PASS_TMP" && -f "$VAULT_PASS_TMP" ]] && rm -f "$VAULT_PASS_TMP"; }
+trap cleanup_vault_tmp EXIT
+
+if [[ -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]] && command -v fnox >/dev/null 2>&1; then
+  export BW_SESSION="${BW_SESSION:-$(fnox get BW_SESSION 2>/dev/null || true)}"
+  if _vp="$(fnox get ANSIBLE_VAULT_PASSWORD 2>/dev/null)" && [[ -n "$_vp" ]]; then
+    VAULT_PASS_TMP="$(mktemp)"
+    chmod 600 "$VAULT_PASS_TMP"
+    printf '%s' "$_vp" > "$VAULT_PASS_TMP"
+    unset _vp
+    ANSIBLE_VAULT_PASSWORD_FILE="$VAULT_PASS_TMP"
+  fi
 fi
 
 # Pass through vault password file if set

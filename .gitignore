@@ -31,13 +31,16 @@ override.tf.json
 backend.tf
 providers.tf
 
-# Environment variables (secrets)
+# Environment variables (legacy -- superseded by fnox; kept ignored for safety)
 .env
 .env.*
 !.env.example
-!.envrc
 
-# Ansible vault password (repo-local secret file)
+# fnox local overrides (gitignored; encrypted project fnox.toml IS committed)
+fnox.local.toml
+fnox.*.local.toml
+
+# Ansible vault password (legacy repo-local secret file -- now via fnox)
 .vault-password
 
 # Ansible Vault (encrypted secrets -- use vault.yml.example as template)

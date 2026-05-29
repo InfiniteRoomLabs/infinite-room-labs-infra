@@ -1,18 +1,24 @@
 ---
 name: manage-secrets
 description: >
-  Manage secrets across Bitwarden, bw-sync-config.yaml, .envrc, .env.example, and .env.
+  Manage secrets across Bitwarden, bw-sync-config.yaml, and fnox.toml.
   Covers create, rotate, edit, move, delete, and sync verification. Use whenever the user
-  mentions credentials, passwords, API keys/tokens, ~/.secrets/, bitwarden, bw-sync,
+  mentions credentials, passwords, API keys/tokens, bitwarden, bw-sync, fnox,
   rotation policy, compromised passwords, decommissioning services that had credentials,
   or onboarding new services that need keys stored. Prefer triggering over not.
 ---
 
 # Secrets Management
 
-Manage the full lifecycle of secrets in the IRL infra repo. Secrets flow through a pipeline:
-source file → Bitwarden → bw-sync-config.yaml → Ansible Vault and/or Kubernetes.
-Some secrets also surface as environment variables via .envrc/.env for Terraform and other tools.
+Manage the full lifecycle of secrets in the IRL infra repo. Bitwarden is the single source
+of truth. Secrets reach consumers two ways:
+
+- **Cluster secrets**: Bitwarden -> `bw-sync-config.yaml` -> `bw-sync.sh` -> Ansible Vault
+  and/or Kubernetes Secrets.
+- **Env-var secrets** (Terraform/CLI tokens): declared in `fnox.toml`, fetched LIVE from
+  Bitwarden by fnox and injected per-command via `fnox exec` / `scripts/with-secrets.sh`.
+  There is no `.env` or `.envrc` -- nothing loads ambiently. Because fnox reads Bitwarden
+  live, rotating an env-var secret needs no separate sync step.
 
 ## Critical Rule
 
@@ -40,11 +46,13 @@ steps that surface in conversation.
 
 | File | Purpose |
 |------|---------|
-| `scripts/bw-sync-config.yaml` | Maps BW items to Ansible vars and K8s secrets |
-| `.envrc` | direnv config; loads .env, lists required env vars |
-| `.env.example` | Template with empty placeholders (committed) |
-| `.env` | Actual values (gitignored, loaded by direnv) |
+| `scripts/bw-sync-config.yaml` | Maps BW items to Ansible vars and K8s secrets (cluster secrets) |
+| `fnox.toml` | Declares env-var secrets and maps each to a BW item/field (committed; no values) |
+| `~/.config/fnox/config.toml` | Global fnox providers (bitwarden, age) + age-encrypted BW_SESSION |
+| `scripts/with-secrets.sh` | Wraps a command in `fnox exec` (also seeds BW_SESSION) |
+| `mise.toml` | Tool versions, task runner, and non-secret `[env]` identifiers |
 | `scripts/bw-sync.sh` | Syncs BW → Ansible Vault and/or K8s |
+| `.env.example` | Deprecated reference list of variable names (committed) |
 
 ## Bitwarden Folder Structure
 
@@ -89,16 +97,22 @@ Then execute:
 4. **Add to bw-sync-config.yaml** -- append a new entry under `secrets:` with the appropriate mappings.
    Use a comment header for the service section (e.g., `# ── SendGrid (transactional email) ──`).
    If ansible_var or k8s_secret is not needed, set them to `null`.
-5. **If an env var is needed:**
-   - Add to the `env_vars_required` line in `.envrc`
-   - Add a comment documenting the var in the `.envrc` comments block
-   - Add a placeholder line to `.env.example` with a section comment
-   - Append the actual value to `.env` (pipe from source file, never display)
-6. **Verify** -- check the env var is loaded via direnv (existence check only):
-   ```bash
-   direnv allow . 2>&1 && direnv exec . bash -c 'test -n "$VAR_NAME" && echo "set" || echo "not set"'
+5. **If an env var is needed (Terraform/CLI token):** declare it in `fnox.toml` under
+   `[secrets]`, mapping to the BW item. Use `value = "<bw_item>"` for a Login item
+   (password field) or `value = "<bw_item>/notes"` for a secure note. No `.env`/`.envrc`
+   edits -- fnox fetches from Bitwarden live. (If it is a non-secret identifier, add it to
+   `mise.toml [env]` instead.)
+   ```toml
+   [secrets]
+   MY_TOKEN = { provider = "bitwarden", value = "<bw_item>", description = "..." }
    ```
-7. **Offer to sync** -- ask the user if they want to run bw-sync.sh now:
+6. **Verify** -- fnox resolves it (length/existence only, never the value):
+   ```bash
+   fnox check                                   # config + provider validity
+   BW_SESSION="$(fnox get BW_SESSION)" bash -c 'v="$(fnox get MY_TOKEN)"; echo "len=${#v}"'
+   ```
+7. **Offer to sync** (cluster secrets only) -- env-var secrets need no sync. For cluster
+   secrets, ask if the user wants to run bw-sync.sh now:
    ```bash
    ./scripts/bw-sync.sh --target both
    ```
@@ -119,17 +133,20 @@ A rotation replaces the value of an existing secret without changing its plumbin
    | bw encode | bw edit item "$ITEM_ID" 2>/dev/null \
    | jq -r '"Updated: \(.name)"'
    ```
-3. **Update .env** if the secret has an env var -- replace the existing line (don't append a duplicate).
-4. **Verify** the env var is still loaded (existence check only).
-5. **Offer to sync** -- `./scripts/bw-sync.sh --target both` to push the new value to Ansible/K8s.
+3. **Env-var secrets need no further action** -- fnox reads the BW value live, so the new
+   value is picked up on the next `fnox exec`. Verify (length only):
+   `BW_SESSION="$(fnox get BW_SESSION)" bash -c 'v="$(fnox get VAR_NAME)"; echo len=${#v}'`.
+4. **Cluster secrets** -- offer to sync: `./scripts/bw-sync.sh --target both` (or
+   `mise run secrets:sync`) to push the new value into Ansible Vault / K8s.
 
 ### Edit Secret Metadata
 
 Change the mappings (ansible_var, k8s_secret, k8s_key) or env var name without changing the secret value.
 
-1. Edit the entry in `bw-sync-config.yaml`.
-2. If the env var name changed: update `.envrc`, `.env.example`, and `.env` (rename the variable).
-3. If the BW item name changed: update `bw_item` in the config and rename the item in BW:
+1. Edit the entry in `bw-sync-config.yaml` (cluster secrets) and/or `fnox.toml` (env-var secrets).
+2. If an env var name changed: rename the key in `fnox.toml [secrets]`.
+3. If the BW item name changed: update `bw_item` in `bw-sync-config.yaml` and/or the `value`
+   in `fnox.toml`, then rename the item in BW:
    ```bash
    bw get item "<id>" 2>/dev/null \
    | jq --arg name "new-name" '.name = $name' \
@@ -156,20 +173,15 @@ Move a BW item to a different folder (e.g., reorganizing from `IRL/Services` to 
 
 Removes a secret from everywhere. **Always confirm with the user before deleting.**
 
-1. **Remove from bw-sync-config.yaml** -- delete the entry.
-2. **Remove from .envrc** -- remove from `env_vars_required` and the comment.
-3. **Remove from .env.example** -- delete the placeholder line and section comment.
-4. **Remove from .env** -- delete the line with the actual value.
-5. **Delete from BW** -- only after user confirms:
+1. **Remove from bw-sync-config.yaml** -- delete the entry (cluster secrets).
+2. **Remove from fnox.toml** -- delete the `[secrets]` entry (env-var secrets). If it was a
+   non-secret identifier, remove it from `mise.toml [env]` instead.
+3. **Delete from BW** -- only after user confirms:
    ```bash
    bw delete item "<id>"
    ```
-6. **Offer to sync** -- to remove the K8s secret / Ansible var from targets.
-7. **Clean up source file** if it exists in `~/.secrets/`:
-   ```bash
-   rm ~/.secrets/.the-key
-   ```
-   Ask the user before deleting the source file.
+4. **Offer to sync** -- for cluster secrets, run bw-sync to remove the K8s secret / Ansible
+   var from targets. Env-var secrets need no sync.
 
 ## Sync Targets
 
@@ -189,6 +201,7 @@ The `bw-sync.sh` script pushes secrets from Bitwarden to downstream targets:
 - BW type `1` = Login. Always use this for secrets (bw-sync.sh reads `.login.password`).
 - `bw encode` takes JSON on stdin and base64-encodes it for the BW CLI.
 - After any BW write, run `bw sync` if you need to ensure other BW clients see the change.
-- The `.env` file is gitignored. The `.env.example` file is committed.
+- `fnox.toml` is committed (only BW references, no values); `fnox.local.toml` is gitignored.
+  The legacy `.env` is gitignored and deprecated; `.env.example` is a committed reference list.
 - Rotation policy: 180 days for infra secrets, 365 days for service secrets.
 - Full rotation SOP: `ansible/docs/sops/rotate-secrets.md`.

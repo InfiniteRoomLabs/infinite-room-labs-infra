@@ -12,21 +12,40 @@ docker/             Custom container image builds (Dockerfiles)
 scripts/            Bootstrap, secrets sync, and shared helpers
 docs/               Architecture plans, access guides, research
 tests/              Acceptance test suite (smoke, validate)
-.envrc              direnv auto-loader (loads .env)
-.env.example        Credential template
+mise.toml           Tool versions + task runner (mise)
+fnox.toml           Secret declarations (fnox, Bitwarden-backed)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide. See [TESTING.md](TESTING.md) for the acceptance test suite.
 
 ## Setup
 
-### 1. Configure credentials
+### 1. Install tools and credentials
+
+Tool versions are pinned in `mise.toml`. Install them once:
 
 ```bash
-cp .env.example .env
+mise install        # terraform, terragrunt, helm, kubectl, task, fnox, usage, age
 ```
 
-Fill in `.env` with your credentials:
+Secrets are managed by **fnox** (Bitwarden-backed) and declared in `fnox.toml`.
+They are injected per-command via `fnox exec` -- there is no `.env` or `.envrc`,
+and nothing is loaded into your shell just by entering the directory. Run
+secret-bearing commands through the mise tasks or the wrapper:
+
+```bash
+mise run bootstrap                       # fnox exec -> scripts/bootstrap.sh
+mise run secrets:sync                    # fnox exec -> bw-sync.sh --target both
+./scripts/with-secrets.sh terragrunt plan   # ad-hoc, in any leaf dir
+```
+
+The providers (Bitwarden + age) live in the global `~/.config/fnox/config.toml`;
+`BW_SESSION` is age-encrypted there and resolved automatically (unlock with
+`bw-unlock`, or seed via `fnox set BW_SESSION --provider age -g`). Non-secret
+identifiers (`CLOUDFLARE_ACCOUNT_ID`, `DOCKER_USERNAME`, `TAILSCALE_TAILNET`)
+live in `mise.toml [env]`.
+
+The secrets `fnox.toml` maps to Bitwarden (fill the BW items if missing):
 
 | Variable                         | Where to get it                                                                                                             |
 |----------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
@@ -43,12 +62,12 @@ Fill in `.env` with your credentials:
 | `HOMELAB_TAILSCALE_IP`           | Tailscale admin console > Machines > homelab node IP                                                                        |
 | `SENDGRID_API_KEY`               | SendGrid > Settings > API Keys > Create API Key                                                                             |
 
-> **Note:** `CLOUDFLARE_API_TOKEN` is no longer required for setup -- the bootstrap creates it. It can still be set as a fallback.
+> **Note:** `CLOUDFLARE_API_TOKEN` (the infra token) is produced by the bootstrap into terragrunt state and consumed downstream via terragrunt dependency -- it is not declared in `fnox.toml`.
 
-If you use direnv, run `direnv allow` to autoload the `.env` file. Otherwise, source it manually:
+Verify fnox can resolve everything (no values printed):
 
 ```bash
-export $(grep -v '^#' .env | xargs)
+fnox check          # validates all declared secrets + providers
 ```
 
 ### 2. Initialize submodules
@@ -209,7 +228,7 @@ Workspace names are derived from the directory path relative to `root.hcl`: `env
 
 All credentials are sourced from environment variables -- nothing is hardcoded. Both providers read their credentials from env vars automatically with zero provider-block configuration.
 
-The `.env` file is gitignored. The `.envrc` file (committed) loads it via direnv. The `.env.example` file (committed) documents which variables are needed.
+Those env vars are injected by **fnox** at command time (`fnox exec` / `scripts/with-secrets.sh`), never loaded ambiently. Run terragrunt under the wrapper: `./scripts/with-secrets.sh terragrunt plan`. Secret-to-Bitwarden mappings are declared in `fnox.toml`; `.env.example` is retained only as a reference list of variable names.
 
 ---
 
@@ -280,7 +299,7 @@ See [TESTING.md](TESTING.md) for the full acceptance test suite. Quick: `cd test
 ## Troubleshooting
 
 **`terragrunt init` fails with "Required token could not be found"**
-Your `TF_TOKEN_app_terraform_io` environment variable isn't set. Check your `.env` file and make sure direnv is active (`direnv allow`).
+`TF_TOKEN_app_terraform_io` isn't in the environment -- you ran terragrunt without fnox. Run it under the wrapper: `./scripts/with-secrets.sh terragrunt init`. Verify the mapping with `fnox check`.
 
 **`terragrunt validate` fails with "could not read state version outputs: resource not found"**
 The dependency workspace has no state yet. This happens when validating Porkbun nameservers before Cloudflare zones have been applied. Apply zones first, or use `terragrunt run-all` which handles ordering.
@@ -289,7 +308,7 @@ The dependency workspace has no state yet. This happens when validating Porkbun 
 Normal. Cloudflare needs to verify nameservers at the registrar match. Can take minutes to hours.
 
 **`get_env` error for `CLOUDFLARE_ACCOUNT_ID`**
-Environment variables aren't loaded. Run `direnv allow` or source your `.env` manually.
+`CLOUDFLARE_ACCOUNT_ID` is a non-secret id set in `mise.toml [env]` -- make sure mise is active (`mise install` / shims on PATH). Secret vars instead come from `fnox exec`.
 
 **Rate limiting on bulk zone creation**
 Reduce Terraform parallelism:

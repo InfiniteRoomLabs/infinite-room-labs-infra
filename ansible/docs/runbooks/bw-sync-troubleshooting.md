@@ -149,8 +149,11 @@ export BW_SESSION=$(bw unlock --raw)
 ```
 
 If your shell doesn't have `BW_SESSION` set in its env, the script
-falls back to reading `~/.secrets/bw-session`. If that file is stale
-(BW vault has been re-locked since), delete it and re-unlock.
+resolves it from fnox (`fnox get BW_SESSION`, age-encrypted), then falls
+back to the fish `bw-unlock` cache at `~/.bw_session`. If the session is
+stale (BW vault re-locked since), run `bw-unlock` and re-seed fnox:
+`fnox set BW_SESSION --provider age -g`. Easiest: run via
+`mise run secrets:sync`, which wraps the script in `fnox exec`.
 
 ### "ansible-vault: ERROR! The vault password file was not provided"
 
@@ -163,13 +166,15 @@ echo "$ANSIBLE_VAULT_PASSWORD_FILE"
 ls -la "$ANSIBLE_VAULT_PASSWORD_FILE"
 ```
 
-`ANSIBLE_VAULT_PASSWORD_FILE` is set by `direnv` from the repo's
-`.envrc`. If you ran the sync outside `direnv exec .` or in a shell
-where direnv hasn't loaded, the var will be empty.
+The vault password now comes from fnox via `ansible.cfg`
+(`vault_password_file = ../scripts/vault-pass.sh`). `bw-sync.sh` itself
+calls `ansible-vault` and resolves the password the same way. Ensure
+fnox can resolve it and `BW_SESSION` is available:
 
 ```bash
 cd ~/projects/infinite-room-labs/infinite-room-labs-infra
-direnv exec . ./scripts/bw-sync.sh --target ansible
+BW_SESSION="$(fnox get BW_SESSION)" fnox get ANSIBLE_VAULT_PASSWORD >/dev/null && echo OK
+mise run secrets:sync   # wraps bw-sync.sh in fnox exec
 ```
 
 ### "kubectl: command not found" during k8s sync

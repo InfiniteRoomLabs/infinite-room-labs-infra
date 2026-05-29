@@ -7,6 +7,14 @@
         "start"
       ],
       "env": {}
+    },
+    "fnox": {
+      "type": "stdio",
+      "command": "/home/deathnerd/.local/share/mise/shims/fnox",
+      "args": [
+        "mcp"
+      ],
+      "env": {}
     }
   }
 }

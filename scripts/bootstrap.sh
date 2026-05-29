@@ -1,18 +1,16 @@
-#!/usr/bin/env bash
+#!/usr/bin/env -S usage bash
 set -euo pipefail
+
+#USAGE flag "-p --plan" help="Run terragrunt plan instead of apply (dry run)"
+#USAGE flag "-s --skip-tfc" help="Skip the TFC workspace bootstrap step"
 
 # scripts/bootstrap.sh
 # Bootstraps the infrastructure by creating TFC workspaces and a scoped
-# Cloudflare API token. All configuration comes from environment variables
-# (12-factor). See .env.example for required values.
+# Cloudflare API token. Secrets are injected by fnox -- run this through
+# `mise run bootstrap` or `./scripts/with-secrets.sh ./scripts/bootstrap.sh`.
 #
-# Usage:
-#   scripts/bootstrap.sh [OPTIONS]
-#
-# Options:
-#   -h, --help       Show this help message and exit
-#   -p, --plan       Run terragrunt plan instead of apply (dry run)
-#   -s, --skip-tfc   Skip the TFC workspace bootstrap step
+# Arg parsing is handled by the `usage` spec above (auto --help); parsed flags
+# arrive as $usage_plan / $usage_skip_tfc.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -20,58 +18,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/includes/env.sh"
 
 # ---------------------------------------------------------------------------
-# Defaults
+# Flags (parsed by the usage spec at the top of this file)
 # ---------------------------------------------------------------------------
 ACTION="apply"
+[[ -n "${usage_plan:-}" ]] && ACTION="plan"
 SKIP_TFC=false
-
-# ---------------------------------------------------------------------------
-# Parse arguments
-# ---------------------------------------------------------------------------
-usage() {
-  cat <<HELP
-Usage: $(basename "$0") [OPTIONS]
-
-Bootstrap Infinite Room Labs infrastructure.
-
-Creates Terraform Cloud workspaces and a scoped Cloudflare API token that
-downstream resource groups use for zone and DNS management.
-
-Prerequisites:
-  Fill in .env (see .env.example) with at minimum:
-    CLOUDFLARE_BOOTSTRAP_API_TOKEN  Cloudflare token with "API Tokens Write"
-    CLOUDFLARE_ACCOUNT_ID           Cloudflare account ID
-    TF_TOKEN_app_terraform_io       Terraform Cloud API token
-
-Options:
-  -h, --help       Show this help message and exit
-  -p, --plan       Run terragrunt plan instead of apply (dry run)
-  -s, --skip-tfc   Skip the TFC workspace bootstrap step
-
-Examples:
-  # Full bootstrap
-  scripts/bootstrap.sh
-
-  # Dry run -- preview what would change
-  scripts/bootstrap.sh --plan
-
-  # Re-run only the Cloudflare token step
-  scripts/bootstrap.sh --skip-tfc
-HELP
-}
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -h|--help)   usage; exit 0 ;;
-    -p|--plan)   ACTION="plan"; shift ;;
-    -s|--skip-tfc) SKIP_TFC=true; shift ;;
-    *)
-      echo "Unknown option: $1" >&2
-      usage >&2
-      exit 1
-      ;;
-  esac
-done
+[[ -n "${usage_skip_tfc:-}" ]] && SKIP_TFC=true
 
 # ---------------------------------------------------------------------------
 # Load and validate environment

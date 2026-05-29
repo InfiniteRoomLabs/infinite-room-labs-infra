@@ -1,0 +1,48 @@
+# fnox.toml -- project secret declarations for infinite-room-labs-infra.
+#
+# Providers (bitwarden, age) are inherited from the global config
+# (~/.config/fnox/config.toml). Bitwarden is the source of truth; values are
+# fetched live and never stored here, so this file is safe to commit.
+#
+# Secrets are injected per-command via `fnox exec` (see scripts/with-secrets.sh)
+# -- never loaded ambiently. There is no .envrc.
+#
+# value syntax: "item" -> Login password field; "item/notes" -> secure-note body.
+
+[secrets]
+# ── Cloudflare ───────────────────────────────────────────────
+# Bootstrap token (scoped "API Tokens Write"); bootstrap.sh uses it to mint the
+# infra token. The infra token (CLOUDFLARE_API_TOKEN) is produced into terragrunt
+# state and consumed downstream via terragrunt dependency, NOT from fnox.
+# CLOUDFLARE_ACCOUNT_ID is a non-secret id -> mise.toml [env].
+CLOUDFLARE_BOOTSTRAP_API_TOKEN = { provider = "bitwarden", value = "cloudflare-create-tokens/notes", description = "Cloudflare bootstrap token (API Tokens Write)" }
+
+# ── Porkbun ──────────────────────────────────────────────────
+PORKBUN_API_KEY    = { provider = "bitwarden", value = "porkbun-api-key/notes" }
+PORKBUN_SECRET_KEY = { provider = "bitwarden", value = "porkbun-api-secret/notes" }
+
+# ── Terraform Cloud ──────────────────────────────────────────
+# Also exported as TFE_TOKEN by bootstrap.sh for the tfe provider.
+TF_TOKEN_app_terraform_io = { provider = "bitwarden", value = "terraform-cloud-org-api/notes", description = "Terraform Cloud API token" }
+
+# ── Docker Hub ───────────────────────────────────────────────
+# DOCKER_USERNAME is a non-secret id -> mise.toml [env].
+DOCKER_PASSWORD = { provider = "bitwarden", value = "docker-hub-pat/notes", description = "Docker Hub PAT" }
+
+# ── DigitalOcean ─────────────────────────────────────────────
+DIGITALOCEAN_TOKEN = { provider = "bitwarden", value = "digitalocean-api-token/notes" }
+
+# ── k3s ──────────────────────────────────────────────────────
+K3S_NODE_TOKEN = { provider = "bitwarden", value = "k3s-node-token/notes" }
+
+# ── Tailscale ────────────────────────────────────────────────
+# TAILSCALE_TAILNET is a non-secret id -> mise.toml [env].
+TAILSCALE_API_KEY  = { provider = "bitwarden", value = "tailscale-api-key" }
+TAILSCALE_AUTH_KEY = { provider = "bitwarden", value = "tailscale-homelab-authkey/notes", description = "Homelab Tailscale node-join auth key" }
+
+# ── SendGrid ─────────────────────────────────────────────────
+SENDGRID_API_KEY = { provider = "bitwarden", value = "sendgrid-api-key" }
+
+# ── Ansible Vault ────────────────────────────────────────────
+# Consumed by scripts/vault-pass.sh (ansible.cfg vault_password_file).
+ANSIBLE_VAULT_PASSWORD = { provider = "bitwarden", value = "ansible-vault-password/notes", description = "Ansible Vault decryption password" }

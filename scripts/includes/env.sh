@@ -7,7 +7,9 @@
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$_SCRIPT_DIR/../.." && pwd)"
 
-# load_env -- source the .env file at the repo root if it exists.
+# load_env -- secrets are injected by fnox (see scripts/with-secrets.sh), so
+# there is normally nothing to source here. A legacy repo-root .env is still
+# honored if present, for transition.
 load_env() {
   local env_file="$REPO_ROOT/.env"
   if [[ -f "$env_file" ]]; then
@@ -15,9 +17,8 @@ load_env() {
     # shellcheck source=/dev/null
     source "$env_file"
     set +a
-  else
-    echo "Warning: $env_file not found. Relying on existing environment." >&2
   fi
+  # Otherwise rely on the environment provided by `fnox exec` / with-secrets.sh.
 }
 
 # require_vars VAR1 VAR2 ... -- exit with an error listing any unset or empty vars.
@@ -34,7 +35,8 @@ require_vars() {
       echo "  - $var" >&2
     done
     echo "" >&2
-    echo "Copy .env.example to .env and fill in the values, or export them directly." >&2
+    echo "These are injected by fnox -- run via 'mise run <task>' or" >&2
+    echo "'./scripts/with-secrets.sh <cmd>'. Check mappings in fnox.toml." >&2
     exit 1
   fi
 }

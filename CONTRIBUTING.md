@@ -108,21 +108,25 @@ ANSIBLE_VAULT_PASSWORD_FILE=~/.secrets/ansible-vault-password \
 ```
 
 The runner needs:
-- `~/.ssh/id_ed25519` (SSH key for server access)
+- `~/.ssh/id_ed25519` (SSH key for server access; also the fnox age identity)
 - `~/.kube/homelab.yaml` (kubeconfig)
-- `~/.secrets/ansible-vault-password` (vault decryption)
+- fnox able to resolve `ANSIBLE_VAULT_PASSWORD` (vault decryption) -- the Docker
+  runner resolves it on the host and mounts it.
 
 ## Running Terraform
 
+Secrets are injected by fnox per-command (no `.envrc`). Wrap terragrunt with
+`scripts/with-secrets.sh`:
+
 ```bash
 cd terraform/environments/homelab/digitalocean/k3s-agent
-source ../../.envrc   # loads secrets from ~/.secrets/
-terragrunt init
-terragrunt plan
-terragrunt apply
+../../../../../scripts/with-secrets.sh terragrunt init
+../../../../../scripts/with-secrets.sh terragrunt plan
+../../../../../scripts/with-secrets.sh terragrunt apply
 ```
 
-Env vars needed are documented in `terraform/environments/homelab/.envrc`.
+The secrets terragrunt consumes are declared in `fnox.toml`; non-secret
+identifiers are in `mise.toml [env]`. Verify resolution with `fnox check`.
 
 ## Secrets Management
 
@@ -135,15 +139,28 @@ Env vars needed are documented in `terraform/environments/homelab/.envrc`.
 
 **Always**:
 - Store in Bitwarden first
-- Add to `bw-sync-config.yaml` for the sync pipeline
+- For cluster secrets: add to `bw-sync-config.yaml` for the sync pipeline
+- For env-var secrets (Terraform/CLI tokens): declare in `fnox.toml`
 - Use `existingSecret` pattern in Helm charts
 - Use `no_log: true` on Ansible tasks that handle secrets
 
 ### Secret flow
 
+Two consumers, one source of truth (Bitwarden):
+
 ```
-Bitwarden -> bw-sync.sh -> vault.yml (encrypted) -> Ansible playbooks -> K8s Secrets
+                         +-> bw-sync.sh -> vault.yml (encrypted) -> Ansible -> K8s Secrets
+Bitwarden (IRL/ tree) ---+
+                         +-> fnox (fnox.toml) -> fnox exec -> env vars -> Terraform / CLIs
 ```
+
+- **Cluster service secrets** (DB passwords, service tokens) flow through
+  `bw-sync.sh` into `vault.yml` and K8s Secrets, as before.
+- **Env-var secrets** (provider/API tokens) are declared in `fnox.toml` and
+  injected per-command via `fnox exec` (`scripts/with-secrets.sh`). No `.env`,
+  no `.envrc`, no ambient loading. `BW_SESSION` is age-encrypted in the global
+  fnox config (`~/.config/fnox/config.toml`) and resolved automatically.
+- See the `manage-secrets` skill for the full add/rotate/delete procedures.
 
 ## Node Labels
 
@@ -187,7 +204,7 @@ task validate   # Full: Goss + pytest + report
 - Feature branches: `feat/{description}`
 - PRs for non-trivial changes
 - Never rewrite shared branch history
-- Never commit `.claude/`, `.codex/`, `.envrc`, or secrets files
+- Never commit `.claude/`, `.codex/`, `fnox.local.toml`, or secrets files. (`fnox.toml` IS committed -- it holds only Bitwarden references, no values.)
 
 ## Common Gotchas
 

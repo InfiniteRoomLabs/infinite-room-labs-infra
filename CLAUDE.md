@@ -65,23 +65,31 @@ terraform/
 
 See `ansible/CLAUDE.md` for full Ansible documentation (layout, running, secrets, SSH access).
 
+### Tooling: mise + fnox + usage
+
+- **mise** (`mise.toml`) pins tool versions (terraform, terragrunt, helm, kubectl, task, fnox, usage, age) and provides the task runner (`mise run bootstrap | secrets:sync | ansible | test:smoke`). Non-secret identifiers live in `[env]`. Run `mise install` after cloning.
+- **fnox** is the secret-injection layer over Bitwarden for env-var secrets (Terraform/CLI tokens). Declared in `fnox.toml`; providers (bitwarden, age) in global `~/.config/fnox/config.toml`. Secrets are injected per-command via `fnox exec` / `scripts/with-secrets.sh` -- never ambiently. There is NO `.env`/`.envrc`. `BW_SESSION` is age-encrypted in the global fnox config.
+- **usage** drives arg parsing for `bootstrap.sh`, `bw-sync.sh`, and `run-ansible.sh` (shebang `#!/usr/bin/env -S usage bash`, `#USAGE` directives -- note: no space after `#`).
+
 ### Secrets Sync
 
-`scripts/bw-sync.sh` syncs secrets from Bitwarden to Ansible Vault and Kubernetes. It is the only authorized write path to `vault.yml`.
+Two consumers, one source (Bitwarden): cluster secrets flow through `bw-sync.sh`; env-var secrets through `fnox.toml`. `scripts/bw-sync.sh` is the only authorized write path to `vault.yml`.
 
 ```
 scripts/
   bw-sync.sh          # Sync script -- reads BW, writes to ansible vault and/or K8s
   bw-sync-config.yaml # Mapping of BW item names to ansible_var and k8s_secret targets
+  with-secrets.sh     # Wraps a command in `fnox exec` (+ seeds BW_SESSION)
+  vault-pass.sh       # Ansible vault-password client (fnox get ANSIBLE_VAULT_PASSWORD)
 ```
 
-Usage:
+Usage (prefer `mise run secrets:sync`, which wraps bw-sync in `fnox exec`):
 
 ```bash
-./scripts/bw-sync.sh --target both        # Sync to both Ansible Vault and Kubernetes
-./scripts/bw-sync.sh --dry-run --target both  # Preview without writing
-./scripts/bw-sync.sh --check-rotation     # Report secrets overdue for rotation
-./scripts/bw-sync.sh --verify-k8s        # Diff K8s secrets against Bitwarden
+mise run secrets:sync                         # Sync both (via fnox exec)
+./scripts/with-secrets.sh ./scripts/bw-sync.sh --dry-run --target both
+./scripts/with-secrets.sh ./scripts/bw-sync.sh --check-rotation
+./scripts/with-secrets.sh ./scripts/bw-sync.sh --verify-k8s
 ```
 
 Rotation policy: 180 days for infra secrets, 365 days for service secrets.
