@@ -44,16 +44,35 @@ paperless:
       cpu: "16000m"
 
   # ── Celery worker sizing (overrides chart default 2/2/2/1800) ──
-  # Bias toward WORKERS (throughput) over threads (per-doc latency) to clear a
-  # large intake queue faster. `env` is a map in bjw-s/common, so Helm deep-merges
-  # these onto the chart's env block -- only these 4 keys change.
-  # Watch item: if `kubectl top pod` shows RES per celeryd worker climbing past
-  # ~1.5G on your real large docs, drop TASK_WORKERS to 6 (and memory limit to 16Gi).
+  # `env` is a map in bjw-s/common, so Helm deep-merges these onto the chart's
+  # env block -- only these keys change.
+  #
+  # TWO independent parallelism knobs (do not confuse them):
+  #   TASK_WORKERS       = how many DOCUMENTS OCR at once (Celery concurrency).
+  #   THREADS_PER_WORKER = how many PAGES OCR at once WITHIN one doc
+  #                        (OCRmyPDF --jobs; Tesseract is ~1 thread/page).
+  # Invariant: TASK_WORKERS x THREADS_PER_WORKER <= host vCPU (Z600 = 24).
+  #
+  # The product is "peak OCR threads"; how you SPLIT it is a throughput-vs-latency
+  # choice. A single huge scan only ever uses THREADS_PER_WORKER threads -- so a
+  # WORKERS-heavy split (e.g. 8x2) leaves one 300-page scan crawling on 2 threads
+  # while 7 workers idle. That is what bit the 2026-06 bulk archival
+  # intake (a 295-page scan nearly hit the 3600s timeout at 2 threads).
+  #
+  # Profiles (pick per expected workload; keep product <= 24):
+  #   batch     8 x 2  -> max doc-throughput; WORST for a lone monster doc
+  #   balanced  4 x 5  -> default; clears batches AND OCRs a big scan ~2.5x faster
+  #   big-scan  2 x 10 -> for bulk huge multi-hundred-page scans; few docs at once
+  #
+  # Memory: each worker can spike ~1.5G on large scanned PDFs (Ghostscript page
+  # rasterization). 4 workers x ~1.5G = ~6G, well under the pod limit.
   env:
-    PAPERLESS_TASK_WORKERS: "8"        # 8 documents OCR'd in parallel
-    PAPERLESS_THREADS_PER_WORKER: "2"  # OCR threads per doc; 8 x 2 = ~16 cores peak
+    PAPERLESS_TASK_WORKERS: "4"        # balanced profile: 4 documents in parallel
+    PAPERLESS_THREADS_PER_WORKER: "5"  # 5 pages/doc in parallel; 4 x 5 = 20 cores peak
     PAPERLESS_WEBSERVER_WORKERS: "3"   # gunicorn workers for the UI/API
-    PAPERLESS_WORKER_TIMEOUT: "3600"   # large scans exceed the 1800s default and get killed
+    PAPERLESS_WORKER_TIMEOUT: "7200"   # 2h hard limit; a 300-page 680dpi scan can
+                                       # exceed 3600s even parallelized. Tune down
+                                       # only if you never ingest monster scans.
 
 # ── Traefik IngressRoute (rendered by chart's own template) ──
 ingress:
