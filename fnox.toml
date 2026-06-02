@@ -45,4 +45,7 @@ SENDGRID_API_KEY = { provider = "bitwarden", value = "sendgrid-api-key" }
 
 # ── Ansible Vault ────────────────────────────────────────────
 # Consumed by scripts/vault-pass.sh (ansible.cfg vault_password_file).
-ANSIBLE_VAULT_PASSWORD = { provider = "bitwarden", value = "ansible-vault-password/notes", description = "Ansible Vault decryption password" }
+# NOTE: value is the Login PASSWORD field (no `/notes`). The item's notes field
+# holds rotation metadata JSON, not the password -- `/notes` here silently fed
+# that JSON to ansible and broke vault decryption.
+ANSIBLE_VAULT_PASSWORD = { provider = "bitwarden", value = "ansible-vault-password", description = "Ansible Vault decryption password" }
