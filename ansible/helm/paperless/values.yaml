@@ -28,11 +28,32 @@ paperless:
 
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "250m"
+      # Modest reservation -- single-node homelab, the scheduler isn't bin-packing.
+      # The LIMIT (not the request) is what gates OCR throughput here.
+      memory: "1Gi"
+      cpu: "1000m"
     limits:
-      memory: "2Gi"
-      cpu: "2000m"
+      # Sized for 8 task workers x 2 threads (~16 parallel OCR threads).
+      # CPU: the OLD 2000m limit hard-throttled the whole pod via CFS -- bumping
+      # PAPERLESS_TASK_WORKERS without raising this does NOTHING (more workers just
+      # contend for the same 2 cores). 16 cores leaves 8 of the node's 24 for the
+      # system + idle neighbors.
+      # Memory: each worker can spike ~1G on large scanned PDFs (Ghostscript page
+      # rasters); 20Gi covers the 8x2 worst case within the node's ~22G free headroom.
+      memory: "20Gi"
+      cpu: "16000m"
+
+  # ── Celery worker sizing (overrides chart default 2/2/2/1800) ──
+  # Bias toward WORKERS (throughput) over threads (per-doc latency) to clear a
+  # large intake queue faster. `env` is a map in bjw-s/common, so Helm deep-merges
+  # these onto the chart's env block -- only these 4 keys change.
+  # Watch item: if `kubectl top pod` shows RES per celeryd worker climbing past
+  # ~1.5G on your real large docs, drop TASK_WORKERS to 6 (and memory limit to 16Gi).
+  env:
+    PAPERLESS_TASK_WORKERS: "8"        # 8 documents OCR'd in parallel
+    PAPERLESS_THREADS_PER_WORKER: "2"  # OCR threads per doc; 8 x 2 = ~16 cores peak
+    PAPERLESS_WEBSERVER_WORKERS: "3"   # gunicorn workers for the UI/API
+    PAPERLESS_WORKER_TIMEOUT: "3600"   # large scans exceed the 1800s default and get killed
 
 # ── Traefik IngressRoute (rendered by chart's own template) ──
 ingress:
