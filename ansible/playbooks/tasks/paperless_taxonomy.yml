@@ -1,0 +1,59 @@
+---
+# tasks/paperless_taxonomy.yml
+# Idempotently apply ONE Paperless taxonomy kind to the REST API.
+# Included (looped) by playbooks/paperless-config.yml with loop_var `tax`:
+#   tax.kind  -> api path segment (correspondents | document_types | tags)
+#   tax.items -> the config-as-data list for that kind
+# Requires play vars: paperless_api, paperless_hdr, alg_map.
+
+- name: "[{{ tax.kind }}] Get existing"
+  ansible.builtin.uri:
+    url: "{{ paperless_api }}/api/{{ tax.kind }}/?page_size=200"
+    headers: "{{ paperless_hdr }}"
+    status_code: 200
+  register: tax_existing
+  no_log: true
+
+- name: "[{{ tax.kind }}] Build name -> object map"
+  ansible.builtin.set_fact:
+    tax_by_name: "{{ dict(tax_existing.json.results | map(attribute='name') | zip(tax_existing.json.results)) }}"
+
+- name: "[{{ tax.kind }}] Create missing"
+  ansible.builtin.uri:
+    url: "{{ paperless_api }}/api/{{ tax.kind }}/"
+    method: POST
+    headers: "{{ paperless_hdr }}"
+    body_format: json
+    body: >-
+      {{ {'name': item.name,
+          'matching_algorithm': alg_map[item.algorithm],
+          'match': item.match | default(''),
+          'is_insensitive': item.insensitive | default(true)}
+         | combine({'color': item.color} if item.color is defined else {}) }}
+    status_code: 201
+  loop: "{{ tax.items }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in tax_by_name
+
+- name: "[{{ tax.kind }}] Update drifted (match / algorithm / color)"
+  ansible.builtin.uri:
+    url: "{{ paperless_api }}/api/{{ tax.kind }}/{{ tax_by_name[item.name].id }}/"
+    method: PATCH
+    headers: "{{ paperless_hdr }}"
+    body_format: json
+    body: >-
+      {{ {'matching_algorithm': alg_map[item.algorithm],
+          'match': item.match | default('')}
+         | combine({'color': item.color} if item.color is defined else {}) }}
+    status_code: 200
+  loop: "{{ tax.items }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    _cur: "{{ tax_by_name[item.name] | default({}) }}"
+  when:
+    - item.name in tax_by_name
+    - (_cur.matching_algorithm != alg_map[item.algorithm])
+      or (_cur.match | default('') != (item.match | default('')))
+      or (item.color is defined and (_cur.color | default('')) != item.color)

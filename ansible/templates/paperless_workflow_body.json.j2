@@ -1,0 +1,32 @@
+{# Renders a Paperless /api/workflows/ request body from a config-as-data workflow.
+   Expects: wf (one paperless_config.workflows entry), and the name->id maps
+   tag_ids / corr_ids / type_ids (built by playbooks/paperless-config.yml). #}
+{
+  "name": {{ wf.name | to_json }},
+  "order": {{ wf.order | default(100) }},
+  "enabled": {{ (wf.enabled | default(true)) | to_json }},
+  "triggers": [
+{% for t in wf.triggers %}
+    {
+      "type": {{ t.type }}
+{%- if t.sources is defined %}, "sources": {{ t.sources | to_json }}{% endif %}
+{%- if t.filter_filename is defined %}, "filter_filename": {{ t.filter_filename | to_json }}{% endif %}
+{%- if t.filter_path is defined %}, "filter_path": {{ t.filter_path | to_json }}{% endif %}
+{%- if t.match is defined %}, "match": {{ t.match | to_json }}, "matching_algorithm": {{ alg_map[t.algorithm | default('any')] }}{% endif %}
+{%- if t.filter_has_correspondent is defined %}, "filter_has_correspondent": {{ corr_ids[t.filter_has_correspondent] }}{% endif %}
+{%- if t.filter_has_document_type is defined %}, "filter_has_document_type": {{ type_ids[t.filter_has_document_type] }}{% endif %}
+    }{{ "," if not loop.last else "" }}
+{% endfor %}
+  ],
+  "actions": [
+{% for a in wf.actions %}
+    {
+      "type": {{ a.type }}
+{%- if a.assign_tags is defined %}, "assign_tags": {{ a.assign_tags | map('extract', tag_ids) | list | to_json }}{% endif %}
+{%- if a.assign_correspondent is defined %}, "assign_correspondent": {{ corr_ids[a.assign_correspondent] }}{% endif %}
+{%- if a.assign_document_type is defined %}, "assign_document_type": {{ type_ids[a.assign_document_type] }}{% endif %}
+{%- if a.assign_title is defined %}, "assign_title": {{ a.assign_title | to_json }}{% endif %}
+    }{{ "," if not loop.last else "" }}
+{% endfor %}
+  ]
+}

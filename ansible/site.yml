@@ -82,6 +82,12 @@
   ansible.builtin.import_playbook: playbooks/helm-deploy.yml
   tags: [phase2, phase3, phase4, phase5, helm]
 
+# Paperless app-layer config (taxonomy + workflows) via REST API, after its Helm
+# deploy. Idempotent; safe to re-run. Standalone: --tags paperless-config.
+- name: "Phase 3: Paperless-ngx app-layer configuration"
+  ansible.builtin.import_playbook: playbooks/paperless-config.yml
+  tags: [phase3, paperless, paperless-config]
+
 # ── Phase 5: Agent Integration ───────────────────────────────────────
 # These remain Ansible-managed (not Helm) -- they configure the OS layer,
 # not containerized services.

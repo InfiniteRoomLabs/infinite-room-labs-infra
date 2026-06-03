@@ -152,6 +152,14 @@ secrets:
     k8s_secret: "paperless-backup-s3"
     k8s_key: "AWS_SECRET_ACCESS_KEY"
 
+  # REST API token used by playbooks/paperless-config.yml to apply taxonomy +
+  # workflows. Value = the existing ~/.secrets/.paperless-api-token (also used by
+  # the paperless MCP wrapper) -- no new token minted.
+  - bw_item: "paperless-api-token"
+    ansible_var: "vault_paperless_api_token"
+    k8s_secret: "paperless-secrets"
+    k8s_key: "api-token"
+
   # ── Vaultwarden (password manager) ─────────────────────────
   - bw_item: "pg-vaultwarden"
     ansible_var: "vault_pg_passwords.vaultwarden"

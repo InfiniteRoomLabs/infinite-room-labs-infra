@@ -1,0 +1,130 @@
+---
+# playbooks/paperless-config.yml
+# ==============================
+# Idempotent post-deploy configuration of Paperless-ngx app-layer classification
+# (correspondents, document types, tags, and workflows) from config-as-data in
+# inventory/group_vars/all/paperless_config.yml, applied via the REST API.
+#
+# WHY: ansible/docs/sops/restore-paperless.md truncates the tag / correspondent /
+# document_type / documents_workflow* tables on restore, so a DB rebuild loses the
+# entire classification setup. This play reproduces it.
+#
+# Runs ON the homelab host (like helm-deploy.yml) and reaches Paperless via the
+# NodePort on localhost (svc nodePort 30800 -> container 8000).
+#
+# Prereq: vault_paperless_api_token (BW item `paperless-api-token` -> bw-sync).
+#
+# Run standalone:
+#   cd ansible && uv run ansible-playbook playbooks/paperless-config.yml
+# Or via site.yml: --tags paperless-config
+#
+# Mail-account / mail-rule monitoring is intentionally DEFERRED (printer scans are
+# the primary ingestion path). See docs/plans/2026-06-02-proactive-paperless.md.
+
+- name: Paperless-ngx app-layer configuration
+  hosts: homelab
+  become: true
+  gather_facts: false
+  tags: [phase3, paperless, paperless-config]
+
+  vars:
+    paperless_api: "http://127.0.0.1:30800"
+    alg_map: { none: 0, any: 1, all: 2, exact: 3, regex: 4, fuzzy: 5, auto: 6 }
+    paperless_hdr:
+      Authorization: "Token {{ vault_paperless_api_token | default('') }}"
+      Content-Type: "application/json"
+
+  tasks:
+    - name: Require the Paperless API token
+      ansible.builtin.assert:
+        that:
+          - vault_paperless_api_token is defined
+          - vault_paperless_api_token | length > 0
+        fail_msg: >-
+          vault_paperless_api_token is missing. Create Bitwarden item
+          'paperless-api-token' (value = ~/.secrets/.paperless-api-token) then run
+          ./scripts/bw-sync.sh --target both.
+
+    - name: Wait for the Paperless API to be ready
+      ansible.builtin.uri:
+        url: "{{ paperless_api }}/api/"
+        headers: "{{ paperless_hdr }}"
+        status_code: 200
+      register: pl_health
+      until: pl_health.status == 200
+      retries: 30
+      delay: 5
+      no_log: true
+
+    # ── Taxonomy (correspondents, document types, tags) ──
+    - name: Apply taxonomy
+      ansible.builtin.include_tasks: tasks/paperless_taxonomy.yml
+      loop:
+        - { kind: "correspondents", items: "{{ paperless_config.correspondents }}" }
+        - { kind: "document_types", items: "{{ paperless_config.document_types }}" }
+        - { kind: "tags", items: "{{ paperless_config.tags }}" }
+      loop_control:
+        loop_var: tax
+        label: "{{ tax.kind }}"
+
+    # ── Workflows ──
+    - name: Fetch tag/correspondent/type lists for name->id resolution
+      ansible.builtin.uri:
+        url: "{{ paperless_api }}/api/{{ item }}/?page_size=200"
+        headers: "{{ paperless_hdr }}"
+        status_code: 200
+      register: wf_lookup
+      loop: ["tags", "correspondents", "document_types"]
+      no_log: true
+
+    - name: Build name->id maps
+      ansible.builtin.set_fact:
+        tag_ids: "{{ dict(wf_lookup.results[0].json.results | map(attribute='name') | zip(wf_lookup.results[0].json.results | map(attribute='id'))) }}"
+        corr_ids: "{{ dict(wf_lookup.results[1].json.results | map(attribute='name') | zip(wf_lookup.results[1].json.results | map(attribute='id'))) }}"
+        type_ids: "{{ dict(wf_lookup.results[2].json.results | map(attribute='name') | zip(wf_lookup.results[2].json.results | map(attribute='id'))) }}"
+
+    - name: Get existing workflows
+      ansible.builtin.uri:
+        url: "{{ paperless_api }}/api/workflows/?page_size=200"
+        headers: "{{ paperless_hdr }}"
+        status_code: 200
+      register: wf_existing
+      no_log: true
+
+    - name: Build workflow name->id map
+      ansible.builtin.set_fact:
+        wf_by_name: "{{ dict(wf_existing.json.results | map(attribute='name') | zip(wf_existing.json.results | map(attribute='id'))) }}"
+
+    - name: Create or update workflows
+      ansible.builtin.uri:
+        url: "{{ paperless_api }}/api/workflows/{{ (wf_by_name[item.name] ~ '/') if item.name in wf_by_name else '' }}"
+        method: "{{ 'PATCH' if item.name in wf_by_name else 'POST' }}"
+        headers: "{{ paperless_hdr }}"
+        body_format: json
+        body: "{{ lookup('template', playbook_dir + '/../templates/paperless_workflow_body.json.j2') }}"
+        status_code: [200, 201]
+      loop: "{{ paperless_config.workflows | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
+      vars:
+        wf: "{{ item }}"
+      # Config is enforced every run (PATCH applies current desired state);
+      # report 'changed' only on first create to keep re-runs quiet.
+      changed_when: item.name not in wf_by_name
+
+    # ── Assert ──
+    - name: Verify object counts meet the configured minimums
+      ansible.builtin.uri:
+        url: "{{ paperless_api }}/api/{{ item.kind }}/?page_size=1"
+        headers: "{{ paperless_hdr }}"
+        status_code: 200
+      register: pl_counts
+      loop:
+        - { kind: "correspondents", min: "{{ paperless_config.correspondents | length }}" }
+        - { kind: "document_types", min: "{{ paperless_config.document_types | length }}" }
+        - { kind: "tags", min: "{{ paperless_config.tags | length }}" }
+        - { kind: "workflows", min: "{{ paperless_config.workflows | default([]) | length }}" }
+      loop_control:
+        label: "{{ item.kind }}"
+      failed_when: pl_counts.json.count | int < item.min | int
+      no_log: true
