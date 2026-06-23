@@ -1,0 +1,45 @@
+---
+# playbooks/laptop.yml
+# ====================
+# Laptop-local automations for THIS machine (connection: local, no become).
+# Deliberately NOT imported by site.yml -- the homelab orchestrator must never
+# touch the personal laptop. Run it on its own.
+#
+# What: clones the standalone `threadwatch` tool repo and installs its systemd
+# --user timer (hourly read-only `claude -p` knowledge-thread scanner).
+# Secrets: none of its own. It still inherits the repo's vault-password
+# mechanism via group_vars/all/vault.yml like every host, so fnox/BW_SESSION
+# must be available when you run it.
+#
+# Run standalone (from ansible/):
+#   uv run ansible-playbook playbooks/laptop.yml
+
+- name: Laptop-local automations
+  hosts: laptop
+  become: false
+  gather_facts: true
+  tags: [laptop]
+  vars:
+    threadwatch_repo: "https://github.com/InfiniteRoomLabs/threadwatch.git"
+    threadwatch_version: main
+    threadwatch_dir: "{{ ansible_user_dir }}/.local/share/threadwatch"
+
+  tasks:
+    # -- threadwatch ----------------------------------------------------------
+    - name: Clone/update the threadwatch tool repo
+      ansible.builtin.git:
+        repo: "{{ threadwatch_repo }}"
+        dest: "{{ threadwatch_dir }}"
+        version: "{{ threadwatch_version }}"
+        update: true
+
+    - name: Install and enable the threadwatch user timer
+      ansible.builtin.command:
+        cmd: ./install.sh --enable
+        chdir: "{{ threadwatch_dir }}"
+      # systemctl --user needs the session bus; these facts exist post-gather.
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
+      register: tw_install
+      changed_when: "'installed' in tw_install.stdout"
