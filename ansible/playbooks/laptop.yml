@@ -21,7 +21,10 @@
   tags: [laptop]
   vars:
     threadwatch_repo: "https://github.com/InfiniteRoomLabs/threadwatch.git"
-    threadwatch_version: main
+    # Pin to an immutable commit, never a moving branch: the play runs the cloned
+    # install.sh, so an unpinned ref is remote code execution of whatever HEAD becomes.
+    # Bump this SHA deliberately after reviewing a new tag.
+    threadwatch_version: "36001f03084a168ebe3bc1f74dc9dddc5c16fcee"  # v0.1.2
     threadwatch_dir: "{{ ansible_user_dir }}/.local/share/threadwatch"
 
   tasks:
