@@ -5,8 +5,12 @@
 # Deliberately NOT imported by site.yml -- the homelab orchestrator must never
 # touch the personal laptop. Run it on its own.
 #
-# What: clones the standalone `threadwatch` tool repo and installs its systemd
-# --user timer (hourly read-only `claude -p` knowledge-thread scanner).
+# What: installs two laptop --user timers:
+#   - threadwatch (5-hourly read-only `claude -p` knowledge-thread scanner),
+#     cloned + pinned from the standalone threadwatch repo;
+#   - claudesync (hourly claude.ai export + git commit), whose units live in the
+#     local ~/claude-ai-export repo and are symlinked into place (no clone -- the
+#     timer commits INTO that live repo).
 # Secrets: none of its own. It still inherits the repo's vault-password
 # mechanism via group_vars/all/vault.yml like every host, so fnox/BW_SESSION
 # must be available when you run it.
@@ -24,8 +28,11 @@
     # Pin to an immutable commit, never a moving branch: the play runs the cloned
     # install.sh, so an unpinned ref is remote code execution of whatever HEAD becomes.
     # Bump this SHA deliberately after reviewing a new tag.
-    threadwatch_version: "36001f03084a168ebe3bc1f74dc9dddc5c16fcee"  # v0.1.2
+    threadwatch_version: "bc1b1fdd4f3bd8254b881f48217288c74b0954de"  # v0.1.3
     threadwatch_dir: "{{ ansible_user_dir }}/.local/share/threadwatch"
+    # claudesync units live in the user's live claude-ai-export repo (not cloned):
+    # the timer commits INTO that repo, so it must run against the canonical checkout.
+    claudesync_dir: "{{ ansible_user_dir }}/claude-ai-export"
 
   tasks:
     # -- threadwatch ----------------------------------------------------------
@@ -46,3 +53,35 @@
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
       register: tw_install
       changed_when: "'installed' in tw_install.stdout"
+
+    # -- claudesync (units live in the local claude-ai-export repo) ------------
+    - name: Check the claudesync units are present in claude-ai-export
+      ansible.builtin.stat:
+        path: "{{ claudesync_dir }}/systemd/claudesync.timer"
+      register: cs_unit
+
+    - name: Fail clearly if claude-ai-export units are missing
+      ansible.builtin.fail:
+        msg: "{{ claudesync_dir }}/systemd/claudesync.timer not found -- is the repo present and committed?"
+      when: not cs_unit.stat.exists
+
+    - name: Symlink the claudesync user units into place
+      ansible.builtin.file:
+        src: "{{ claudesync_dir }}/systemd/{{ item }}"
+        dest: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - claudesync.service
+        - claudesync.timer
+
+    - name: Enable and start the claudesync timer
+      ansible.builtin.systemd_service:
+        name: claudesync.timer
+        scope: user
+        enabled: true
+        state: started
+        daemon_reload: true
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
