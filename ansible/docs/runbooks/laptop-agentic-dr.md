@@ -17,9 +17,9 @@ operations to get it running again.
 Data archives (the "knowledge"): `~/claude-ai-export`, `~/private-email-archive`,
 `~/threadwatch`.
 
-Backup location: homelab ZFS share `/media/root/storage1/nfs-share/laptop-knowledge-backup`,
-reached from the laptop via the NFS automount at `/mnt/homelab-nfs` (fstab,
-`100.86.213.22` over Tailscale).
+Backup location: homelab `main/backups` ZFS dataset at
+`/media/root/storage1/backups/laptop-knowledge` (owned by `wes`, 500G quota),
+reached by rsync over SSH to the `homelab-ts` alias (`100.86.213.22`) over Tailscale.
 
 ## Prerequisites on a fresh laptop
 
@@ -37,10 +37,10 @@ reached from the laptop via the NFS automount at `/mnt/homelab-nfs` (fstab,
 ### 1. Restore the data from the homelab backup
 
 ```bash
-ls -l /mnt/homelab-nfs/laptop-knowledge-backup/LAST-BACKUP.txt   # check freshness
-rsync -a /mnt/homelab-nfs/laptop-knowledge-backup/claude-ai-export/      ~/claude-ai-export/
-rsync -a /mnt/homelab-nfs/laptop-knowledge-backup/private-email-archive/ ~/private-email-archive/
-rsync -a /mnt/homelab-nfs/laptop-knowledge-backup/threadwatch/           ~/threadwatch/
+ssh homelab-ts 'cat /media/root/storage1/backups/laptop-knowledge/LAST-BACKUP.txt'   # check freshness
+rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/claude-ai-export/        ~/claude-ai-export/
+rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/private-email-archive/ ~/private-email-archive/
+rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/threadwatch/             ~/threadwatch/
 ```
 
 Alternative (or in addition): re-clone `claude-ai-export` from Gitea and let the
@@ -97,7 +97,7 @@ Staggered so each later job sees fresh output from the earlier one.
 | threadwatch `69/UNAVAILABLE` | `claude` OAuth session expired | re-login with `claude` |
 | claudesync `sync_failed` | claude.ai cookie stale | re-login the browser into claude.ai |
 | knowledge-backup `skipped` | Tailscale down / homelab unreachable | expected off-network; check `tailscale status` |
-| knowledge-backup `error` rc 75 | NFS dest not writable | check the `/mnt/homelab-nfs` automount + Tailscale |
+| knowledge-backup `error` rc 75 | SSH or dest dir failed | check `ssh homelab-ts` works + the dest dir exists |
 
 ## Backup details
 
@@ -107,5 +107,5 @@ Staggered so each later job sees fresh output from the earlier one.
   Git history (in the repos) and ZFS snapshots (if sanoid covers the `nfs-share`
   dataset) are the point-in-time versioning layer.
 - Freshness marker: `LAST-BACKUP.txt` in the backup root.
-- Transport: rsync to the local NFS automount; the homelab squashes writes to
-  uid/gid 1000 (`all_squash` on the Tailscale-range export).
+- Transport: rsync over SSH to `homelab-ts` (passphraseless key, runs unattended).
+  Lands in the `main/backups` dataset owned by `wes`.

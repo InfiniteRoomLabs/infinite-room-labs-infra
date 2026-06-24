@@ -12,7 +12,7 @@
 #     local ~/claude-ai-export repo and are symlinked into place (no clone -- the
 #     timer commits INTO that live repo);
 #   - knowledge-backup (6-hourly Tailscale-gated rsync of the knowledge archives
-#     to the homelab NFS), shipped from ansible/files/laptop/.
+#     over SSH to the homelab main/backups ZFS dataset), shipped from ansible/files/laptop/.
 # DR: docs/runbooks/laptop-agentic-dr.md covers rebuilding this from scratch.
 # Secrets: none of its own. It still inherits the repo's vault-password
 # mechanism via group_vars/all/vault.yml like every host, so fnox/BW_SESSION
