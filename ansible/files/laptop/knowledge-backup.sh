@@ -25,7 +25,10 @@ log() { printf '{"event":"knowledge_backup",%s}\n' "$1"; }
 if ! tailscale status >/dev/null 2>&1; then
     log '"status":"skipped","reason":"tailscale down"'; exit 0
 fi
-if ! ping -c1 -W3 "$HOMELAB_IP" >/dev/null 2>&1; then
+# TCP connect to the NFS port instead of ping: ping needs CAP_NET_RAW via file
+# capabilities, which NoNewPrivileges=true strips, so it always fails in the unit.
+# bash /dev/tcp needs no raw socket and tests the service we actually need.
+if ! timeout 4 bash -c ": > /dev/tcp/$HOMELAB_IP/2049" 2>/dev/null; then
     log '"status":"skipped","reason":"homelab unreachable"'; exit 0
 fi
 
