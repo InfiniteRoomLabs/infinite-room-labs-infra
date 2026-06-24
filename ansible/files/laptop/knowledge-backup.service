@@ -1,0 +1,19 @@
+# knowledge-backup.service -- Tailscale-gated rsync of the knowledge archives to the
+# homelab NFS. Light sandboxing: it needs the /mnt automount, Tailscale, and network,
+# which mount/namespace/filesystem hardening would break. The wrapper guards itself.
+# Run standalone: systemctl --user start knowledge-backup.service ; journalctl --user -u knowledge-backup -e
+[Unit]
+Description=knowledge backup to homelab NFS (Tailscale-gated rsync)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/knowledge-backup
+TimeoutStartSec=1800
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+NoNewPrivileges=true
+MemoryMax=1G
+CPUQuota=60%
+TasksMax=128
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=knowledge-backup

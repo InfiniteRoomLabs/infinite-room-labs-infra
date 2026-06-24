@@ -5,12 +5,15 @@
 # Deliberately NOT imported by site.yml -- the homelab orchestrator must never
 # touch the personal laptop. Run it on its own.
 #
-# What: installs two laptop --user timers:
+# What: installs three laptop --user timers:
 #   - threadwatch (5-hourly read-only `claude -p` knowledge-thread scanner),
 #     cloned + pinned from the standalone threadwatch repo;
 #   - claudesync (hourly claude.ai export + git commit), whose units live in the
 #     local ~/claude-ai-export repo and are symlinked into place (no clone -- the
-#     timer commits INTO that live repo).
+#     timer commits INTO that live repo);
+#   - knowledge-backup (6-hourly Tailscale-gated rsync of the knowledge archives
+#     to the homelab NFS), shipped from ansible/files/laptop/.
+# DR: docs/runbooks/laptop-agentic-dr.md covers rebuilding this from scratch.
 # Secrets: none of its own. It still inherits the repo's vault-password
 # mechanism via group_vars/all/vault.yml like every host, so fnox/BW_SESSION
 # must be available when you run it.
@@ -78,6 +81,33 @@
     - name: Enable and start the claudesync timer
       ansible.builtin.systemd_service:
         name: claudesync.timer
+        scope: user
+        enabled: true
+        state: started
+        daemon_reload: true
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
+
+    # -- knowledge-backup (Tailscale-gated rsync to homelab NFS, every 6h) -----
+    - name: Install the knowledge-backup wrapper
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/knowledge-backup.sh"
+        dest: "{{ ansible_user_dir }}/.local/bin/knowledge-backup"
+        mode: "0755"
+
+    - name: Install the knowledge-backup user units
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/{{ item }}"
+        dest: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+        mode: "0644"
+      loop:
+        - knowledge-backup.service
+        - knowledge-backup.timer
+
+    - name: Enable and start the knowledge-backup timer
+      ansible.builtin.systemd_service:
+        name: knowledge-backup.timer
         scope: user
         enabled: true
         state: started

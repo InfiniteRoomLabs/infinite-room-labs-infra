@@ -1,0 +1,17 @@
+# knowledge-backup.timer -- every 6h, only while logged in (no linger). Fires at :40
+# of the 6-hour marks (00/06/12/18:40), after the hourly claudesync (:00) and the
+# 5-hourly threadwatch (:15), so it captures fresh data. Persistent catches up one
+# missed run on login. Off-network runs are clean no-ops (see the wrapper's guard).
+# Run standalone: systemctl --user enable --now knowledge-backup.timer
+[Unit]
+Description=knowledge backup to homelab NFS (every 6h)
+
+[Timer]
+OnCalendar=*-*-* 00/6:40:00
+Persistent=true
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=knowledge-backup.service
+
+[Install]
+WantedBy=timers.target
