@@ -5,12 +5,13 @@
 # Deliberately NOT imported by site.yml -- the homelab orchestrator must never
 # touch the personal laptop. Run it on its own.
 #
-# What: installs three laptop --user timers:
+# What: installs four laptop --user timers:
 #   - threadwatch (5-hourly read-only `claude -p` knowledge-thread scanner),
 #     cloned + pinned from the standalone threadwatch repo;
-#   - claudesync (hourly claude.ai export + git commit), whose units live in the
-#     local ~/claude-ai-export repo and are symlinked into place (no clone -- the
-#     timer commits INTO that live repo);
+#   - claudesync (hourly claude.ai export + git commit) and claudesync-indexer
+#     (daily `claude -p` reindex + commit), whose units live in the local
+#     ~/claude-ai-export repo and are symlinked into place (no clone -- the timers
+#     commit INTO that live repo);
 #   - knowledge-backup (6-hourly Tailscale-gated rsync of the knowledge archives
 #     over SSH to the homelab main/backups ZFS dataset), shipped from ansible/files/laptop/.
 # DR: docs/runbooks/laptop-agentic-dr.md covers rebuilding this from scratch.
@@ -45,6 +46,9 @@
         dest: "{{ threadwatch_dir }}"
         version: "{{ threadwatch_version }}"
         update: true
+        # The deploy clone is a pristine mirror of the pinned SHA. Discard any local
+        # drift (edits belong in the source repo, not here) so it never blocks deploys.
+        force: true
 
     - name: Install and enable the threadwatch user timer
       ansible.builtin.command:
@@ -77,14 +81,19 @@
       loop:
         - claudesync.service
         - claudesync.timer
+        - claudesync-indexer.service
+        - claudesync-indexer.timer
 
-    - name: Enable and start the claudesync timer
+    - name: Enable and start the claudesync timers
       ansible.builtin.systemd_service:
-        name: claudesync.timer
+        name: "{{ item }}"
         scope: user
         enabled: true
         state: started
         daemon_reload: true
+      loop:
+        - claudesync.timer
+        - claudesync-indexer.timer
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
