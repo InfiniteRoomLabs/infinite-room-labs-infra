@@ -47,6 +47,9 @@
         - nextcloud
         - monitoring
         - paperless
+        - firefly
+        - ghostfolio
+        - firefly-importer
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -64,6 +67,8 @@
         - { name: ollama-helm, url: "https://otwld.github.io/ollama-helm/" }
         - { name: guerzon, url: "https://guerzon.github.io/vaultwarden" }
         - { name: nextcloud, url: "https://nextcloud.github.io/helm/" }
+        - { name: firefly-iii, url: "https://firefly-iii.github.io/kubernetes/" }
+        - { name: ghostfolio, url: "https://bythehugo.github.io/ghostfolio-helm/" }
         - { name: traefik, url: "https://traefik.github.io/charts" }
       tags: [always]
 
@@ -590,6 +595,24 @@
       no_log: true
       tags: [phase3, monitoring]
 
+    # ── Grafana dashboards ConfigMap ───────────────────────────────
+    # The irl-monitoring chart mounts the `grafana-dashboards` ConfigMap
+    # (dashboardsConfigMaps: irl-homelab) but does not create it. Recreate it
+    # declaratively from the version-controlled JSON so a rebuild restores every
+    # dashboard. `kubectl create --dry-run | apply` upserts all *.json in the dir.
+    - name: "Phase 3: Sync grafana-dashboards ConfigMap from files/grafana/dashboards"
+      ansible.builtin.shell:
+        cmd: >-
+          kubectl --kubeconfig {{ kubeconfig }}
+          create configmap grafana-dashboards
+          --from-file {{ playbook_dir }}/../files/grafana/dashboards
+          --namespace {{ k3s_namespace }}
+          --dry-run=client -o yaml
+          | kubectl --kubeconfig {{ kubeconfig }} apply -f -
+      register: grafana_dash_cm
+      changed_when: "'unchanged' not in grafana_dash_cm.stdout"
+      tags: [phase3, monitoring]
+
     # ── Homepage Dashboard ─────────────────────────────────────────
 
     - name: "Phase 3: Add Homepage Helm repo"
@@ -818,6 +841,81 @@
         # Tika + Gotenberg image pulls are slow on first run
         timeout: "10m0s"
       tags: [phase3, paperless]
+
+    # ── Firefly III (personal finance ledger) ─────────────────────
+    # Requires: postgres-firefly + firefly-secrets K8s Secrets (k8s-secrets.yml),
+    # the `firefly` DB/role (Phase 2 bootstrap from irl_pg_databases), and a
+    # finances.lab IngressRoute (irl_traefik_standalone_services). The image
+    # runs DB migrations automatically on first start.
+    - name: "Phase 3: Upload Firefly III values"
+      ansible.builtin.copy:
+        src: ../helm/firefly/values.yaml
+        dest: "{{ helm_values_path }}/firefly/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, firefly]
+
+    - name: "Phase 3: Deploy Firefly III (firefly-iii chart)"
+      kubernetes.core.helm:
+        name: firefly
+        chart_ref: firefly-iii/firefly-iii
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/firefly/values.yaml"
+        wait: true
+        timeout: "5m0s"
+      tags: [phase3, firefly]
+
+    # ── Ghostfolio (investment portfolio) ─────────────────────────
+    # Bitnami postgresql+redis subcharts are disabled in values; reuses CNPG +
+    # Valkey. Requires postgres-ghostfolio + ghostfolio-secrets + the `ghostfolio`
+    # DB/role. Entrypoint runs `prisma migrate deploy` + seed on startup.
+    - name: "Phase 3: Upload Ghostfolio values"
+      ansible.builtin.copy:
+        src: ../helm/ghostfolio/values.yaml
+        dest: "{{ helm_values_path }}/ghostfolio/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, ghostfolio]
+
+    - name: "Phase 3: Deploy Ghostfolio (ghostfolio chart)"
+      kubernetes.core.helm:
+        name: ghostfolio
+        chart_ref: ghostfolio/ghostfolio
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/ghostfolio/values.yaml"
+        wait: true
+        timeout: "5m0s"
+      tags: [phase3, ghostfolio]
+
+    # ── Firefly III Data Importer (QFX/CSV ingest, stateless) ─────
+    # Requires firefly-importer-secrets (accessToken = Firefly PAT) and the
+    # firefly service. Routed at import.lab via IngressRoute.
+    - name: "Phase 3: Upload Firefly Importer values"
+      ansible.builtin.copy:
+        src: ../helm/firefly-importer/values.yaml
+        dest: "{{ helm_values_path }}/firefly-importer/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, firefly-importer]
+
+    - name: "Phase 3: Deploy Firefly Importer (importer chart)"
+      kubernetes.core.helm:
+        name: firefly-importer
+        chart_ref: firefly-iii/importer
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/firefly-importer/values.yaml"
+        wait: true
+        timeout: "5m0s"
+      tags: [phase3, firefly-importer]
 
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,

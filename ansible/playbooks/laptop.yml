@@ -32,7 +32,7 @@
     # Pin to an immutable commit, never a moving branch: the play runs the cloned
     # install.sh, so an unpinned ref is remote code execution of whatever HEAD becomes.
     # Bump this SHA deliberately after reviewing a new tag.
-    threadwatch_version: "92b3d619271733d5db3a740baad868fda4bb4885"  # v0.1.4
+    threadwatch_version: "4a36c3ce8546e23f677ded746a5d9964bdc1157c"  # v0.1.5
     threadwatch_dir: "{{ ansible_user_dir }}/.local/share/threadwatch"
     # claudesync units live in the user's live claude-ai-export repo (not cloned):
     # the timer commits INTO that repo, so it must run against the canonical checkout.
