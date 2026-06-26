@@ -1,0 +1,75 @@
+// alloy-config.alloy
+// ===================
+// IRL laptop -> homelab log shipping.
+//
+// Reads the journals of the laptop's --user timer services (threadwatch,
+// claudesync, claudesync-indexer, knowledge-backup) and forwards them, via the
+// loki -> OTLP bridge, to the homelab OpenTelemetry Collector at
+// 100.86.213.22:30418 (OTLP/HTTP). That collector's `logs` pipeline already
+// exports to Loki (otlphttp/loki -> monitoring-loki-gateway), so no homelab
+// change is needed -- we reuse the NodePort that was provisioned for exactly
+// this ("Claude Code on the laptop ship ... logs ... to the collector").
+//
+// Runs as a --user systemd service (alloy.service), deployed by
+// ansible/playbooks/laptop.yml. No linger: it runs while wes is logged in,
+// which is also the only time the timer units produce logs.
+
+loki.relabel "keep_timers" {
+  forward_to = []
+
+  // Keep only the four IRL laptop timer units; drop all other journal entries.
+  rule {
+    source_labels = ["__journal__systemd_user_unit"]
+    regex         = "(threadwatch|claudesync|claudesync-indexer|knowledge-backup)\\.service"
+    action        = "keep"
+  }
+
+  // Promote useful journal fields to labels.
+  rule {
+    source_labels = ["__journal__systemd_user_unit"]
+    target_label  = "unit"
+  }
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "host"
+  }
+}
+
+loki.source.journal "laptop_timers" {
+  forward_to    = [otelcol.receiver.loki.to_otel.receiver]
+  relabel_rules = loki.relabel.keep_timers.rules
+  labels        = { job = "laptop-timers" }
+}
+
+// Bridge loki-formatted entries into the OTLP pipeline.
+otelcol.receiver.loki "to_otel" {
+  output {
+    logs = [otelcol.processor.transform.set_service.input]
+  }
+}
+
+// Stamp a stable service.name so Loki indexes these as
+// {service_name="laptop-timers"} instead of dumping them in the shared
+// "unknown_service" bucket. `unit`/`host` remain as structured metadata,
+// queryable via `{service_name="laptop-timers"} | unit="threadwatch.service"`.
+otelcol.processor.transform "set_service" {
+  error_mode = "ignore"
+  log_statements {
+    context    = "resource"
+    statements = [
+      `set(attributes["service.name"], "laptop-timers")`,
+    ]
+  }
+  output {
+    logs = [otelcol.exporter.otlphttp.homelab.input]
+  }
+}
+
+otelcol.exporter.otlphttp "homelab" {
+  client {
+    endpoint = "http://100.86.213.22:30418"
+    tls {
+      insecure = true  // plain HTTP over the trusted tailnet
+    }
+  }
+}

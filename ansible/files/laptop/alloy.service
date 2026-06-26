@@ -1,0 +1,24 @@
+[Unit]
+Description=Grafana Alloy -- ship IRL laptop timer journals to homelab Loki
+Documentation=file://%h/projects/infinite-room-labs/infinite-room-labs-infra/ansible/docs/runbooks/laptop-agentic-dr.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# mise-managed binary; shim keeps it on the pinned version.
+ExecStart=%h/.local/share/mise/shims/alloy run \
+  --disable-reporting \
+  --storage.path=%h/.local/state/alloy \
+  --server.http.listen-addr=127.0.0.1:12345 \
+  %h/.config/alloy/config.alloy
+Restart=on-failure
+RestartSec=10
+# Minimal hardening only. Heavier sandboxing (ProtectSystem/SystemCallFilter)
+# is intentionally omitted: it broke the threadwatch unit (218/CAPABILITIES,
+# SIGSYS) under the --user manager. Add back incrementally if ever wanted.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

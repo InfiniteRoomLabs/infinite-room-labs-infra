@@ -37,6 +37,9 @@
     # claudesync units live in the user's live claude-ai-export repo (not cloned):
     # the timer commits INTO that repo, so it must run against the canonical checkout.
     claudesync_dir: "{{ ansible_user_dir }}/claude-ai-export"
+    # Grafana Alloy ships the timers' journals to the homelab. Pin explicitly
+    # (jdx tools are installed globally as `latest`; project configs pin).
+    alloy_version: "1.17.0"
 
   tasks:
     # -- threadwatch ----------------------------------------------------------
@@ -120,6 +123,53 @@
         scope: user
         enabled: true
         state: started
+        daemon_reload: true
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
+
+    # -- alloy (ship the timers' journals to homelab Loki via OTel) -----------
+    # Long-running --user daemon (not a timer): reads the journals of the four
+    # units above and forwards them to the homelab OTel Collector NodePort
+    # (100.86.213.22:30418), which already exports logs to Loki. No homelab
+    # change needed -- that NodePort exists for exactly this.
+    - name: Install Grafana Alloy via mise (pinned)
+      ansible.builtin.command:
+        cmd: "mise use -g aqua:grafana/alloy@{{ alloy_version }}"
+      register: alloy_install
+      changed_when: "'alloy' in (alloy_install.stderr | default('')) and 'installing' in (alloy_install.stderr | default(''))"
+      environment:
+        PATH: "{{ ansible_user_dir }}/.local/bin:{{ ansible_env.PATH }}"
+
+    - name: Ensure Alloy config + state directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ ansible_user_dir }}/.config/alloy"
+        - "{{ ansible_user_dir }}/.local/state/alloy"
+
+    - name: Install the Alloy config
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/alloy-config.alloy"
+        dest: "{{ ansible_user_dir }}/.config/alloy/config.alloy"
+        mode: "0644"
+      register: alloy_config
+
+    - name: Install the Alloy user unit
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/alloy.service"
+        dest: "{{ ansible_user_dir }}/.config/systemd/user/alloy.service"
+        mode: "0644"
+      register: alloy_unit
+
+    - name: Enable and start Alloy
+      ansible.builtin.systemd_service:
+        name: alloy.service
+        scope: user
+        enabled: true
+        state: "{{ 'restarted' if (alloy_config.changed or alloy_unit.changed) else 'started' }}"
         daemon_reload: true
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"

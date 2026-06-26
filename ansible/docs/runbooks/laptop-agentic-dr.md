@@ -1,9 +1,9 @@
 # Runbook: Laptop Agentic Context -- Disaster Recovery
 
 Rebuild the laptop-local agentic automation stack on a fresh or wiped machine.
-The stack is three systemd `--user` timers plus the knowledge data they operate
-on. All of it is version-controlled or backed up; this runbook is the order of
-operations to get it running again.
+The stack is three systemd `--user` timers, one always-on `--user` log shipper
+(Alloy), plus the knowledge data they operate on. All of it is version-controlled
+or backed up; this runbook is the order of operations to get it running again.
 
 ## System inventory
 
@@ -12,7 +12,8 @@ operations to get it running again.
 | threadwatch | 5-hourly read-only `claude -p` scan of the archives -> `~/threadwatch/THREADWATCH.md` | GitHub `InfiniteRoomLabs/threadwatch` (pinned SHA) | `~/.local/share/threadwatch` |
 | claudesync | hourly `claude.ai` export + git commit into the archive | units in Gitea `InfiniteRoomLabs/claude-ai-export` (`systemd/`, `scripts/`) | symlinked from `~/claude-ai-export` |
 | knowledge-backup | 6-hourly Tailscale-gated rsync of the archives to the homelab | infra `ansible/files/laptop/` | `~/.local/bin` + `~/.config/systemd/user` |
-| deploy driver | installs + enables all three | infra `ansible/playbooks/laptop.yml` | run with `uv run ansible-playbook` |
+| alloy | always-on shipper: tails the four units' journals -> homelab OTel Collector (`100.86.213.22:30418`) -> Loki | infra `ansible/files/laptop/` (mise-installed binary) | `~/.config/alloy/` + `~/.config/systemd/user` |
+| deploy driver | installs + enables all of the above | infra `ansible/playbooks/laptop.yml` | run with `uv run ansible-playbook` |
 
 Data archives (the "knowledge"): `~/claude-ai-export`, `~/private-email-archive`,
 `~/threadwatch`.
@@ -68,16 +69,26 @@ uv run ansible-playbook playbooks/laptop.yml
 ```
 
 This clones + pins threadwatch, symlinks the claudesync units (needs `~/claude-ai-export`
-present from step 1), installs knowledge-backup, and enables all three timers.
+present from step 1), installs knowledge-backup, installs + starts Alloy, and
+enables all three timers.
 
 ### 5. Verify
 
 ```bash
 systemctl --user list-timers threadwatch.timer claudesync.timer knowledge-backup.timer
+systemctl --user status alloy.service             # log shipper should be active (running)
 ~/.local/share/threadwatch/smoke.sh --full        # threadwatch end-to-end (spends a little quota)
 systemctl --user start claudesync.service         # one export + commit
 systemctl --user start knowledge-backup.service   # one backup
 journalctl --user -u threadwatch -u claudesync -u knowledge-backup -o cat -e
+```
+
+Confirm logs reached the homelab (Grafana Explore -> Loki, or via the API):
+
+```bash
+# adjust the selector to whatever label landed (see smoke notes); job is the seed
+curl -s 'http://100.86.213.22:30001/api/datasources/proxy/uid/loki/loki/api/v1/query_range' \
+  --data-urlencode 'query={job="laptop-timers"}' --data-urlencode 'limit=5' | jq '.data.result | length'
 ```
 
 ## Cadence reference
@@ -98,6 +109,8 @@ Staggered so each later job sees fresh output from the earlier one.
 | claudesync `sync_failed` | claude.ai cookie stale | re-login the browser into claude.ai |
 | knowledge-backup `skipped` | Tailscale down / homelab unreachable | expected off-network; check `tailscale status` |
 | knowledge-backup `error` rc 75 | SSH or dest dir failed | check `ssh homelab-ts` works + the dest dir exists |
+| alloy logs absent in Loki | homelab unreachable / collector down | Alloy buffers and retries; check `tailscale status` + `curl -s -o /dev/null -w '%{http_code}' -XPOST http://100.86.213.22:30418/v1/logs -d '{"resourceLogs":[]}'` returns `200` |
+| alloy `component ... error` (config) | bad `config.alloy` | `alloy fmt ~/.config/alloy/config.alloy`; check the loki->otel wiring |
 
 ## Backup details
 
