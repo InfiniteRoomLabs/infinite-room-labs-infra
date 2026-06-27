@@ -62,7 +62,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "sum(count_over_time({service_name=\"laptop-timers\", unit=\"threadwatch.service\"} |~ `Failed with result|Failed to start` [$__range]))",
+          "expr": "sum(count_over_time({service_name=\"laptop-timers\"} | unit=\"threadwatch.service\" |~ `Failed with result|Failed to start` [$__range]))",
           "queryType": "instant"
         }
       ],
@@ -107,7 +107,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "sum(count_over_time({service_name=\"laptop-timers\", unit=\"claudesync.service\"} |~ `Failed with result|Failed to start` [$__range]))",
+          "expr": "sum(count_over_time({service_name=\"laptop-timers\"} | unit=\"claudesync.service\" |~ `Failed with result|Failed to start` [$__range]))",
           "queryType": "instant"
         }
       ],
@@ -152,7 +152,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "sum(count_over_time({service_name=\"laptop-timers\", unit=\"claudesync-indexer.service\"} |~ `Failed with result|Failed to start` [$__range]))",
+          "expr": "sum(count_over_time({service_name=\"laptop-timers\"} | unit=\"claudesync-indexer.service\" |~ `Failed with result|Failed to start` [$__range]))",
           "queryType": "instant"
         }
       ],
@@ -197,7 +197,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "sum(count_over_time({service_name=\"laptop-timers\", unit=\"knowledge-backup.service\"} |~ `Failed with result|Failed to start` [$__range]))",
+          "expr": "sum(count_over_time({service_name=\"laptop-timers\"} | unit=\"knowledge-backup.service\" |~ `Failed with result|Failed to start` [$__range]))",
           "queryType": "instant"
         }
       ],

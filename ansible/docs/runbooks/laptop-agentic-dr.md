@@ -86,9 +86,10 @@ journalctl --user -u threadwatch -u claudesync -u knowledge-backup -o cat -e
 Confirm logs reached the homelab (Grafana Explore -> Loki, or via the API):
 
 ```bash
-# adjust the selector to whatever label landed (see smoke notes); job is the seed
+# service_name is the only indexed stream label; unit/host/job are structured
+# metadata, so filter a unit with `| unit="..."`, not a stream selector.
 curl -s 'http://100.86.213.22:30001/api/datasources/proxy/uid/loki/loki/api/v1/query_range' \
-  --data-urlencode 'query={job="laptop-timers"}' --data-urlencode 'limit=5' | jq '.data.result | length'
+  --data-urlencode 'query={service_name="laptop-timers"}' --data-urlencode 'limit=5' | jq '.data.result | length'
 ```
 
 ## Cadence reference

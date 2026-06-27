@@ -17,18 +17,28 @@
 loki.relabel "keep_timers" {
   forward_to = []
 
-  // Keep only the four IRL laptop timer units; drop all other journal entries.
+  // The unit name lives in a DIFFERENT journal field per line type:
+  //   app stdout/stderr  -> _SYSTEMD_USER_UNIT (__journal__systemd_user_unit)
+  //   systemd lifecycle  -> USER_UNIT          (__journal_user_unit)
+  //     (Starting/Finished/Failed lines have _SYSTEMD_USER_UNIT=init.scope)
+  // Coalesce both, then extract the unit from whichever carries it. Without this
+  // the Finished/Failed lifecycle lines -- the runs/failures signal -- get dropped.
+  // (claudesync-indexer listed before claudesync so the longer name wins.)
   rule {
-    source_labels = ["__journal__systemd_user_unit"]
-    regex         = "(threadwatch|claudesync|claudesync-indexer|knowledge-backup)\\.service"
+    source_labels = ["__journal__systemd_user_unit", "__journal_user_unit"]
+    separator     = ";"
+    regex         = ".*?((?:claudesync-indexer|claudesync|threadwatch|knowledge-backup)\\.service).*"
+    target_label  = "unit"
+    replacement   = "${1}"
+  }
+
+  // Keep only lines that resolved to one of our four units; drop everything else.
+  rule {
+    source_labels = ["unit"]
+    regex         = "(?:claudesync-indexer|claudesync|threadwatch|knowledge-backup)\\.service"
     action        = "keep"
   }
 
-  // Promote useful journal fields to labels.
-  rule {
-    source_labels = ["__journal__systemd_user_unit"]
-    target_label  = "unit"
-  }
   rule {
     source_labels = ["__journal__hostname"]
     target_label  = "host"
