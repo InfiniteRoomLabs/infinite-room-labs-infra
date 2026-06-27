@@ -61,11 +61,12 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "noValue": "0",
           "color": {
             "mode": "fixed",
             "fixedColor": "green"
@@ -94,7 +95,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "sum(count_over_time({service_name=\"laptop-timers\"} | unit=\"knowledge-backup.service\" |~ `Failed with result|Failed to start` [$__range]))",
+          "expr": "sum(count_over_time({service_name=\"laptop-timers\"} | unit=\"knowledge-backup.service\" |~ `Failed with result` [$__range]))",
           "queryType": "instant"
         }
       ],
@@ -106,11 +107,12 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "noValue": "0",
           "color": {
             "mode": "fixed",
             "fixedColor": "red"
@@ -151,11 +153,12 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value_and_name"
+        "textMode": "value"
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "noValue": "0",
           "color": {
             "mode": "fixed",
             "fixedColor": "blue"
@@ -222,7 +225,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "{service_name=\"laptop-timers\"} | unit=\"knowledge-backup.service\" |~ `(?i)Failed with result|Failed to start|\"status\":\"error\"|sync_failed|claude_failed|claude_timeout|parse_failed|claude_not_on_path`",
+          "expr": "{service_name=\"laptop-timers\"} | unit=\"knowledge-backup.service\" |~ `(?i)Failed with result|\"status\":\"error\"|sync_failed|claude_failed|claude_timeout|parse_failed|claude_not_on_path`",
           "queryType": "range"
         }
       ],
