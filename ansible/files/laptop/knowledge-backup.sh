@@ -28,13 +28,22 @@ SOURCES=(
 
 log() { printf '{"event":"knowledge_backup",%s}\n' "$1"; }
 
-# -- Guard: Tailscale up + homelab SSH reachable. Skip cleanly (exit 0) if not. --
-if ! tailscale status >/dev/null 2>&1; then
-    log '"status":"skipped","reason":"tailscale down"'; exit 0
-fi
-# bash /dev/tcp (no raw socket; works under NoNewPrivileges, unlike ping) to port 22.
-if ! timeout 4 bash -c ": > /dev/tcp/$HOMELAB_IP/22" 2>/dev/null; then
-    log '"status":"skipped","reason":"homelab unreachable"'; exit 0
+# -- Guard: wait (bounded) for Tailscale + homelab, then skip cleanly if still down. --
+# On resume/boot Tailscale needs ~10-15s to reconnect, so a single check would skip a
+# backup that would have succeeded moments later (observed on a wake-from-sleep). Wait
+# up to ~90s, re-checking both conditions; skip cleanly (exit 0) only if still down --
+# off-network for real, where a 6-hourly no-op is correct. (bash /dev/tcp, not ping:
+# no raw socket, so it works under NoNewPrivileges.)
+ready=0
+for _ in $(seq 1 18); do  # 18 * 5s = 90s
+    if tailscale status >/dev/null 2>&1 \
+       && timeout 4 bash -c ": > /dev/tcp/$HOMELAB_IP/22" 2>/dev/null; then
+        ready=1; break
+    fi
+    sleep 5
+done
+if [ "$ready" -eq 0 ]; then
+    log '"status":"skipped","reason":"homelab unreachable after 90s wait"'; exit 0
 fi
 
 # Confirm ssh works and the dest dir exists (created wes-owned during setup).
