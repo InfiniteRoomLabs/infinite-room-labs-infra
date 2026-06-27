@@ -31,7 +31,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Runs finished (range)",
+      "title": "Runs completed (range)",
       "datasource": {
         "type": "loki",
         "uid": "${loki}"
