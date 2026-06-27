@@ -102,6 +102,12 @@
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
 
     # -- knowledge-backup (Tailscale-gated rsync to homelab NFS, every 6h) -----
+    - name: Install the wait-for-it readiness helper
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/wait-for-it.sh"
+        dest: "{{ ansible_user_dir }}/.local/bin/wait-for-it"
+        mode: "0755"
+
     - name: Install the knowledge-backup wrapper
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/laptop/knowledge-backup.sh"
