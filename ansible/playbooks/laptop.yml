@@ -5,13 +5,18 @@
 # Deliberately NOT imported by site.yml -- the homelab orchestrator must never
 # touch the personal laptop. Run it on its own.
 #
-# What: installs four laptop --user timers:
+# What: installs five laptop --user timers:
 #   - threadwatch (5-hourly read-only `claude -p` knowledge-thread scanner),
 #     cloned + pinned from the standalone threadwatch repo;
 #   - claudesync (hourly claude.ai export + git commit) and claudesync-indexer
 #     (daily `claude -p` reindex + commit), whose units live in the local
 #     ~/claude-ai-export repo and are symlinked into place (no clone -- the timers
 #     commit INTO that live repo);
+#   - claudesync-embed (daily Cloudflare bge-m3 vector-embed into a local Chroma
+#     .vector-db, after the indexer so it embeds fresh INDEX.md summaries; commits
+#     nothing -- .vector-db is gitignored). Its units are shipped FROM this repo
+#     (ansible/files/laptop/) and copied into place; it only operates on the
+#     claude-ai-export data dir, with no symlink coupling to that repo's internals;
 #   - knowledge-backup (6-hourly Tailscale-gated rsync of the knowledge archives
 #     over SSH to the homelab main/backups ZFS dataset), shipped from ansible/files/laptop/.
 # DR: docs/runbooks/laptop-agentic-dr.md covers rebuilding this from scratch.
@@ -97,6 +102,30 @@
       loop:
         - claudesync.timer
         - claudesync-indexer.timer
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
+
+    # -- claudesync-embed (Cloudflare bge-m3 vector index, daily) --------------
+    # Units shipped FROM this repo (copied, not symlinked): the embed has no commit
+    # step, so unlike claudesync there's no reason to live in the app repo. It runs
+    # `uv run reindex embed` in ~/claude-ai-export via the unit's WorkingDirectory.
+    - name: Install the claudesync-embed user units
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/{{ item }}"
+        dest: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+        mode: "0644"
+      loop:
+        - claudesync-embed.service
+        - claudesync-embed.timer
+
+    - name: Enable and start the claudesync-embed timer
+      ansible.builtin.systemd_service:
+        name: claudesync-embed.timer
+        scope: user
+        enabled: true
+        state: started
+        daemon_reload: true
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"

@@ -1,0 +1,22 @@
+# claudesync-embed.timer -- embed once daily, AFTER claudesync-indexer (12:50, up to
+# ~1h runtime) so the INDEX.md summaries it embeds are the freshly regenerated ones.
+# Fires at 14:30. Cheap to run (content-hash skip = only new/changed files hit
+# Cloudflare), so daily is fine; tighten if you want the vector index fresher.
+# Soft ordering only: systemd timers aren't dependency-chained, so if the indexer runs
+# long one day the embed just uses slightly stale summaries and the next run picks them
+# up -- no breakage. Runs only while logged in (no linger); Persistent catches up one
+# missed run on login.
+# Shipped from this infra repo (ansible/files/laptop/), copied into place by laptop.yml.
+# Run standalone: systemctl --user enable --now claudesync-embed.timer
+[Unit]
+Description=claudesync daily vector-embed (Cloudflare bge-m3)
+
+[Timer]
+OnCalendar=*-*-* 14:30:00
+Persistent=true
+RandomizedDelaySec=600
+AccuracySec=1min
+Unit=claudesync-embed.service
+
+[Install]
+WantedBy=timers.target

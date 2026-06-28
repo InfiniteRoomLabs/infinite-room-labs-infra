@@ -1,0 +1,36 @@
+# claudesync-embed.service -- update the local vector index (Cloudflare bge-m3 ->
+# Chroma .vector-db) over ~/claude-ai-export via the repo's `reindex embed` CLI.
+# Content-hash caching means only NEW/changed conversations + INDEX.md summaries hit
+# Cloudflare each day (pennies). Daily, scheduled AFTER claudesync-indexer so the
+# summaries it embeds are freshly regenerated. Commits nothing -- .vector-db is
+# gitignored, unlike the indexer which commits INDEX.md.
+#
+# Shipped from this infra repo (ansible/files/laptop/, copied into place by
+# playbooks/laptop.yml) -- NOT symlinked out of claude-ai-export. It only operates
+# ON that repo (WorkingDirectory) and reads CF_ACCOUNT_ID/CF_API_TOKEN from its .env.
+# Run standalone: systemctl --user start claudesync-embed.service ; journalctl --user -u claudesync-embed -e
+[Unit]
+Description=claudesync vector-embed of claude-ai-export (Cloudflare bge-m3 -> Chroma)
+
+[Service]
+Type=oneshot
+# WorkingDirectory makes `uv run` resolve the repo project + load its .env (CF creds),
+# the same context the claudesync-indexer fish script gets via `cd`.
+WorkingDirectory=%h/claude-ai-export
+ExecStart=%h/.local/bin/uv run reindex embed
+TimeoutStartSec=3600
+# Boot-readiness gate: the Persistent catch-up run can fire before the network is up.
+# Block up to 120s for Cloudflare reachability (the embed endpoint's host), then
+# proceed -- a real outage is logged and the content-hash skip retries next day.
+ExecStartPre=/usr/bin/bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null --max-time 3 https://api.cloudflare.com/ && exit 0; sleep 2; done; echo "claudesync-embed: network not ready after 120s, proceeding"; exit 0'
+# uv, curl resolve on this PATH.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+NoNewPrivileges=true
+MemoryMax=2G
+CPUQuota=80%
+# Async embed worker (max_in_flight=8 httpx coroutines) + chromadb; not thread-heavy
+# like the claude -p indexer, so this cap is plenty.
+TasksMax=512
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=claudesync-embed
