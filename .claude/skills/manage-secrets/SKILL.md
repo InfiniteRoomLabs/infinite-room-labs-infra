@@ -81,7 +81,7 @@ Gather this information (ask the user for anything missing):
 
 Then execute:
 
-1. **Check BW status** -- `bw status` must show `unlocked`. If not, tell the user to run `! bw unlock`.
+1. **Check BW status** -- `bw status` must show `unlocked`. If not (or any fnox/bw-sync command reports a locked/stale session), run `./scripts/bw-unlock-prompt.sh`: it spawns a front-and-center terminal where the user unlocks Bitwarden, refreshes both `~/.bw_session` and fnox's age-stored `BW_SESSION` (which shadows the file), then detaches. Tell the user it's waiting, then poll `bw status` and retry.
 2. **Create BW folder** if it doesn't exist:
    ```bash
    bw create folder "$(echo '{"name":"IRL/Services/FooBar"}' | bw encode)"

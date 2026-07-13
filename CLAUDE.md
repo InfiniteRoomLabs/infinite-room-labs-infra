@@ -9,6 +9,10 @@ This project uses Claude Code Secrets Manager (CCSM). Follow these rules:
 4. Run `ccsm secret list` to see available credentials.
 <!-- CCSM:END -->
 
+### Locked vault / stale session recovery
+
+If bw/fnox/bw-sync/ansible-vault reports a locked vault or stale/invalid session, run `./scripts/bw-unlock-prompt.sh` -- it pops a front-and-center terminal for the user to unlock Bitwarden (refreshing both `~/.bw_session` and fnox's age-stored `BW_SESSION`, which shadows it), then detaches. Tell the user it's waiting, then retry the failed command. Do not ask them to run `bw unlock` by hand.
+
 ## Repository Structure
 
 This is a multi-tool IaC monorepo. Each IaC tool has its own top-level directory:

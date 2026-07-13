@@ -12,12 +12,16 @@ set -euo pipefail
 # Needs BW_SESSION (the secret is Bitwarden-backed). Resolve it the same way as
 # scripts/with-secrets.sh: env -> fnox age -> ~/.bw_session cache.
 
-if [[ -z "${BW_SESSION:-}" ]]; then
-  BW_SESSION="$(fnox get BW_SESSION 2>/dev/null || true)"
-fi
-if [[ -z "${BW_SESSION:-}" && -f "$HOME/.bw_session" ]]; then
-  BW_SESSION="$(cat "$HOME/.bw_session")"
-fi
-export BW_SESSION
+# A candidate is only trusted if bw accepts it -- an inherited env BW_SESSION
+# can be stale (e.g. a long-lived agent shell started before a re-unlock).
+session_ok() { [[ -n "$1" ]] && BW_SESSION="$1" bw status 2>/dev/null | grep -q '"status":"unlocked"'; }
 
-exec fnox get ANSIBLE_VAULT_PASSWORD
+for candidate in "${BW_SESSION:-}" "$(fnox get BW_SESSION 2>/dev/null || true)" "$(cat "$HOME/.bw_session" 2>/dev/null || true)"; do
+  if session_ok "$candidate"; then
+    export BW_SESSION="$candidate"
+    exec fnox get ANSIBLE_VAULT_PASSWORD
+  fi
+done
+
+echo "vault-pass.sh: no valid BW_SESSION -- run scripts/bw-unlock-prompt.sh, then retry" >&2
+exit 1
