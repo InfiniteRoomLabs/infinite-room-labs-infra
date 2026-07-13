@@ -131,6 +131,13 @@ SERVICES = {
         "health_path": "/health",
         "health_status": 200,
     },
+    "karakeep": {
+        "subdomain": "bookmarks",
+        "domain": "bookmarks.lab.infiniteroomlabs.cloud",
+        "internal": False,
+        "health_path": "/api/health",
+        "health_status": 200,
+    },
 }
 
 

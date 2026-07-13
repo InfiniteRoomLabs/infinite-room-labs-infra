@@ -474,3 +474,24 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [gitoxide (Rust)](https://github.com/Byron/gitoxide)
 - **Findings**: _Not yet researched._
 - **Decision**: _Pending._
+
+---
+
+### R15: Authentik ForwardAuth Gateway for Exposing Internal Services
+
+- **Status**: open
+- **Roadmap link**: Future / Public exposure hardening (prerequisite for exposing any internal service beyond Tailscale)
+- **Key questions**:
+  1. Authentik embedded outpost + Traefik ForwardAuth middleware — exact wiring for our hostNetwork Traefik (chart 39.0.7) and existing authentik 2026.2.1 install?
+  2. Bearer-token auth for headless/API clients (e.g. ollama's OpenAI-compatible API): do authentik service-account tokens / app passwords validate through ForwardAuth, and what scopes/expiry policy fits?
+  3. Per-service vs shared middleware: one auth gateway middleware reused across IngressRoutes, or per-app proxy providers?
+  4. Which services are candidates? ollama first (zero built-in auth, currently ClusterIP-only); anything we later expose publicly (Cloudflare Tunnel plan in docs/plans/2026-07-10-gitops-cloudflare-tunnel-exposure.md) should sit behind this.
+  5. Interaction with tailscale-only services: is ForwardAuth worth adding inside the tailnet too (defense in depth), or public-exposure only?
+  6. Header pass-through (X-authentik-username etc.) for apps that can consume identity headers?
+- **Resources**:
+  - [authentik Proxy Provider docs](https://docs.goauthentik.io/docs/add-secure-apps/providers/proxy/)
+  - [authentik + Traefik ForwardAuth integration](https://docs.goauthentik.io/docs/add-secure-apps/providers/proxy/server_traefik)
+  - [Traefik ForwardAuth middleware](https://doc.traefik.io/traefik/middlewares/http/forwardauth/)
+  - [authentik outposts](https://docs.goauthentik.io/docs/add-secure-apps/outposts/)
+- **Findings**: _Not yet researched._ (Origin: 2026-07-12 karakeep deployment session — question raised about putting ollama behind authentik with bearer-auth proxy.)
+- **Decision**: _Pending._

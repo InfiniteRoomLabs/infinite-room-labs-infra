@@ -1,0 +1,63 @@
+# Review: Karakeep Tailscale-only deployment plan (alt)
+
+**Plan under review**: `docs/plans/2026-07-10-karakeep-tailscale-only-deployment-alt.md`
+**Reviewer**: independent infra plan reviewer (did not read the sibling plan)
+**Date**: 2026-07-10
+
+## Verdict: ship-with-fixes
+
+No blockers. The deploy sequence as written would very likely work first try. Every load-bearing external claim checks out against the upstream chart (fetched karakeep chart 0.32.0 values.yaml, Chart.yaml, bjw-s common 3.7.3 templates, meilisearch chart 0.12.0 statefulset template), and every repo line reference is accurate. The should-fix items below are about fragility and undocumented mechanisms, not first-deploy breakage.
+
+## What the plan gets right (verified, not just plausible)
+
+- **The `meilesearch` typo claim is real.** Upstream `values.yaml` defines `secrets.meilesearch` (sic) and the karakeep container's `envFrom` references `{{ .Release.Name }}-meilesearch`. The plan's `secrets.meilesearch.enabled: false` matches the chart's actual key. This is the kind of detail that usually gets hallucinated; here it was checked.
+- **The randAlphaNum gotcha is real and the fix is the right one.** Upstream: `NEXTAUTH_SECRET: "{{ default (randAlphaNum 48) .Values.applicationSecretKey }}"` and `MEILI_MASTER_KEY: "{{ default (randAlphaNum 30) .Values.meilisearchMasterKey }}"` -- re-evaluated on every `helm upgrade`, no `lookup`. Disabling chart secrets and supplying a Bitwarden-backed Secret (instead of pinning via `applicationSecretKey`, which would put a secret value in a committed values file) is the only approach that satisfies the repo's no-secrets-in-values rule. The cited precedent (`ansible/helm/ghostfolio/values.yaml:35-39`) says exactly what the plan claims.
+- **All repo line references are accurate**: the Ghostfolio secret block is `ansible/playbooks/k8s-secrets.yml:292-307`, the Ghostfolio deploy block is `ansible/playbooks/helm-deploy.yml:871-894`, and both are correct templates to clone (single Secret, `no_log: true`, `when: vault_* is defined` guard, `tags: [phase3, <svc>]`).
+- **The bjw-s override paths are all valid against common 3.7.3** (the chart's pinned library version): `controllers.karakeep.containers.karakeep.envFrom`, `controllers.karakeep.statefulset.volumeClaimTemplates` (correct sibling-of-`containers` indentation in the plan's snippet), `secrets.<key>.enabled: false` (upstream sets `enabled: true` explicitly, so the merge is clean), and `ingress.karakeep.enabled: false` (verified in `_enabled_ingresses.tpl`: enabled-by-default, `false` is honored). Disabling the ingress is not just style -- the chart's default Ingress for `applicationHost` would otherwise be picked up by Traefik and duplicate the route.
+- **Service naming resolves as assumed.** Release name `karakeep` + chart name `karakeep` gives fullname `karakeep`; bjw-s collapses the suffix when the service identifier equals the fullname, so the web Service is literally `karakeep:3000` -- matching `cluster_svc: karakeep` / `cluster_port: 3000` in both dicts. Chrome becomes `karakeep-chrome`, meilisearch subchart becomes `karakeep-meilisearch`, matching the chart's baked-in `MEILI_ADDR` and `BROWSER_WEB_URL`.
+- **`meilisearch.auth.existingMasterKeySecret: karakeep-secrets` works.** Verified in meilisearch chart 0.12.0's statefulset template: it `envFrom`s the named secret, so the `MEILI_MASTER_KEY` key name in `karakeep-secrets` is what the pod reads. (See should-fix #4 for the side effect.)
+- **The context claims are true**: `https://karakeep-app.github.io/helm-charts` exists and serves karakeep 0.32.0; `docs.karakeep.app/installation/kubernetes` is indeed raw kustomize with no mention of the helm chart.
+- **The Tailscale-only claim holds by construction.** No public DNS record is created (CoreDNS zone is only reachable via Split DNS), no NodePort is added, the IngressRoute binds `websecure` on the in-cluster hostNetwork Traefik reachable at the Tailscale IP. Adding entries to the two dicts genuinely inherits the posture; no new Tailscale work is needed.
+- **The bw-sync mapping is correct.** `bw-sync.sh` groups entries by `k8s_secret` name and applies multi-key secrets atomically (verified in the script, lines ~613-700), so two BW items mapping into one `karakeep-secrets` follows the established ghostfolio-secrets pattern. Item names (`karakeep-nextauth-secret`, `karakeep-meili-master-key`) and vault var names match house style.
+- **The verification section is strong**, especially the `helm upgrade` idempotency + still-logged-in check, which directly exercises the gotcha the whole design revolves around. No step prints a secret value.
+- **Deploy order is right**: BW items -> sync -> k8s-secrets -> app -> coredns/traefik, all with the repo-canonical `cd ansible/ && uv run ansible-playbook` invocation. The `always`-tagged repo-add and values-dir tasks mean `--tags karakeep` picks up the new repo and directory in the same run.
+
+## Findings by severity
+
+### Should-fix
+
+**1. The CoreDNS record claim glosses over the hardcoded zone serial; DNS only works because of the wildcard.** Plan line 128 says the `--tags coredns` rerun handles the "DNS record". Reality: `ansible/templates/coredns-internal-zone.db.j2:10` has a literal serial (`2026032201`, unchanged since March), and CoreDNS's `file` plugin only reloads a zone when the SOA serial changes. Rerunning `--tags coredns` rewrites the ConfigMap but the running pod keeps serving the old zone. `bookmarks.lab.infiniteroomlabs.cloud` will resolve anyway -- but via the wildcard `* IN A` record (template line 37), not the new explicit record. This is a pre-existing repo defect (firefly/ghostfolio ride the same wildcard), but the plan asserts a mechanism that does not do what it says, and its `dig` verification cannot distinguish wildcard from real record. Fix: either note the wildcard dependency honestly, or (better, small) make the template serial dynamic (e.g. epoch-derived) and/or add a CoreDNS rollout-restart step after the ConfigMap change.
+
+**2. The `envFrom` override is load-bearing list replacement and the plan never says so.** Helm replaces user-supplied lists wholesale, so the plan's single `secretRef: karakeep-secrets` silently discards the chart's two default refs (`karakeep` and `karakeep-meilesearch` -- the very secrets being disabled, which would otherwise leave the pod in `CreateContainerConfigError`). The plan navigated this correctly, but the values file as drafted carries no comment explaining that (a) the list REPLACES the chart default and (b) `secrets.*.enabled: false` and this override are a paired invariant -- re-enable one without the other and you get either a broken pod or re-rolled secrets. One comment line in `ansible/helm/karakeep/values.yaml` (plan section 5, near line 82) prevents a future footgun. Same class of risk exists for the `volumeClaimTemplates` override (also full list replacement; the plan correctly re-specifies `globalMounts`, but dropping it during a future edit would silently unmount `/data`).
+
+**3. Plan section 6 misdescribes the helm-deploy.yml edits.** There is no "valid tags list" at line 52 -- that is the values-override directory creation loop (`helm-deploy.yml:39-53`), and that loop (plus the repo list at 60-72) is what actually needs the karakeep entries. Also "template values" is loose: the peer pattern is `ansible.builtin.copy` of a static values file (`helm-deploy.yml:875-881`), not `ansible.builtin.template` -- fine here since the karakeep values file has no Jinja, but an implementer following the plan literally will hunt for a nonexistent list and may reach for the wrong module. Rename to "values-dir loop (~line 52) + helm repo list (~line 71)" and "copy values".
+
+**4. `karakeep-secrets` leaks `NEXTAUTH_SECRET` into the meilisearch pod.** Because the meilisearch chart `envFrom`s the entire `existingMasterKeySecret`, the single shared secret puts the NextAuth session secret in the meilisearch container's environment. It works, and Tailscale-only lowers the stakes, but it violates least-privilege for zero structural benefit -- splitting into `karakeep-secrets` (NEXTAUTH_SECRET) and `karakeep-meili-secrets` (MEILI_MASTER_KEY) costs one extra bw-sync entry and one extra `envFrom` item (the karakeep container needs both). If the single-secret simplicity is a deliberate trade-off, say so in the plan; right now it reads as unexamined.
+
+### Nits
+
+**5. The `irl_services` entry claims to drive the health check but won't.** `ansible/templates/irl-health-check.j2:23-27` only emits a check when `health_path` is defined; the plan's entry (section 4) has none. Karakeep has `/api/health` (the chart's own probes use it). Add `health_path: "/api/health"` and note that `cron-agents.yml` deploys the checker -- or drop "health check" from the parenthetical.
+
+**6. CONTRIBUTING.md checklist steps silently skipped.** The "Adding a New Service" checklist also asks for test updates (`tests/conftest.py` SERVICES, `tests/test_dns.py` EXPECTED_RECORDS) and doc updates (`~/.claude/CLAUDE.md` service table, `docs/homelab-access-guide.md`, `CHANGELOG.md`). Precedent cuts both ways: firefly/ghostfolio never made it into the tests either, so the plan is peer-consistent -- but the "Skipped" section should own that explicitly the way it owns Homepage/Prometheus/OIDC.
+
+**7. Redundant values restatements invite drift.** The `service.karakeep` block and `meilisearch.environment` / `meilisearch.persistence.enabled` lines duplicate chart defaults verbatim (only the meilisearch `size: 2Gi` differs from the default 1Gi). `fullnameOverride: karakeep` does work in bjw-s 3.7.3 (top-level is read alongside `global.fullnameOverride`) but is a no-op here since release name == chart name already yields fullname `karakeep`. Trim to the actual deltas, or keep them with a "restated for clarity" comment.
+
+**8. "3 env vars" for the skipped Ollama integration, but only 2 are listed** (`OLLAMA_BASE_URL`, `INFERENCE_TEXT_MODEL`; the third would be `INFERENCE_IMAGE_MODEL`). Trivial, but it is the plan's only internal inconsistency.
+
+**9. Encoding convention tension.** The plan uses em dashes and `->` arrows in prose; the parent-repo convention says ASCII equivalents (`-`, `->`). Existing `docs/plans/` files set precedent for both styles and this is not a Spec Kitty artifact (the stated reason for the rule), so: nit. Prose is correctly not hard-wrapped.
+
+**10. Post-deploy hardening not mentioned: signups.** Karakeep allows open signup by default. Tailscale-only makes this a one-tenant problem, but adding `DISABLE_SIGNUPS: "true"` (chart `env` block) after creating the account is a one-line follow-up worth a bullet in "Skipped". Related observation, no action needed: the chrome container ships with `SYS_ADMIN` capability per chart defaults (mitigated by non-root, read-only rootfs, no exposure beyond the cluster).
+
+**11. Minor sequence redundancy.** `mise run secrets:sync` (target both) already pushes `karakeep-secrets` to k8s directly from the laptop; the `k8s-secrets.yml` run then recreates the same secret from vault. Harmless and idempotent -- it is the repo's deliberate dual-path design -- but the plan could note that either path alone suffices for the secret to exist.
+
+## Risky assumptions checked and cleared
+
+- **bjw-s `secrets.<key>.enabled: false`**: supported; upstream declares `enabled: true` explicitly so the merge behaves.
+- **bjw-s `ingress.<key>.enabled: false`**: supported; ingresses are enabled-by-default when the key is a map, and `false` is honored.
+- **`volumeClaimTemplates` size 10Gi**: fine on first install; note for later that StatefulSet volumeClaimTemplates are immutable, so a future resize means PVC expansion or release surgery, not a values bump.
+- **Unpinned `chart_ref`**: matches firefly/ghostfolio precedent exactly as the plan states. The repo-wide no-pin convention is its own (pre-existing) risk -- an upstream chart restructure lands unreviewed on the next full run -- but that is not this plan's debt to pay.
+- **TLS**: the standalone IngressRoute template uses `certResolver: letsencrypt` per-host; issuance for the new subdomain is automatic via the existing Cloudflare DNS-01 setup. No plan step needed, and the `curl https://` verification covers it.
+
+## Bottom line
+
+This is a well-grounded plan whose external claims survive verification unusually well (the sic-typo and randAlphaNum claims are both real and correctly handled). Apply fixes 1-4 -- honesty about the wildcard/serial DNS mechanism, a comment documenting the envFrom/secrets pairing, corrected helm-deploy.yml edit descriptions, and a decision (either way) on the shared-secret blast radius -- and ship it.

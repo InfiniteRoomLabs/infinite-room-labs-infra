@@ -72,6 +72,18 @@
         - paperless-data
       tags: [paperless]
 
+    # Meilisearch (karakeep search index) runs as UID/GID 1000 with an
+    # fsGroup that does not apply to hostPath PVs -- chown explicitly.
+    # karakeep-data is NOT listed: the karakeep container runs as root.
+    - name: Chown karakeep-meilisearch dataset to UID 1000 (container user)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/karakeep-meilisearch"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        recurse: true
+      tags: [karakeep]
+
     # ── ZFS scrub schedule ─────────────────────────────────────────
     - name: Schedule weekly ZFS scrub (Sunday 3am)
       ansible.builtin.cron:

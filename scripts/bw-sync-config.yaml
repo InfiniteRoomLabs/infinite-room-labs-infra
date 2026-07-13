@@ -160,6 +160,54 @@ secrets:
     k8s_secret: "paperless-secrets"
     k8s_key: "api-token"
 
+  # ── Firefly III (personal finance ledger) ───────────────────
+  - bw_item: "pg-firefly"
+    ansible_var: "vault_pg_passwords.firefly"
+    k8s_secret: "postgres-firefly"
+    k8s_key: "password"
+
+  # 32-char APP_KEY -- Firefly encrypts data with this; losing/changing it
+  # makes existing encrypted fields unreadable. Generate exactly 32 chars.
+  - bw_item: "firefly-app-key"
+    ansible_var: "vault_firefly_app_key"
+    k8s_secret: "firefly-secrets"
+    k8s_key: "APP_KEY"
+
+  # Firefly PAT used by the Data Importer (reuses the same token as the MCP).
+  - bw_item: "firefly-importer-token"
+    ansible_var: "vault_firefly_importer_token"
+    k8s_secret: "firefly-importer-secrets"
+    k8s_key: "accessToken"
+
+  # ── Ghostfolio (investment portfolio) ───────────────────────
+  - bw_item: "pg-ghostfolio"
+    ansible_var: "vault_pg_passwords.ghostfolio"
+    k8s_secret: "postgres-ghostfolio"
+    k8s_key: "password"
+
+  - bw_item: "ghostfolio-access-token-salt"
+    ansible_var: "vault_ghostfolio_access_token_salt"
+    k8s_secret: "ghostfolio-secrets"
+    k8s_key: "ACCESS_TOKEN_SALT"
+
+  - bw_item: "ghostfolio-jwt-secret"
+    ansible_var: "vault_ghostfolio_jwt_secret"
+    k8s_secret: "ghostfolio-secrets"
+    k8s_key: "JWT_SECRET_KEY"
+
+  # ── Karakeep (bookmarks) ────────────────────────────────────
+  # Split into two Secrets: the meilisearch chart envFroms its entire
+  # secret, so a shared one would leak NEXTAUTH_SECRET into that pod.
+  - bw_item: "karakeep-nextauth-secret"
+    ansible_var: "vault_karakeep_nextauth_secret"
+    k8s_secret: "karakeep-secrets"
+    k8s_key: "NEXTAUTH_SECRET"
+
+  - bw_item: "karakeep-meili-master-key"
+    ansible_var: "vault_karakeep_meili_master_key"
+    k8s_secret: "karakeep-meili-secrets"
+    k8s_key: "MEILI_MASTER_KEY"
+
   # ── Vaultwarden (password manager) ─────────────────────────
   - bw_item: "pg-vaultwarden"
     ansible_var: "vault_pg_passwords.vaultwarden"

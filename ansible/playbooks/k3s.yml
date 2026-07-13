@@ -454,6 +454,17 @@
           app: paperless
           capacity: "20Gi"
           hostPath: "{{ irl_zfs_mount }}/paperless-data"
+        # ── Karakeep ──
+        # Data = SQLite DB + archived pages (authoritative). Meilisearch =
+        # rebuildable search index (dataset chowned to 1000 in zfs.yml).
+        - name: pv-karakeep-data
+          app: karakeep
+          capacity: "50Gi"
+          hostPath: "{{ irl_zfs_mount }}/karakeep-data"
+        - name: pv-karakeep-meilisearch
+          app: karakeep
+          capacity: "20Gi"
+          hostPath: "{{ irl_zfs_mount }}/karakeep-meilisearch"
 
     - name: Create zfs-local StorageClass
       kubernetes.core.k8s:

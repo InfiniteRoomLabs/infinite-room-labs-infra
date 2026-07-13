@@ -50,6 +50,7 @@
         - firefly
         - ghostfolio
         - firefly-importer
+        - karakeep
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -57,6 +58,7 @@
       kubernetes.core.helm_repository:
         name: "{{ item.name }}"
         repo_url: "{{ item.url }}"
+        force_update: true
       loop:
         - { name: irl, url: "https://infiniteroomlabs.github.io/helm-charts/" }
         - { name: hashicorp, url: "https://helm.releases.hashicorp.com" }
@@ -69,6 +71,7 @@
         - { name: nextcloud, url: "https://nextcloud.github.io/helm/" }
         - { name: firefly-iii, url: "https://firefly-iii.github.io/kubernetes/" }
         - { name: ghostfolio, url: "https://bythehugo.github.io/ghostfolio-helm/" }
+        - { name: karakeep-app, url: "https://karakeep-app.github.io/helm-charts" }
         - { name: traefik, url: "https://traefik.github.io/charts" }
       tags: [always]
 
@@ -431,6 +434,7 @@
       kubernetes.core.helm:
         name: traefik
         chart_ref: traefik/traefik
+        chart_version: "39.0.7"  # last schema-compatible with our values; 40+ upgrade is a separate task
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -916,6 +920,74 @@
         wait: true
         timeout: "5m0s"
       tags: [phase3, firefly-importer]
+
+    # ── Karakeep (bookmarks: web + chrome + meilisearch) ──────────
+    # Official upstream chart, PINNED (values overrides depend on chart
+    # internals incl. its "meilesearch" secrets typo -- bump deliberately
+    # with a render-diff review). Requires karakeep-secrets +
+    # karakeep-meili-secrets (k8s-secrets.yml) and the pv-karakeep-* PVs
+    # (k3s.yml). PVCs bind via explicit volumeName: both PVs share the
+    # app=karakeep label, so a selector alone could bind the 20Gi claim
+    # to the 50Gi PV. Routed at bookmarks.lab via IngressRoute.
+    - name: "Phase 3: Create Karakeep data PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: karakeep-data
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            volumeName: pv-karakeep-data
+            resources:
+              requests:
+                storage: "50Gi"
+      tags: [phase3, karakeep]
+
+    - name: "Phase 3: Create Karakeep meilisearch PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: karakeep-meilisearch
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            volumeName: pv-karakeep-meilisearch
+            resources:
+              requests:
+                storage: "20Gi"
+      tags: [phase3, karakeep]
+
+    - name: "Phase 3: Upload Karakeep values"
+      ansible.builtin.copy:
+        src: ../helm/karakeep/values.yaml
+        dest: "{{ helm_values_path }}/karakeep/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, karakeep]
+
+    - name: "Phase 3: Deploy Karakeep (karakeep-app chart, pinned)"
+      kubernetes.core.helm:
+        name: karakeep
+        chart_ref: karakeep-app/karakeep
+        chart_version: "0.32.0"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/karakeep/values.yaml"
+        wait: true
+        timeout: "10m0s"
+      tags: [phase3, karakeep]
 
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,

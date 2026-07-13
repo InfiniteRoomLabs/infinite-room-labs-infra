@@ -133,6 +133,13 @@ securityContext:
 updateStrategy:
   type: Recreate
 
+# -- Service: traefik binds hostNetwork 80/443 directly; the chart-default
+# LoadBalancer never gets an IP on k3s here (no LB provider), which made every
+# `helm --wait` hang until its 5m timeout (revs 13/14/16/18). ClusterIP lets
+# --wait actually complete.
+service:
+  type: ClusterIP
+
 # -- OpenTelemetry tracing
 tracing:
   otlp:

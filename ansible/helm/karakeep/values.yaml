@@ -1,0 +1,83 @@
+# Karakeep -- bookmarks/read-later. Official chart karakeep-app/karakeep
+# (bjw-s common 3.7.3 base), PINNED to chart_version in helm-deploy.yml:
+# our overrides depend on chart internals (incl. its "meilesearch" typo),
+# so upgrades are deliberate version bumps with a render-diff review.
+# SQLite on a ZFS-backed PV; Meilisearch + headless Chrome bundled.
+applicationProtocol: https
+applicationHost: bookmarks.lab.infiniteroomlabs.cloud
+
+# INVARIANT (paired overrides -- change together or break the pod):
+# 1. Chart-generated secrets are DISABLED because their randAlphaNum defaults
+#    re-roll on every helm upgrade (session + Meilisearch auth loss). Values
+#    live in Bitwarden -> karakeep-secrets / karakeep-meili-secrets
+#    (bw-sync-config.yaml + k8s-secrets.yml).
+# 2. The envFrom list below REPLACES the chart's default refs to those
+#    disabled secrets wholesale (Helm list semantics). Re-enabling chart
+#    secrets without restoring envFrom (or vice versa) yields
+#    CreateContainerConfigError or re-rolled secrets.
+secrets:
+  karakeep:
+    enabled: false
+  meilesearch:            # sic -- chart's own typo, must match
+    enabled: false
+
+defaultPodOptions:
+  nodeSelector:
+    irl.dev/tier: data    # PVs are node-local hostPath
+  dnsConfig:              # alpine/musl + k8s ndots:5 breaks external DNS
+    options:              # (same bug that paused qbittorrent -- see main.yml)
+      - name: ndots
+        value: "1"
+
+controllers:
+  karakeep:
+    type: deployment      # not the chart's statefulset: we bind the
+    replicas: 1           # IRL-managed static-PV claim via existingClaim
+    strategy: Recreate    # RWO claim
+    containers:
+      karakeep:
+        envFrom:          # REPLACES chart default (see INVARIANT above)
+          - secretRef:
+              name: karakeep-secrets
+          - secretRef:
+              name: karakeep-meili-secrets
+        env:
+          # Flipped after the single admin account was bootstrapped (2026-07-12).
+          DISABLE_SIGNUPS: "true"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+  # chrome: chart defaults (SYS_ADMIN capability accepted: non-root,
+  # read-only rootfs, ClusterIP-only -- documented trade-off).
+
+persistence:
+  data:
+    existingClaim: karakeep-data
+    advancedMounts:       # scoped: chrome must not mount /data
+      karakeep:
+        karakeep:
+          - path: /data
+
+meilisearch:
+  auth:
+    existingMasterKeySecret: karakeep-meili-secrets   # key MEILI_MASTER_KEY
+  persistence:
+    enabled: true
+    existingClaim: karakeep-meilisearch
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  nodeSelector:           # subchart does not inherit defaultPodOptions
+    irl.dev/tier: data
+
+ingress:
+  karakeep:
+    enabled: false        # routed by Traefik IngressRoute (standalone svc)

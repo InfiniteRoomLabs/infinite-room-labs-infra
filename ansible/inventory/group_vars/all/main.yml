@@ -64,6 +64,23 @@ irl_zfs_datasets:
     properties:
       atime: "off"
       compression: "lz4"
+  # ── Karakeep (bookmarks) ─────────────────────────────────────
+  # Data holds the SQLite DB + archived pages/screenshots (authoritative,
+  # must be backed up). Meilisearch is the rebuildable search index; it
+  # runs as UID 1000 and is chowned in zfs.yml (karakeep-data stays
+  # root-owned -- the karakeep container runs as root).
+  - name: "{{ irl_zfs_pool }}/karakeep-data"
+    mountpoint: "{{ irl_zfs_mount }}/karakeep-data"
+    quota: "50G"
+    properties:
+      atime: "off"
+      compression: "lz4"
+  - name: "{{ irl_zfs_pool }}/karakeep-meilisearch"
+    mountpoint: "{{ irl_zfs_mount }}/karakeep-meilisearch"
+    quota: "20G"
+    properties:
+      atime: "off"
+      compression: "lz4"
 
 # ── NFS (hand-managed on homelab, not via ansible) ──────────────────
 # The homelab already exports /media/root/storage1/nfs-share via NFSv4.2
@@ -150,6 +167,27 @@ irl_services:
     internal: false
     cluster_svc: "paperless"
     cluster_port: 8000
+  firefly:
+    subdomain: "finances"
+    internal: false
+    cluster_svc: "firefly"
+    cluster_port: 80
+  ghostfolio:
+    subdomain: "portfolio"
+    internal: false
+    cluster_svc: "ghostfolio"
+    cluster_port: 3333
+  firefly-importer:
+    subdomain: "import"
+    internal: false
+    cluster_svc: "firefly-importer"
+    cluster_port: 80
+  karakeep:
+    subdomain: "bookmarks"
+    internal: false
+    cluster_svc: "karakeep"
+    cluster_port: 3000
+    health_path: "/api/health"
   # qbittorrent:                 # PAUSED -- DNS resolution blocker, see
   #   subdomain: "torrents"      # ~/projects/infinite-room-labs/qbittorrent-operator/deploy/irl/README.md
   #   internal: false            # Alpine/musl + k8s ndots:5 breaks tracker hostname resolution.
@@ -173,6 +211,8 @@ irl_pg_databases:
   - name: vaultwarden
   - name: nextcloud
   - name: paperless
+  - name: firefly
+  - name: ghostfolio
 
 # ── Traefik (in-cluster reverse proxy) ──────────────────────────────
 irl_traefik_le_email: "admin@infiniteroomlabs.cloud"
@@ -204,6 +244,26 @@ irl_traefik_standalone_services:
     domain: "{{ irl_public_domain }}"
     cluster_svc: "nextcloud"
     cluster_port: 8080
+  firefly:
+    subdomain: "finances"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "firefly"
+    cluster_port: 80
+  ghostfolio:
+    subdomain: "portfolio"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "ghostfolio"
+    cluster_port: 3333
+  firefly-importer:
+    subdomain: "import"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "firefly-importer"
+    cluster_port: 80
+  karakeep:
+    subdomain: "bookmarks"
+    domain: "{{ irl_public_domain }}"
+    cluster_svc: "karakeep"
+    cluster_port: 3000
 
 # ── Services to disable during cleanup ───────────────────────────────
 irl_services_to_disable:

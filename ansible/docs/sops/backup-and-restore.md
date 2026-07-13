@@ -39,3 +39,27 @@ sudo docker compose stop
 sudo zfs snapshot main/backups@{stack}-$(date +%Y%m%d)
 sudo docker compose start
 ```
+
+## Karakeep
+
+Two datasets, different value:
+- `main/karakeep-data` -- **authoritative** (SQLite DB + archived pages +
+  screenshots). Sanoid `service_data` template.
+- `main/karakeep-meilisearch` -- rebuildable search index. Sanoid
+  `large_assets` template (minimal retention); never restore-critical.
+
+Restore bookmark data from a snapshot (k8s workload, not compose):
+
+```bash
+# Scale the app down so SQLite isn't written mid-rollback
+kubectl scale -n irl deploy/karakeep --replicas=0
+
+ssh homelab-ts "sudo zfs list -t snapshot main/karakeep-data | tail"
+ssh homelab-ts "sudo zfs rollback main/karakeep-data@<snapshot>"  # DESTRUCTIVE
+
+kubectl scale -n irl deploy/karakeep --replicas=1
+```
+
+After a data restore, rebuild search: karakeep UI -> Admin Settings ->
+Background Jobs -> Reindex (or restart `statefulset/karakeep-meilisearch`
+and reindex). Do NOT bother restoring the meilisearch dataset.
