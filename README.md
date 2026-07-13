@@ -1,6 +1,20 @@
 # Infinite Room Labs Infrastructure
 
-Infrastructure as code for Infinite Room Labs. This monorepo contains all IaC tooling, organized by tool.
+Infrastructure as code for Infinite Room Labs. This monorepo provisions cloud and DNS resources with Terraform/Terragrunt and manages the homelab k3s cluster with Ansible and Helm.
+
+## Start Here
+
+| I want to... | Read or run |
+|---|---|
+| Set up a new checkout | Follow [Quick Start](#quick-start) below |
+| Add or change a homelab service | [Contributing guide](CONTRIBUTING.md#adding-a-new-service) |
+| Run infrastructure tests | [Testing guide](TESTING.md) |
+| Access the homelab | [Homelab access guide](docs/homelab-access-guide.md) |
+| Respond to an outage | [Service-down runbook](ansible/docs/runbooks/service-down.md) |
+| Deploy a new service | [Deployment SOP](ansible/docs/sops/deploy-new-service.md) |
+| Add a DNS record | [DNS record SOP](ansible/docs/sops/add-dns-record.md) |
+| Work on Terraform | [Terraform](#terraform) |
+| Work on Ansible | [Ansible](#ansible) and [ansible/CLAUDE.md](ansible/CLAUDE.md) |
 
 ## Repository Layout
 
@@ -18,67 +32,50 @@ fnox.toml           Secret declarations (fnox, Bitwarden-backed)
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide. See [TESTING.md](TESTING.md) for the acceptance test suite.
 
-## Setup
+## Quick Start
 
-### 1. Install tools and credentials
+Prerequisites: Git, [mise](https://mise.jdx.dev/), Docker, an SSH key at `~/.ssh/id_ed25519`, and access to the IRL Bitwarden organization. Ansible runs in Docker; do not install it locally.
 
-Tool versions are pinned in `mise.toml`. Install them once:
-
-```bash
-mise install        # terraform, terragrunt, helm, kubectl, task, fnox, usage, age
-```
-
-Secrets are managed by **fnox** (Bitwarden-backed) and declared in `fnox.toml`.
-They are injected per-command via `fnox exec` -- there is no `.env` or `.envrc`,
-and nothing is loaded into your shell just by entering the directory. Run
-secret-bearing commands through the mise tasks or the wrapper:
-
-```bash
-mise run bootstrap                       # fnox exec -> scripts/bootstrap.sh
-mise run secrets:sync                    # fnox exec -> bw-sync.sh --target both
-./scripts/with-secrets.sh terragrunt plan   # ad-hoc, in any leaf dir
-```
-
-The providers (Bitwarden + age) live in the global `~/.config/fnox/config.toml`;
-`BW_SESSION` is age-encrypted there and resolved automatically (unlock with
-`bw-unlock`, or seed via `fnox set BW_SESSION --provider age -g`). Non-secret
-identifiers (`CLOUDFLARE_ACCOUNT_ID`, `DOCKER_USERNAME`, `TAILSCALE_TAILNET`)
-live in `mise.toml [env]`.
-
-The secrets `fnox.toml` maps to Bitwarden (fill the BW items if missing):
-
-| Variable                         | Where to get it                                                                                                             |
-|----------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
-| `CLOUDFLARE_BOOTSTRAP_API_TOKEN` | Cloudflare dashboard > My Profile > API Tokens > Create Token > custom token with "API Tokens: Edit" under User permissions |
-| `CLOUDFLARE_ACCOUNT_ID`          | Cloudflare dashboard > any domain > Overview > right sidebar under "API"                                                    |
-| `PORKBUN_API_KEY`                | Porkbun > Account > API Access                                                                                              |
-| `PORKBUN_SECRET_KEY`             | Porkbun > Account > API Access (generated with the API key)                                                                 |
-| `TF_TOKEN_app_terraform_io`      | Terraform Cloud > User Settings > Tokens > Create an API token                                                              |
-| `DOCKER_USERNAME`                | Docker Hub username                                                                                                         |
-| `DOCKER_PASSWORD`                | Docker Hub > Account Settings > Security > New Access Token                                                                 |
-| `DIGITAL_OCEAN_TOKEN`            | DigitalOcean > API > Generate New Token                                                                                     |
-| `TAILSCALE_API_KEY`              | Tailscale admin console > Settings > Keys > Generate auth key                                                               |
-| `TAILSCALE_TAILNET`              | Tailscale admin console > Settings > General > Organization                                                                 |
-| `HOMELAB_TAILSCALE_IP`           | Tailscale admin console > Machines > homelab node IP                                                                        |
-| `SENDGRID_API_KEY`               | SendGrid > Settings > API Keys > Create API Key                                                                             |
-
-> **Note:** `CLOUDFLARE_API_TOKEN` (the infra token) is produced by the bootstrap into terragrunt state and consumed downstream via terragrunt dependency -- it is not declared in `fnox.toml`.
-
-Verify fnox can resolve everything (no values printed):
-
-```bash
-fnox check          # validates all declared secrets + providers
-```
-
-### 2. Initialize submodules
+Clone and initialize the Helm chart submodule, then install the pinned tools:
 
 ```bash
 git submodule update --init
+mise install
 ```
 
-This populates `helm-charts/` with the IRL Helm charts.
+Check that fnox can resolve the declared credentials. This validates references without printing secret values:
 
----
+```bash
+fnox check
+```
+
+List the available project tasks and run a non-mutating smoke test:
+
+```bash
+mise tasks
+mise run test:smoke
+```
+
+Secrets are declared in `fnox.toml` and backed by Bitwarden. They are injected only for the duration of a command. There is no project `.env` or `.envrc`, and entering the directory does not load credentials into the shell.
+
+Use a mise task when one exists. For an ad hoc command that needs credentials, use the wrapper:
+
+```bash
+mise run bootstrap
+mise run secrets:sync
+./scripts/with-secrets.sh terragrunt plan
+```
+
+`mise run bootstrap` and `mise run secrets:sync` change infrastructure or secret state. Review their help or plan output before running them. See [CONTRIBUTING.md](CONTRIBUTING.md#secrets-management) for the secret flow and [rotate-secrets.md](ansible/docs/sops/rotate-secrets.md) for rotation procedures.
+
+## Safety Rules
+
+- Run Ansible through `mise run ansible -- ...` or `ansible/run-ansible.sh`; do not run Helm deployments by hand.
+- Run secret-bearing commands through mise tasks or `scripts/with-secrets.sh`; never print secret values.
+- Run `terragrunt plan` before `terragrunt apply`, especially when removing resources.
+- Treat `helm-charts/` as a separate Git repository: commit there first, then update the submodule pointer in this repository.
+- Keep tool-specific files under their existing top-level directory; do not add IaC files at the repository root.
+
 
 ## Terraform
 
