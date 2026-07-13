@@ -15,6 +15,12 @@
         "mcp"
       ],
       "env": {}
+    },
+    "grafana": {
+      "type": "stdio",
+      "command": "./scripts/mcp-grafana.sh",
+      "args": [],
+      "env": {}
     }
   }
 }

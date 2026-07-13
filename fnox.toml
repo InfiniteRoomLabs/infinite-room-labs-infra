@@ -43,6 +43,13 @@ TAILSCALE_AUTH_KEY = { provider = "bitwarden", value = "tailscale-homelab-authke
 # ── SendGrid ─────────────────────────────────────────────────
 SENDGRID_API_KEY = { provider = "bitwarden", value = "sendgrid-api-key" }
 
+# ── Grafana (mcp-grafana MCP server) ─────────────────────────
+# Editor-role service-account token (SA name "mcp-grafana"). Fetched as a single
+# secret by scripts/mcp-grafana.sh via `fnox get` -- NOT `fnox exec` -- so the
+# third-party mcp-grafana binary only ever sees this token, never infra-wide creds.
+# GRAFANA_URL is a non-secret id -> mise.toml [env].
+GRAFANA_SERVICE_ACCOUNT_TOKEN = { provider = "bitwarden", value = "grafana-mcp-token", description = "Grafana SA token (Editor) for mcp-grafana" }
+
 # ── Ansible Vault ────────────────────────────────────────────
 # Consumed by scripts/vault-pass.sh (ansible.cfg vault_password_file).
 # NOTE: value is the Login PASSWORD field (no `/notes`). The item's notes field
