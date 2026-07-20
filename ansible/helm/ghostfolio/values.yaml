@@ -1,0 +1,53 @@
+# Ghostfolio -- investment positions / portfolio analytics.
+# Keep PRD (docs): the investments source of truth (cost basis, dividends).
+# Chart: ghostfolio/ghostfolio (ByTheHugo). Bitnami postgresql+redis subcharts
+# are DISABLED -- we reuse the homelab CNPG Postgres and Valkey.
+fullnameOverride: ghostfolio
+
+# --- External Postgres (CNPG) instead of the bundled Bitnami subchart ---
+postgresql:
+  enabled: false
+externalPostgresql:
+  host: postgresql-rw
+  port: 5432
+  auth:
+    username: ghostfolio
+    database: ghostfolio
+    existingSecret: postgres-ghostfolio   # auto-created by the vault_pg_passwords loop
+    secretKeys:
+      userPasswordKey: password
+  options: connect_timeout=300
+
+# --- External Redis == the existing Valkey (DB 4; 0-3 already in use) ---
+redis:
+  enabled: false
+externalRedis:
+  host: valkey
+  port: 6379
+  auth:
+    enabled: true
+    existingSecret: redis-auth
+    existingSecretPasswordKey: redis-password
+
+ghostfolio:
+  HOST: 0.0.0.0
+  PORT: 3333
+  # ACCESS_TOKEN_SALT + JWT_SECRET_KEY come from our K8s Secret, never this file.
+  # These are wired as explicit env secretKeyRefs (override the chart's autogen).
+  # Stability is critical: a changed ACCESS_TOKEN_SALT locks existing accounts out,
+  # so we keep it in Bitwarden, not chart-generated.
+  existingSecret: ghostfolio-secrets
+  existingSecretAccessTokenSaltKey: ACCESS_TOKEN_SALT
+  existingSecretJwtSecretKeyKey: JWT_SECRET_KEY
+
+# Pin Ghostfolio to Valkey logical DB 4 (gitea/authentik/.../paperless hold 0-3).
+extraEnv:
+  - name: REDIS_DB
+    value: "4"
+
+service:
+  type: ClusterIP                  # routed by Traefik IngressRoute (standalone svc)
+  port: 3333
+
+ingress:
+  enabled: false

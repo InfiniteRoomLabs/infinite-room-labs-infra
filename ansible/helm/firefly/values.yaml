@@ -1,0 +1,45 @@
+# Firefly III -- personal-finance double-entry ledger / system-of-record.
+# Keep PRD (docs): the cash + liabilities source of truth.
+# Chart: firefly-iii/firefly-iii (standalone subchart, NOT the -stack umbrella).
+# External CNPG Postgres (postgresql-rw); secrets via existing K8s Secret.
+fullnameOverride: firefly
+
+image:
+  # Empty -> chart appVersion (Firefly III core). Pin here if a specific
+  # version is needed.
+  tag: ""
+
+persistence:
+  # Uploaded transaction attachments live on disk; keep them across restarts.
+  enabled: true
+  storageClassName: local-path   # dynamic default StorageClass; no pre-created PV
+  accessModes: ReadWriteOnce
+  storage: 5Gi
+
+config:
+  # firefly-secrets supplies APP_KEY (32-char) + DB_PASSWORD as env vars,
+  # overriding config.env. Setting this also stops the chart creating its own
+  # plaintext Secret -- we never put secret values in this file.
+  existingSecret: firefly-secrets
+  env:
+    DB_CONNECTION: pgsql
+    DB_HOST: postgresql-rw
+    DB_PORT: "5432"
+    DB_DATABASE: firefly
+    DB_USERNAME: firefly
+    APP_URL: "https://finances.lab.infiniteroomlabs.cloud"
+    TRUSTED_PROXIES: "**"          # behind Traefik
+    SITE_OWNER: "admin@infiniteroomlabs.cloud"
+    TZ: "America/New_York"
+
+service:
+  type: ClusterIP                  # routed by Traefik IngressRoute (standalone svc)
+  port: 80
+
+ingress:
+  enabled: false                   # IngressRoute comes from irl_traefik_standalone_services
+
+cronjob:
+  # Recurring-transaction + bill cron. Off for day-one familiarisation; turn on
+  # when the Keep ingest pipeline starts posting real recurring data.
+  enabled: false

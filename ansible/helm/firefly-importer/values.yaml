@@ -1,0 +1,29 @@
+# Firefly III Data Importer -- ingests QFX/OFX/CSV bank exports into Firefly III.
+# The manual bridge until the Keep ingest pipeline is automated. Stateless (no DB).
+# Chart: firefly-iii/importer. Talks to Firefly in-cluster; PAT from a K8s Secret.
+fullnameOverride: firefly-importer
+
+image:
+  tag: ""   # chart appVersion
+
+trustedProxies: "**"   # behind Traefik
+
+fireflyiii:
+  url: "http://firefly:80"                                  # in-cluster Firefly service
+  vanityUrl: "https://finances.lab.infiniteroomlabs.cloud"  # public URL users open Firefly at
+  auth:
+    # firefly-importer-secrets must carry key `accessToken` (a Firefly PAT).
+    existingSecret: firefly-importer-secrets
+
+config:
+  env:
+    TZ: "America/New_York"
+    IGNORE_DUPLICATE_ERRORS: "false"
+  files: []   # drop the chart's dummy test.txt sample file
+
+service:
+  type: ClusterIP   # routed by Traefik IngressRoute (irl_traefik_standalone_services)
+  port: 80
+
+ingress:
+  enabled: false
