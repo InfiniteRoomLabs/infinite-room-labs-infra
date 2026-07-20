@@ -17,6 +17,15 @@
 # CLOUDFLARE_ACCOUNT_ID is a non-secret id -> mise.toml [env].
 CLOUDFLARE_BOOTSTRAP_API_TOKEN = { provider = "bitwarden", value = "cloudflare-create-tokens/notes", description = "Cloudflare bootstrap token (API Tokens Write)" }
 
+# ── Terraform state backend (Garage S3 over Tailscale) ───────
+# The global/cloudflare/tokens bootstrap leaf keeps state in the self-hosted
+# Garage S3 bucket `irl-tfstate` (endpoint over Tailscale). Its backend expects
+# standard AWS_* vars. Wiring these restores state access for the whole CF IaC
+# chain (tokens -> zones -> dns-records -> tunnel), which was broken by the
+# May-2026 Garage state migration never being committed to fnox.
+AWS_ACCESS_KEY_ID     = { provider = "bitwarden", value = "garage-tfstate-access-key", description = "Garage S3 access key for the irl-tfstate state bucket" }
+AWS_SECRET_ACCESS_KEY = { provider = "bitwarden", value = "garage-tfstate-secret-key", description = "Garage S3 secret key for the irl-tfstate state bucket" }
+
 # ── Porkbun ──────────────────────────────────────────────────
 PORKBUN_API_KEY    = { provider = "bitwarden", value = "porkbun-api-key/notes" }
 PORKBUN_SECRET_KEY = { provider = "bitwarden", value = "porkbun-api-secret/notes" }

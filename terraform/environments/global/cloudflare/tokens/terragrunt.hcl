@@ -10,16 +10,10 @@ generate "main" {
   path      = "main.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<-EOF
-    terraform {
-      required_version = ">= 1.5"
-      required_providers {
-        cloudflare = {
-          source  = "cloudflare/cloudflare"
-          version = "~> 5.17"
-        }
-      }
-    }
-
+    # NOTE: required_providers is intentionally NOT declared here -- terraform
+    # forbids two required_providers blocks, and root.hcl's generate "providers"
+    # already pins cloudflare ~> 5.17 via providers.tf. Declaring it again here
+    # breaks every leaf that depends on this module's outputs.
     variable "bootstrap_api_token" {
       type        = string
       sensitive   = true
@@ -44,6 +38,10 @@ generate "main" {
       perm_zone_write = "e6d2666161e84845a636613608cee8d5"
       perm_dns_read   = "82e64a83756745bbbb1c9c2701bf816b"
       perm_dns_write  = "4755a26eedb94da69e1066d98aa820be"
+      # Added for the JobOps tunnel (account-level Cloudflare Tunnel + Zero Trust Access).
+      perm_tunnel_write          = "c07321b023e944ff818fec44d8203567"
+      perm_access_apps_write     = "1e13c5124ca64b72b1969a67e8829049"
+      perm_access_orgs_idp_write = "bfe0d8686a584fa680f4c53b5eb0de6d"
     }
 
     resource "cloudflare_account_token" "infra" {
@@ -58,6 +56,9 @@ generate "main" {
             { id = local.perm_zone_write },
             { id = local.perm_dns_read },
             { id = local.perm_dns_write },
+            { id = local.perm_tunnel_write },
+            { id = local.perm_access_apps_write },
+            { id = local.perm_access_orgs_idp_write },
           ]
           resources = jsonencode({
             "com.cloudflare.api.account.$${var.account_id}" = "*"

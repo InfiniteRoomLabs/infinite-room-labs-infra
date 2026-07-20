@@ -417,17 +417,21 @@ run_verify_k8s() {
   local kubeconfig
   kubeconfig=$(yq e '.targets.kubernetes.kubeconfig' "$CONFIG_FILE")
   kubeconfig="${kubeconfig/#\~/$HOME}"
-  local namespace
-  namespace=$(yq e '.targets.kubernetes.namespace' "$CONFIG_FILE")
+  # Global default namespace -- used for any secret without its own k8s_namespace.
+  local default_namespace
+  default_namespace=$(yq e '.targets.kubernetes.namespace' "$CONFIG_FILE")
 
   local n mismatches=0
   n=$(secret_count)
 
   for ((i=0; i<n; i++)); do
-    local item_name k8s_secret k8s_key
+    local item_name k8s_secret k8s_key namespace
     item_name=$(secret_field "$i" "bw_item")
     k8s_secret=$(secret_field "$i" "k8s_secret")
     k8s_key=$(secret_field "$i" "k8s_key")
+    # Per-secret namespace, falling back to the global default.
+    namespace=$(secret_field "$i" "k8s_namespace")
+    [[ "$namespace" == "null" || -z "$namespace" ]] && namespace="$default_namespace"
 
     if [[ "$k8s_secret" == "null" || "$k8s_key" == "null" ]]; then
       log "  [skip]    $item_name (no k8s target)"
@@ -447,13 +451,13 @@ run_verify_k8s() {
         | base64 -d \
         | compute_checksum); then
       if [[ "$bw_checksum" == "$k8s_checksum" ]]; then
-        log "  [match]   $item_name -> $k8s_secret/$k8s_key"
+        log "  [match]   $item_name -> $namespace/$k8s_secret/$k8s_key"
       else
-        log_err "  [MISMATCH] $item_name -> $k8s_secret/$k8s_key (K8s differs from Bitwarden)"
+        log_err "  [MISMATCH] $item_name -> $namespace/$k8s_secret/$k8s_key (K8s differs from Bitwarden)"
         ((mismatches++)) || true
       fi
     else
-      log_err "  [missing]  $item_name -> $k8s_secret/$k8s_key (secret or key not found in K8s)"
+      log_err "  [missing]  $item_name -> $namespace/$k8s_secret/$k8s_key (secret or key not found in K8s)"
       ((mismatches++)) || true
     fi
   done
@@ -607,31 +611,39 @@ run_sync_k8s() {
   local kubeconfig
   kubeconfig=$(yq e '.targets.kubernetes.kubeconfig' "$CONFIG_FILE")
   kubeconfig="${kubeconfig/#\~/$HOME}"
-  local namespace
-  namespace=$(yq e '.targets.kubernetes.namespace' "$CONFIG_FILE")
+  # Global default namespace -- used for any secret without its own k8s_namespace.
+  local default_namespace
+  default_namespace=$(yq e '.targets.kubernetes.namespace' "$CONFIG_FILE")
 
-  # Group secrets by k8s_secret name so we can create multi-key secrets atomically.
-  # Build a list of unique k8s secret names first.
+  # Group secrets by (namespace + k8s_secret name) so we can create multi-key
+  # secrets atomically. Namespacing the group key keeps same-named secrets in
+  # different namespaces from merging into one. Group keys are "namespace<TAB>name"
+  # (a tab can't appear in a namespace or Secret name, so it is a safe delimiter).
   local n
   n=$(secret_count)
 
-  # Collect all unique k8s_secret names (excluding nulls)
-  local k8s_secret_names=()
+  # Collect all unique (namespace, k8s_secret) group keys (excluding nulls)
+  local k8s_group_keys=()
   for ((i=0; i<n; i++)); do
-    local k8s_secret
+    local k8s_secret ns
     k8s_secret=$(secret_field "$i" "k8s_secret")
     [[ "$k8s_secret" == "null" ]] && continue
+    ns=$(secret_field "$i" "k8s_namespace")
+    [[ "$ns" == "null" || -z "$ns" ]] && ns="$default_namespace"
+    local group_key="${ns}"$'\t'"${k8s_secret}"
     # Add to list if not already present
     local found=false
-    for name in "${k8s_secret_names[@]:-}"; do
-      [[ "$name" == "$k8s_secret" ]] && found=true && break
+    for existing in "${k8s_group_keys[@]:-}"; do
+      [[ "$existing" == "$group_key" ]] && found=true && break
     done
-    [[ "$found" == false ]] && k8s_secret_names+=("$k8s_secret")
+    [[ "$found" == false ]] && k8s_group_keys+=("$group_key")
   done
 
   local synced=0 unchanged=0 errors=0
 
-  for k8s_secret_name in "${k8s_secret_names[@]:-}"; do
+  for group_key in "${k8s_group_keys[@]:-}"; do
+    local namespace="${group_key%%$'\t'*}"
+    local k8s_secret_name="${group_key##*$'\t'}"
     # Build --from-literal args for all keys belonging to this secret
     local from_literal_args=()
     local secret_changed=false
@@ -639,12 +651,14 @@ run_sync_k8s() {
     local item_names_for_secret=()
 
     for ((i=0; i<n; i++)); do
-      local item_name k8s_secret k8s_key
+      local item_name k8s_secret k8s_key ns
       item_name=$(secret_field "$i" "bw_item")
       k8s_secret=$(secret_field "$i" "k8s_secret")
       k8s_key=$(secret_field "$i" "k8s_key")
+      ns=$(secret_field "$i" "k8s_namespace")
+      [[ "$ns" == "null" || -z "$ns" ]] && ns="$default_namespace"
 
-      [[ "$k8s_secret" != "$k8s_secret_name" ]] && continue
+      [[ "$k8s_secret" != "$k8s_secret_name" || "$ns" != "$namespace" ]] && continue
 
       local value
       value=$(get_item_password "$item_name")
@@ -679,19 +693,19 @@ run_sync_k8s() {
     fi
 
     if [[ "$secret_changed" == false ]]; then
-      log "  [unchanged] $k8s_secret_name"
+      log "  [unchanged] $namespace/$k8s_secret_name"
       ((unchanged++)) || true
       continue
     fi
 
     if [[ "$DRY_RUN" == true ]]; then
-      log "  [dry-run] Would apply secret: $k8s_secret_name (${#from_literal_args[@]} key(s))"
+      log "  [dry-run] Would apply secret: $namespace/$k8s_secret_name (${#from_literal_args[@]} key(s))"
       continue
     fi
 
     # Apply: kubectl create --dry-run=client -o yaml | kubectl apply -f -
     # This is idempotent and never echoes values.
-    log "  [applying]  $k8s_secret_name (${#from_literal_args[@]} key(s))"
+    log "  [applying]  $namespace/$k8s_secret_name (${#from_literal_args[@]} key(s))"
     if kubectl create secret generic "$k8s_secret_name" \
         --namespace "$namespace" \
         --kubeconfig "$kubeconfig" \
@@ -711,7 +725,7 @@ run_sync_k8s() {
       done
       ((synced++)) || true
     else
-      log_err "  [error]   Failed to apply $k8s_secret_name"
+      log_err "  [error]   Failed to apply $namespace/$k8s_secret_name"
       for entry in "${item_names_for_secret[@]}"; do
         audit_log "${entry%%:*}" "k8s" "error" "kubectl apply failed"
       done

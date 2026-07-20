@@ -1,6 +1,16 @@
 # scripts/bw-sync-config.yaml
 # Mapping file for bw-sync.sh -- defines where each Bitwarden item gets written.
 # The "IRL" folder in Bitwarden is the root; all items here live under that folder.
+#
+# Per-secret fields:
+#   bw_item        (required) Bitwarden item name to read the value from.
+#   ansible_var    (optional) Dotted var path written into the Ansible vault.
+#   k8s_secret     (optional) Kubernetes Secret name; null disables the k8s sync.
+#   k8s_key        (optional) Key inside that Secret.
+#   k8s_namespace  (optional) Namespace for this secret. Omit to fall back to
+#                  targets.kubernetes.namespace (the default below). Secrets
+#                  with the same k8s_secret name but different namespaces are
+#                  kept separate -- they are NOT merged into one Secret.
 
 bitwarden_folder: "IRL"
 
@@ -9,6 +19,7 @@ targets:
     output_file: "ansible/inventory/group_vars/all/vault.yml"
     encryption_password_item: "ansible-vault-password"
   kubernetes:
+    # Default namespace for any secret that does not set its own k8s_namespace.
     namespace: "irl"
     kubeconfig: "~/.kube/homelab.yaml"
 
@@ -252,3 +263,19 @@ secrets:
     ansible_var: "vault_gemini_api_key"
     k8s_secret: "gemini-api-key"
     k8s_key: "api-key"
+
+  # ── JobOps (separate namespace: "jobops") ───────────────────
+  # Example shape for secrets that must land in the "jobops" namespace instead
+  # of the default "irl". Uncomment and replace the placeholder bw_item names
+  # with the real Bitwarden item names once they exist.
+  # - bw_item: "REPLACE-jobops-db-password"
+  #   ansible_var: "vault_jobops_db_password"
+  #   k8s_secret: "jobops-postgres"
+  #   k8s_key: "password"
+  #   k8s_namespace: "jobops"
+  #
+  # - bw_item: "REPLACE-jobops-api-key"
+  #   ansible_var: "vault_jobops_api_key"
+  #   k8s_secret: "jobops-secrets"
+  #   k8s_key: "api-key"
+  #   k8s_namespace: "jobops"
