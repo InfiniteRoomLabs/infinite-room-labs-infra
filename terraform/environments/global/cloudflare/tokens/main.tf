@@ -28,9 +28,10 @@ locals {
   perm_dns_read   = "82e64a83756745bbbb1c9c2701bf816b"
   perm_dns_write  = "4755a26eedb94da69e1066d98aa820be"
   # Added for the JobOps tunnel (account-level Cloudflare Tunnel + Zero Trust Access).
-  perm_tunnel_write          = "c07321b023e944ff818fec44d8203567"
-  perm_access_apps_write     = "1e13c5124ca64b72b1969a67e8829049"
-  perm_access_orgs_idp_write = "bfe0d8686a584fa680f4c53b5eb0de6d"
+  perm_tunnel_write                = "c07321b023e944ff818fec44d8203567"
+  perm_access_apps_write           = "1e13c5124ca64b72b1969a67e8829049"
+  perm_access_orgs_idp_write       = "bfe0d8686a584fa680f4c53b5eb0de6d"
+  perm_access_service_tokens_write = "a1c0fec57cf94af79479a6d827fa518c"
 }
 
 resource "cloudflare_account_token" "infra" {
@@ -48,6 +49,7 @@ resource "cloudflare_account_token" "infra" {
         { id = local.perm_tunnel_write },
         { id = local.perm_access_apps_write },
         { id = local.perm_access_orgs_idp_write },
+        { id = local.perm_access_service_tokens_write },
       ]
       resources = jsonencode({
         "com.cloudflare.api.account.${var.account_id}" = "*"

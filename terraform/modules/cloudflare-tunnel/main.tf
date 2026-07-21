@@ -88,6 +88,10 @@ resource "cloudflare_zero_trust_access_application" "this" {
       id         = cloudflare_zero_trust_access_policy.operator.id
       precedence = 1
     },
+    {
+      id         = cloudflare_zero_trust_access_policy.mcp_service.id
+      precedence = 2
+    },
   ]
 }
 
@@ -100,4 +104,32 @@ data "cloudflare_zero_trust_tunnel_cloudflared_token" "this" {
 
   account_id = var.account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.this.id
+}
+
+# ── Access service token: headless MCP agents ────────────────────────────────
+# MCP clients (Claude Code/Desktop, codex, opencode) cannot complete the OTP
+# browser flow. They authenticate to Access with this service token via the
+# CF-Access-Client-Id / CF-Access-Client-Secret headers; the app's own API-key
+# auth still applies behind it (defense in depth, Authorization: Bearer <key>).
+resource "cloudflare_zero_trust_access_service_token" "mcp_agents" {
+  account_id = var.account_id
+  name       = "${var.app_name} mcp agents"
+  duration   = "8760h" # 1 year; rotate via terraform taint/apply
+}
+
+# non_identity: requests presenting the service token pass Access without an
+# identity login. Browsers never send these headers, so the OTP flow is
+# untouched for interactive use.
+resource "cloudflare_zero_trust_access_policy" "mcp_service" {
+  account_id = var.account_id
+  name       = "${var.app_name} mcp service token"
+  decision   = "non_identity"
+
+  include = [
+    {
+      service_token = {
+        token_id = cloudflare_zero_trust_access_service_token.mcp_agents.id
+      }
+    },
+  ]
 }

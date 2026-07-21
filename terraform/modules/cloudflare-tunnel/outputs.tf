@@ -57,3 +57,14 @@ output "connector_token" {
   description = "Tunnel connector token. Null unless read_connector_token is temporarily enabled for an out-of-band bootstrap into Bitwarden."
   sensitive   = true
 }
+
+output "mcp_service_token_client_id" {
+  value       = cloudflare_zero_trust_access_service_token.mcp_agents.client_id
+  description = "CF-Access-Client-Id header value for headless MCP agents."
+}
+
+output "mcp_service_token_client_secret" {
+  value       = cloudflare_zero_trust_access_service_token.mcp_agents.client_secret
+  description = "CF-Access-Client-Secret header value. Retrieve with terraform output -raw; store in Bitwarden."
+  sensitive   = true
+}
