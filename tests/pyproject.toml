@@ -19,4 +19,5 @@ markers = [
     "integration: Do services talk to each other?",
     "compliance: Security configuration correct?",
     "networking: Cross-node connectivity (slow)",
+    "hygiene: Repo-internal contract checks (no cluster access needed)",
 ]

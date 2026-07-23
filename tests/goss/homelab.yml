@@ -46,18 +46,15 @@ http:
 process:
   k3s:
     running: true
-  # caddy: removed -- Caddy now runs in k3s (hostNetwork pod)
-
-# Caddy pod health (in-cluster)
+# In-cluster ingress + ZFS pool. NOTE: single command: block on purpose --
+# duplicate top-level keys are silently collapsed by YAML (last one wins),
+# which is how the old caddy-pod-running check went dead unnoticed.
 command:
-  caddy-pod-running:
-    exec: "kubectl get pods -n irl -l app.kubernetes.io/name=caddy -o jsonpath='{.items[0].status.phase}' --kubeconfig /etc/rancher/k3s/k3s.yaml"
+  traefik-pod-running:
+    exec: "kubectl get pods -n irl -l app.kubernetes.io/name=traefik -o jsonpath='{.items[0].status.phase}' --kubeconfig /etc/rancher/k3s/k3s.yaml"
     exit-status: 0
     stdout:
       - "Running"
-
-# ZFS pool
-command:
   zpool-status:
     exec: "zpool status main"
     exit-status: 0

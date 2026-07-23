@@ -50,6 +50,11 @@ run = "./scripts/with-secrets.sh ./scripts/bw-sync.sh --verify-k8s"
 description = "Ansible Docker wrapper -- e.g. mise run ansible -- playbook site.yml"
 run = "./scripts/with-secrets.sh ./ansible/run-ansible.sh"
 
+[tasks."test:hygiene"]
+description = "Repo-hygiene contract tests (registry fan-out, docs; no cluster)"
+dir = "tests"
+run = "uv run pytest -m hygiene"
+
 [tasks."test:smoke"]
 description = "Quick health-check smoke tests"
 dir = "tests"

@@ -51,7 +51,7 @@ steps that surface in conversation.
 | `~/.config/fnox/config.toml` | Global fnox providers (bitwarden, age) + age-encrypted BW_SESSION |
 | `scripts/with-secrets.sh` | Wraps a command in `fnox exec` (also seeds BW_SESSION) |
 | `mise.toml` | Tool versions, task runner, and non-secret `[env]` identifiers |
-| `scripts/bw-sync.sh` | Syncs BW → Ansible Vault and/or K8s |
+| `scripts/bw-sync.sh` | Syncs BW -> Ansible Vault and/or K8s |
 | `.env.example` | Deprecated reference list of variable names (committed) |
 
 ## Bitwarden Folder Structure

@@ -126,6 +126,7 @@ irl_services:
     internal: false
     cluster_svc: "monitoring-grafana"
     cluster_port: 80
+    deploy_tag: "monitoring"  # deployed by the monitoring stack block
   vault:
     subdomain: "vault"
     internal: false
@@ -139,11 +140,13 @@ irl_services:
     internal: true
     cluster_svc: "monitoring-kube-prometheus-prometheus"
     cluster_port: 9090
+    deploy_tag: "monitoring"
   alertmanager:
     subdomain: "alerts"
     internal: true
     cluster_svc: "monitoring-kube-prometheus-alertmanager"
     cluster_port: 9093
+    deploy_tag: "monitoring"
   garage:
     subdomain: "storage"
     internal: true
@@ -153,6 +156,7 @@ irl_services:
     subdomain: "s3"
     internal: true
     cluster_only: true  # No external routing, cluster-internal only
+    deploy_tag: "garage"
   homepage:
     subdomain: "home"
     internal: false
