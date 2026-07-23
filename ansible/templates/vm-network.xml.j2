@@ -1,0 +1,19 @@
+<!-- {{ ansible_managed }}: libvirt NAT network for IRL VMs (playbooks/libvirt.yml).
+     DNS is disabled: the host's internal CoreDNS binds *:53, so libvirt's
+     dnsmasq cannot listen on 53 on any address. DHCP hands out public
+     resolvers instead; after tailscale up with accept-dns, MagicDNS (including
+     the *.lab split-DNS zones) takes over inside each VM. -->
+<network xmlns:dnsmasq='http://libvirt.org/schemas/network/dnsmasq/1.0'>
+  <name>irl-vms</name>
+  <forward mode='nat'/>
+  <bridge name='virbr-irl' stp='on' delay='0'/>
+  <dns enable='no'/>
+  <ip address='192.168.100.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.100.10' end='192.168.100.254'/>
+    </dhcp>
+  </ip>
+  <dnsmasq:options>
+    <dnsmasq:option value='dhcp-option=option:dns-server,1.1.1.1,9.9.9.9'/>
+  </dnsmasq:options>
+</network>

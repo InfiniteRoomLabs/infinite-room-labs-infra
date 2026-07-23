@@ -28,6 +28,9 @@ table inet filter {
         iifname "tailscale0" accept
         iifname "cni0" accept
         iifname "flannel.1" accept
+        # libvirt VM NAT bridge (playbooks/libvirt.yml) -- VMs need DHCP from
+        # the host's dnsmasq; input policy drop would otherwise eat it
+        iifname "virbr-irl" accept
 
         # Allow specific TCP ports from any interface
 {% for port in irl_firewall_allowed_tcp_ports %}

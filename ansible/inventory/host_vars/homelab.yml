@@ -42,3 +42,18 @@ irl_loki_retention: "30d"
 irl_ollama_models:
   - "llama3.2"
   - "codellama"
+
+# ── VM hosting (KVM/libvirt, playbooks/vms.yml) ─────────────────────
+# Hard ceiling on summed VM RAM -- leaves the OS reserve, ZFS ARC cap,
+# and k3s workloads untouched. vms.yml asserts against this.
+irl_vm_ram_budget_gb: 12
+
+# Declarative VM inventory. Adding an entry provisions it on the next
+# vms.yml run; removing one does NOT delete the VM (manual teardown).
+# Optional per-VM key `image:` pins a specific gold master version
+# (default: ubuntu-24.04-golden-latest.qcow2).
+irl_vms:
+  ubuntu-vm-01:
+    vcpus: 4
+    ram_gb: 8
+    disk_gb: 40

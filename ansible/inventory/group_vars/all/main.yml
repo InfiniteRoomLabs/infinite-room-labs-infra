@@ -64,6 +64,17 @@ irl_zfs_datasets:
     properties:
       atime: "off"
       compression: "lz4"
+  # ── VM hosting (KVM/libvirt) ─────────────────────────────────
+  # images/ holds versioned Packer gold masters (published from the laptop
+  # via packer/scripts/publish-image.sh); disks/ holds per-VM qcow2 files
+  # backed by a gold master. 64K recordsize matches the qcow2 cluster size.
+  - name: "{{ irl_zfs_pool }}/vms"
+    mountpoint: "{{ irl_zfs_mount }}/vms"
+    quota: "300G"
+    properties:
+      recordsize: "64K"
+      atime: "off"
+      compression: "lz4"
   # ── Karakeep (bookmarks) ─────────────────────────────────────
   # Data holds the SQLite DB + archived pages/screenshots (authoritative,
   # must be backed up). Meilisearch is the rebuildable search index; it

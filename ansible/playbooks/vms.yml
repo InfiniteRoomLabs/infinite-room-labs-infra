@@ -1,0 +1,168 @@
+---
+# playbooks/vms.yml
+# ==================
+# Provisions Ubuntu server VMs on the homelab KVM/libvirt hypervisor from
+# Packer gold master images (see packer/README.md). Declarative source of
+# truth is the `irl_vms` dict in inventory/host_vars/homelab.yml.
+#
+# Per NEW vm this playbook:
+#   1. mints a single-use, non-ephemeral Tailscale pre-auth key via the
+#      Tailscale API (vault_tailscale_api_key) -- no stored authkey secret
+#   2. creates a qcow2 disk backed by the gold master image
+#   3. renders a NoCloud cloud-init seed (hostname, admin user, tailscale up)
+#   4. defines and starts the libvirt domain
+#
+# Existing VMs are left untouched apart from ensuring running + autostart.
+# Removing an entry from irl_vms does NOT delete the VM -- teardown is a
+# manual `virsh destroy && virsh undefine --remove-all-storage` decision.
+#
+# Depends on: libvirt.yml, a published gold master in images/.
+#
+# Run standalone:
+#   uv run ansible-playbook playbooks/vms.yml
+
+- name: Ubuntu VMs from gold master images
+  hosts: homelab
+  become: true
+  tags: [phase1, vms]
+
+  vars:
+    irl_vms_root: "{{ irl_zfs_mount }}/vms"
+    irl_vm_default_image: "ubuntu-24.04-golden-latest.qcow2"
+
+  tasks:
+    - name: Assert VM RAM total is within budget
+      ansible.builtin.assert:
+        that:
+          - "(irl_vms.values() | map(attribute='ram_gb') | sum) <= irl_vm_ram_budget_gb"
+        fail_msg: >-
+          irl_vms requests
+          {{ irl_vms.values() | map(attribute='ram_gb') | sum }}GB RAM,
+          over the {{ irl_vm_ram_budget_gb }}GB budget
+          (irl_vm_ram_budget_gb in host_vars/homelab.yml).
+
+    - name: List existing libvirt domains
+      community.libvirt.virt:
+        command: list_vms
+      register: irl_existing_domains
+
+    # ── Tailscale pre-auth keys (new VMs only) ──────────────────────
+    - name: Mint single-use Tailscale pre-auth key per new VM
+      ansible.builtin.uri:
+        url: "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        method: POST
+        url_username: "{{ vault_tailscale_api_key }}"
+        url_password: ""
+        force_basic_auth: true
+        body_format: json
+        body:
+          # Tailscale rejects punctuation like parens/dots in descriptions
+          description: "vm-{{ item.key }} ansible provision"
+          expirySeconds: 3600
+          capabilities:
+            devices:
+              create:
+                reusable: false
+                ephemeral: false
+                preauthorized: true
+        status_code: 200
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.key not in irl_existing_domains.list_vms
+      register: irl_ts_key_mint
+      # Debug escape hatch: -e irl_debug_nolog=true (redact output yourself!)
+      no_log: "{{ not (irl_debug_nolog | default(false)) }}"
+
+    - name: Index minted keys by VM name
+      ansible.builtin.set_fact:
+        irl_vm_authkeys: >-
+          {{
+            dict(
+              irl_ts_key_mint.results | selectattr('json', 'defined')
+                | map(attribute='item.key')
+              | zip(
+                irl_ts_key_mint.results | selectattr('json', 'defined')
+                  | map(attribute='json.key')
+              )
+            )
+          }}
+      no_log: true
+
+    # ── Disks: qcow2 backed by the gold master (new VMs only) ───────
+    - name: Create backing-file disks for new VMs
+      ansible.builtin.command:
+        cmd: >-
+          qemu-img create -f qcow2
+          -b {{ irl_vms_root }}/images/{{ item.value.image | default(irl_vm_default_image) }}
+          -F qcow2
+          {{ irl_vms_root }}/disks/{{ item.key }}.qcow2
+          {{ item.value.disk_gb }}G
+        creates: "{{ irl_vms_root }}/disks/{{ item.key }}.qcow2"
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.key in irl_vm_authkeys
+
+    # ── NoCloud cloud-init seeds (new VMs only) ─────────────────────
+    # The rendered user-data contains the (single-use, 1h-expiry) authkey;
+    # keep it root-only and let cloud-localds pack it into the seed ISO.
+    - name: Render cloud-init user-data
+      ansible.builtin.template:
+        src: ../templates/vm-cloud-init.yaml.j2
+        dest: "{{ irl_vms_root }}/seeds/{{ item.key }}-user-data"
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.key in irl_vm_authkeys
+      no_log: true
+
+    - name: Build NoCloud seed ISOs
+      ansible.builtin.command:
+        cmd: >-
+          cloud-localds
+          {{ irl_vms_root }}/seeds/{{ item.key }}-seed.iso
+          {{ irl_vms_root }}/seeds/{{ item.key }}-user-data
+        creates: "{{ irl_vms_root }}/seeds/{{ item.key }}-seed.iso"
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.key in irl_vm_authkeys
+
+    - name: Remove rendered user-data (secret lives only inside the seed ISO)
+      ansible.builtin.file:
+        path: "{{ irl_vms_root }}/seeds/{{ item.key }}-user-data"
+        state: absent
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.key in irl_vm_authkeys
+
+    # ── Define + run domains ────────────────────────────────────────
+    - name: Define new VM domains
+      community.libvirt.virt:
+        command: define
+        xml: "{{ lookup('template', '../templates/vm-domain.xml.j2') }}"
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.key not in irl_existing_domains.list_vms
+
+    - name: Ensure VMs are running
+      community.libvirt.virt:
+        name: "{{ item.key }}"
+        state: running
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Ensure VMs autostart with the host
+      community.libvirt.virt:
+        name: "{{ item.key }}"
+        autostart: true
+      loop: "{{ irl_vms | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"

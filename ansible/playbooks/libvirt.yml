@@ -1,0 +1,95 @@
+---
+# playbooks/libvirt.yml
+# ======================
+# Installs the KVM/libvirt hypervisor on the homelab host, alongside k3s.
+# VMs themselves are provisioned by playbooks/vms.yml from Packer gold
+# masters (see packer/README.md and docs/runbooks/vm-provisioning.md).
+#
+# Depends on: zfs.yml (creates the main/vms dataset).
+#
+# Run standalone:
+#   uv run ansible-playbook playbooks/libvirt.yml
+
+- name: KVM/libvirt hypervisor
+  hosts: homelab
+  become: true
+  tags: [phase1, libvirt]
+
+  vars:
+    irl_vms_root: "{{ irl_zfs_mount }}/vms"
+
+  tasks:
+    - name: Install KVM, libvirt, and VM tooling
+      ansible.builtin.apt:
+        name:
+          - qemu-system-x86
+          - qemu-utils
+          - libvirt-daemon-system
+          - libvirt-clients
+          - virtinst
+          - cloud-image-utils
+          - python3-libvirt
+          - python3-lxml
+        state: present
+        update_cache: true
+
+    - name: Ensure libvirtd is running and enabled
+      ansible.builtin.systemd:
+        name: libvirtd
+        state: started
+        enabled: true
+
+    - name: Add admin user to libvirt group (virsh without sudo)
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: libvirt
+        append: true
+
+    # ── irl-vms NAT network ─────────────────────────────────────────
+    # VMs get outbound connectivity via NAT and join Tailscale at first
+    # boot -- the tailnet is their real network identity. No bridge to
+    # the LAN. The stock `default` network is unusable here: its dnsmasq
+    # needs port 53, which the internal CoreDNS holds on *:53 -- see the
+    # comment in templates/vm-network.xml.j2.
+    - name: Define irl-vms NAT network
+      community.libvirt.virt_net:
+        command: define
+        name: irl-vms
+        xml: "{{ lookup('template', '../templates/vm-network.xml.j2') }}"
+
+    - name: Activate irl-vms NAT network
+      community.libvirt.virt_net:
+        name: irl-vms
+        state: active
+
+    - name: Autostart irl-vms NAT network
+      community.libvirt.virt_net:
+        name: irl-vms
+        autostart: true
+
+    # ── Storage layout on the ZFS dataset (created by zfs.yml) ──────
+    # images/ is owned by the admin user so publish-image.sh can scp
+    # straight into it; libvirt (root) only ever reads gold masters.
+    - name: Create VM images directory
+      ansible.builtin.file:
+        path: "{{ irl_vms_root }}/images"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Create VM disks directory
+      ansible.builtin.file:
+        path: "{{ irl_vms_root }}/disks"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create VM cloud-init seeds directory
+      ansible.builtin.file:
+        path: "{{ irl_vms_root }}/seeds"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"

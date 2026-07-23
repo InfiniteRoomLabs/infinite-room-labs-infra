@@ -46,6 +46,14 @@
   ansible.builtin.import_playbook: playbooks/zfs.yml
   tags: [phase1, zfs]
 
+- name: "Phase 1: KVM/libvirt hypervisor"
+  ansible.builtin.import_playbook: playbooks/libvirt.yml
+  tags: [phase1, libvirt]
+
+- name: "Phase 1: Ubuntu VMs from gold master images"
+  ansible.builtin.import_playbook: playbooks/vms.yml
+  tags: [phase1, vms]
+
 - name: "Phase 1: Samba host service (paperless-consume share)"
   ansible.builtin.import_playbook: playbooks/samba.yml
   tags: [phase1, samba]

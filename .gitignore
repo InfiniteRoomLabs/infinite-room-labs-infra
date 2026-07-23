@@ -49,3 +49,11 @@ ansible/inventory/group_vars/all/vault.yml
 # Ansible runtime
 ansible/.venv/
 ansible/facts_cache/
+
+# Locally installed Galaxy collections (ansible.cfg collections_paths) -- vendor code, never committed
+ansible/collections/
+
+# Packer build artifacts (multi-GB qcow2 images) and download cache
+packer/*/output/
+packer/*/packer_cache/
+packer_cache/

@@ -1,0 +1,30 @@
+#cloud-config
+# {{ ansible_managed }}
+# NoCloud seed for {{ item.key }} -- rendered by playbooks/vms.yml.
+# The gold master image is generic; this seed is the VM's entire identity.
+
+hostname: {{ item.key }}
+
+users:
+  - name: {{ irl_admin_user }}
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - {{ irl_admin_ssh_pubkey }}
+
+disable_root: true
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now tailscaled
+  - >-
+    tailscale up
+    --authkey={{ irl_vm_authkeys[item.key] }}
+    --hostname={{ item.key }}
+    --accept-dns
+    --accept-routes
+
+final_message: |
+  IRL VM cloud-init complete. Hostname: {{ item.key }}. Uptime: $UPTIME seconds.

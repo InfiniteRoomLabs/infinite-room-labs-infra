@@ -1,0 +1,52 @@
+<!-- {{ ansible_managed }}: libvirt domain for {{ item.key }}, rendered by playbooks/vms.yml -->
+<domain type='kvm'>
+  <name>{{ item.key }}</name>
+  <memory unit='GiB'>{{ item.value.ram_gb }}</memory>
+  <vcpu placement='static'>{{ item.value.vcpus }}</vcpu>
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' discard='unmap'/>
+      <source file='{{ irl_vms_root }}/disks/{{ item.key }}.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ irl_vms_root }}/seeds/{{ item.key }}-seed.iso'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>
+    <interface type='network'>
+      <source network='irl-vms'/>
+      <model type='virtio'/>
+    </interface>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <channel type='unix'>
+      <target type='virtio' name='org.qemu.guest_agent.0'/>
+    </channel>
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+    <video>
+      <model type='virtio'/>
+    </video>
+    <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'/>
+  </devices>
+</domain>
