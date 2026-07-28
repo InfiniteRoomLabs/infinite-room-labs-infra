@@ -30,7 +30,7 @@ identified faster.
 # 1. Bitwarden status -- is the CLI session even alive?
 bw status
 # Expected: {"status":"unlocked", ...}
-# If "locked" or "unauthenticated": run `bw unlock` and re-export BW_SESSION
+# If "locked" or "unauthenticated": run `bw-unlock` (fish) to refresh ~/.bw_session
 
 # 2. Dry run with verbose output
 ./scripts/bw-sync.sh --dry-run --target both 2>&1 | tee /tmp/bw-sync-dry.log
@@ -139,20 +139,21 @@ mv ~/.local/share/irl/bw-sync-state.json ~/.local/share/irl/bw-sync-state.json.b
 
 ## Generic failure modes
 
-### "BW_SESSION is not set or expired"
+### "no valid BW_SESSION (vault locked or session rotated)"
 
 ```bash
-# Re-unlock
-export BW_SESSION=$(bw unlock --raw)
+# Re-unlock (fish) -- refreshes the single session cache ~/.bw_session
+bw-unlock
 # Then re-run sync
 ./scripts/bw-sync.sh --target both
 ```
 
-If your shell doesn't have `BW_SESSION` set in its env, the script
-resolves it from fnox (`fnox get BW_SESSION`, age-encrypted), then falls
-back to the fish `bw-unlock` cache at `~/.bw_session`. If the session is
-stale (BW vault re-locked since), run `bw-unlock` and re-seed fnox:
-`fnox set BW_SESSION --provider age -g`. Easiest: run via
+The script resolves `BW_SESSION` via `scripts/includes/bw-session.sh`:
+env first, then the `~/.bw_session` cache, validating each candidate with
+`bw status`. Sessions have no inactivity TTL, but any subsequent
+unlock/lock/logout may invalidate cached keys. Do NOT recover with raw
+`bw unlock --raw` -- it may rotate the key without updating the cache;
+use `bw-unlock` (fish) or `scripts/bw-unlock-prompt.sh`. Easiest: run via
 `mise run secrets:sync`, which wraps the script in `fnox exec`.
 
 ### "ansible-vault: ERROR! The vault password file was not provided"
@@ -173,7 +174,7 @@ fnox can resolve it and `BW_SESSION` is available:
 
 ```bash
 cd ~/projects/infinite-room-labs/infinite-room-labs-infra
-BW_SESSION="$(fnox get BW_SESSION)" fnox get ANSIBLE_VAULT_PASSWORD >/dev/null && echo OK
+fnox get ANSIBLE_VAULT_PASSWORD >/dev/null && echo OK   # BW_SESSION already in env
 mise run secrets:sync   # wraps bw-sync.sh in fnox exec
 ```
 

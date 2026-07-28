@@ -48,8 +48,8 @@ steps that surface in conversation.
 |------|---------|
 | `scripts/bw-sync-config.yaml` | Maps BW items to Ansible vars and K8s secrets (cluster secrets) |
 | `fnox.toml` | Declares env-var secrets and maps each to a BW item/field (committed; no values) |
-| `~/.config/fnox/config.toml` | Global fnox providers (bitwarden, age) + age-encrypted BW_SESSION |
-| `scripts/with-secrets.sh` | Wraps a command in `fnox exec` (also seeds BW_SESSION) |
+| `~/.config/fnox/config.toml` | Global fnox provider (bitwarden) |
+| `scripts/with-secrets.sh` | Wraps a command in `fnox exec` (BW_SESSION via `scripts/includes/bw-session.sh`) |
 | `mise.toml` | Tool versions, task runner, and non-secret `[env]` identifiers |
 | `scripts/bw-sync.sh` | Syncs BW -> Ansible Vault and/or K8s |
 | `.env.example` | Deprecated reference list of variable names (committed) |
@@ -81,7 +81,7 @@ Gather this information (ask the user for anything missing):
 
 Then execute:
 
-1. **Check BW status** -- `bw status` must show `unlocked`. If not (or any fnox/bw-sync command reports a locked/stale session), run `./scripts/bw-unlock-prompt.sh`: it spawns a front-and-center terminal where the user unlocks Bitwarden, refreshes both `~/.bw_session` and fnox's age-stored `BW_SESSION` (which shadows the file), then detaches. Tell the user it's waiting, then poll `bw status` and retry.
+1. **Check BW status** -- `bw status` must show `unlocked`. If not (or any fnox/bw-sync command reports a locked/invalid session), run `./scripts/bw-unlock-prompt.sh`: it spawns a front-and-center terminal where the user unlocks Bitwarden, refreshing the single session cache `~/.bw_session`, then detaches. Tell the user it's waiting, then poll `bw status` and retry. Never recover via raw `bw unlock --raw` -- it may rotate the key without updating the cache.
 2. **Create BW folder** if it doesn't exist:
    ```bash
    bw create folder "$(echo '{"name":"IRL/Services/FooBar"}' | bw encode)"
@@ -109,7 +109,7 @@ Then execute:
 6. **Verify** -- fnox resolves it (length/existence only, never the value):
    ```bash
    fnox check                                   # config + provider validity
-   BW_SESSION="$(fnox get BW_SESSION)" bash -c 'v="$(fnox get MY_TOKEN)"; echo "len=${#v}"'
+   v="$(fnox get MY_TOKEN)"; echo "len=${#v}"   # BW_SESSION already in env (~/.bw_session)
    ```
 7. **Offer to sync** (cluster secrets only) -- env-var secrets need no sync. For cluster
    secrets, ask if the user wants to run bw-sync.sh now:
@@ -135,7 +135,7 @@ A rotation replaces the value of an existing secret without changing its plumbin
    ```
 3. **Env-var secrets need no further action** -- fnox reads the BW value live, so the new
    value is picked up on the next `fnox exec`. Verify (length only):
-   `BW_SESSION="$(fnox get BW_SESSION)" bash -c 'v="$(fnox get VAR_NAME)"; echo len=${#v}'`.
+   `v="$(fnox get VAR_NAME)"; echo len=${#v}` (BW_SESSION is already in the env from `~/.bw_session`).
 4. **Cluster secrets** -- offer to sync: `./scripts/bw-sync.sh --target both` (or
    `mise run secrets:sync`) to push the new value into Ansible Vault / K8s.
 

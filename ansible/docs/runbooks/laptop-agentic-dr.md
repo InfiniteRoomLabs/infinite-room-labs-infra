@@ -30,7 +30,7 @@ reached by rsync over SSH to the `homelab-ts` alias (`100.86.213.22`) over Tails
 4. claudesync cookie broker working: a browser logged into claude.ai, and
    `sh ~/.local/share/claudesync/harvest-cookie.sh` prints `sessionKey=...`. The
    Docker image is digest-pinned; `docker pull deathnerd/claudesync@sha256:a59ee9617f395b558e1ed82ea117b8ae98ed677fd932912dc4c92ad6e30d85b1` if absent.
-5. Bitwarden + fnox unlocked (`bw-unlock`) so the ansible vault password resolves.
+5. Bitwarden unlocked so the ansible vault password resolves. On a fresh machine the fish `bw-unlock` function may not exist yet: restore `~/.config/fish/conf.d/bw.fish` (from backup or dotfiles) first, then run `bw-unlock` and verify `~/.bw_session` exists with mode 600 (`stat -c '%a' ~/.bw_session` -> `600`). All secret tooling resolves the session from that single cache via `scripts/includes/bw-session.sh`.
 6. git access: GitHub (threadwatch), Gitea over Tailscale (claude-ai-export, infra).
 
 ## Recovery procedure
@@ -59,7 +59,7 @@ cd infinite-room-labs-infra/ansible && uv sync && uv run ansible-galaxy install 
 
 - `claude` CLI: log in on the subscription. (threadwatch exits `69/UNAVAILABLE` until this works.)
 - claudesync cookie: log the browser into claude.ai; confirm `harvest-cookie.sh` returns a `sessionKey`.
-- fnox/Bitwarden: `bw-unlock` so `uv run ansible-playbook` can read the vault password.
+- fnox/Bitwarden: `bw-unlock` (writes `~/.bw_session`, mode 600) so `uv run ansible-playbook` can read the vault password.
 
 ### 4. Re-deploy the timers
 

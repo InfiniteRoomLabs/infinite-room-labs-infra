@@ -13,8 +13,8 @@ set -euo pipefail
 # Syncs Bitwarden secrets to Ansible Vault and/or Kubernetes Secrets.
 # Uses bw-sync-config.yaml to define the secret-to-target mappings.
 #
-# Bitwarden remains the source of truth. The BW_SESSION token is sourced from
-# fnox (age-backed) -- see load_bw_session below. Arg parsing is handled by the
+# Bitwarden remains the source of truth. BW_SESSION is resolved and validated
+# by scripts/includes/bw-session.sh (env -> ~/.bw_session). Arg parsing is handled by the
 # `usage` spec above (auto --help); flags arrive as $usage_target,
 # $usage_check_rotation, $usage_verify_k8s, $usage_dry_run, $usage_quiet.
 #
@@ -27,7 +27,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/bw-sync-config.yaml"
-BW_SESSION_FILE="$HOME/.bw_session"   # fish bw-unlock cache (fallback only)
+# shellcheck source=includes/bw-session.sh
+source "$SCRIPT_DIR/includes/bw-session.sh"
 STATE_DIR="$HOME/.local/share/irl"
 STATE_FILE="$STATE_DIR/bw-sync-state.json"
 LOG_FILE="$STATE_DIR/bw-sync.log"
@@ -114,21 +115,7 @@ check_deps() {
 # Bitwarden session
 # ---------------------------------------------------------------------------
 load_bw_session() {
-  [[ -n "${BW_SESSION:-}" ]] && return 0
-  # Prefer fnox (age-backed BW_SESSION secret).
-  if command -v fnox >/dev/null 2>&1; then
-    BW_SESSION="$(fnox get BW_SESSION 2>/dev/null || true)"
-  fi
-  # Fall back to the fish `bw-unlock` session cache.
-  if [[ -z "${BW_SESSION:-}" && -f "$BW_SESSION_FILE" ]]; then
-    BW_SESSION="$(cat "$BW_SESSION_FILE")"
-  fi
-  if [[ -z "${BW_SESSION:-}" ]]; then
-    log_err "Error: BW_SESSION not set; 'fnox get BW_SESSION' failed and $BW_SESSION_FILE absent."
-    log_err "Unlock with: bw-unlock (fish), or seed fnox: fnox set BW_SESSION --provider age -g"
-    exit 2
-  fi
-  export BW_SESSION
+  resolve_bw_session || exit 2
 }
 
 # bw_retry CMD [ARGS...]

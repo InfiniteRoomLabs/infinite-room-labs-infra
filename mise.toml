@@ -1,9 +1,9 @@
 # mise.toml -- tool versions + task runner for infinite-room-labs-infra.
 #
 # Secrets are NEVER loaded ambiently (no .envrc). They are injected per-command
-# via `fnox exec`, wrapped by scripts/with-secrets.sh (which also supplies
-# BW_SESSION). Run secret-needing work through the `mise run` tasks below, or
-# ad-hoc with: `./scripts/with-secrets.sh <cmd>` / `fnox exec -- <cmd>`.
+# via `fnox exec`, wrapped by scripts/with-secrets.sh (which resolves BW_SESSION
+# via scripts/includes/bw-session.sh). Run secret-needing work through the
+# `mise run` tasks below, or ad-hoc with: `./scripts/with-secrets.sh <cmd>`.
 #
 # Pinned versions are explicit (no "latest") per jdx policy. Bump deliberately.
 
@@ -16,7 +16,6 @@ kubectl    = "1.31.4"
 task       = "3.49.1"
 fnox       = "1.25.1"
 usage      = "3.3.0"
-age        = "1.3.1"   # required by the fnox age provider (BW_SESSION at rest)
 "aqua:grafana/mcp-grafana" = "latest"
 
 # Non-secret environment only. Anything sensitive lives in fnox, not here.

@@ -158,8 +158,8 @@ Bitwarden (IRL/ tree) ---+
   `bw-sync.sh` into `vault.yml` and K8s Secrets, as before.
 - **Env-var secrets** (provider/API tokens) are declared in `fnox.toml` and
   injected per-command via `fnox exec` (`scripts/with-secrets.sh`). No `.env`,
-  no `.envrc`, no ambient loading. `BW_SESSION` is age-encrypted in the global
-  fnox config (`~/.config/fnox/config.toml`) and resolved automatically.
+  no `.envrc`, no ambient loading. `BW_SESSION` comes from the single cache
+  `~/.bw_session` (fish `bw-unlock`), validated by `scripts/includes/bw-session.sh`.
 - See the `manage-secrets` skill for the full add/rotate/delete procedures.
 
 ## Node Labels

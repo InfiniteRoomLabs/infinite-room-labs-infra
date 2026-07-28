@@ -9,19 +9,12 @@ set -euo pipefail
 # no ambient env var -- the secret is fetched on demand and printed only to the
 # pipe ansible reads.
 #
-# Needs BW_SESSION (the secret is Bitwarden-backed). Resolve it the same way as
-# scripts/with-secrets.sh: env -> fnox age -> ~/.bw_session cache.
+# Needs a valid BW_SESSION (the secret is Bitwarden-backed) -- resolved and
+# validated by the shared resolver (see includes/bw-session.sh).
 
-# A candidate is only trusted if bw accepts it -- an inherited env BW_SESSION
-# can be stale (e.g. a long-lived agent shell started before a re-unlock).
-session_ok() { [[ -n "$1" ]] && BW_SESSION="$1" bw status 2>/dev/null | grep -q '"status":"unlocked"'; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=includes/bw-session.sh
+source "$SCRIPT_DIR/includes/bw-session.sh"
+resolve_bw_session || exit 1
 
-for candidate in "${BW_SESSION:-}" "$(fnox get BW_SESSION 2>/dev/null || true)" "$(cat "$HOME/.bw_session" 2>/dev/null || true)"; do
-  if session_ok "$candidate"; then
-    export BW_SESSION="$candidate"
-    exec fnox get ANSIBLE_VAULT_PASSWORD
-  fi
-done
-
-echo "vault-pass.sh: no valid BW_SESSION -- run scripts/bw-unlock-prompt.sh, then retry" >&2
-exit 1
+exec fnox get ANSIBLE_VAULT_PASSWORD

@@ -7,17 +7,13 @@ set -euo pipefail
 # It does NOT wait for the unlock -- after spawning, poll `bw status` or just
 # retry the failed command once the user says done.
 #
-# The spawned session refreshes BOTH session stores, in order:
-#   1. bw-unlock (fish)  -> writes ~/.bw_session
-#   2. fnox set          -> refreshes the age-encrypted BW_SESSION that
-#                           with-secrets.sh / vault-pass.sh resolve FIRST.
-# Refreshing only ~/.bw_session is not enough: a stale fnox entry shadows it.
+# The spawned session runs the fish `bw-unlock` function, which refreshes the
+# single session cache at ~/.bw_session (what includes/bw-session.sh resolves).
 
 UNLOCK_CMD='
   echo "== Agent needs the Bitwarden vault unlocked =="
   bw-unlock
-  and cat ~/.bw_session | fnox set BW_SESSION --provider age -g
-  and echo "Unlocked; fnox session refreshed. Closing in 3s..."
+  and echo "Unlocked; session cache refreshed. Closing in 3s..."
   and sleep 3
   or begin
     echo "Unlock failed or was cancelled. Close this window and retry."

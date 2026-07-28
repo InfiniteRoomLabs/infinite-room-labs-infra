@@ -70,7 +70,7 @@ cleanup_vault_tmp() { [[ -n "$VAULT_PASS_TMP" && -f "$VAULT_PASS_TMP" ]] && rm -
 trap cleanup_vault_tmp EXIT
 
 if [[ -z "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
-  # scripts/vault-pass.sh validates BW_SESSION candidates (inherited env can be stale).
+  # scripts/vault-pass.sh validates BW_SESSION via the shared resolver (includes/bw-session.sh).
   if _vp="$("$REPO_ROOT/scripts/vault-pass.sh" 2>/dev/null)" && [[ -n "$_vp" ]]; then
     VAULT_PASS_TMP="$(mktemp)"
     chmod 600 "$VAULT_PASS_TMP"

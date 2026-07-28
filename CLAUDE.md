@@ -11,7 +11,7 @@ This project uses Claude Code Secrets Manager (CCSM). Follow these rules:
 
 ### Locked vault / stale session recovery
 
-If bw/fnox/bw-sync/ansible-vault reports a locked vault or stale/invalid session, run `./scripts/bw-unlock-prompt.sh` -- it pops a front-and-center terminal for the user to unlock Bitwarden (refreshing both `~/.bw_session` and fnox's age-stored `BW_SESSION`, which shadows it), then detaches. Tell the user it's waiting, then retry the failed command. Do not ask them to run `bw unlock` by hand.
+If bw/fnox/bw-sync/ansible-vault reports a locked vault or invalid session, run `./scripts/bw-unlock-prompt.sh` -- it pops a front-and-center terminal for the user to unlock Bitwarden (refreshing the single session cache `~/.bw_session`), then detaches. Tell the user it's waiting, then retry the failed command. Do not ask them to run `bw unlock` by hand, and never use raw `bw unlock --raw` yourself -- it may rotate the key without updating the cache. Sessions have no inactivity TTL; any subsequent unlock/lock/logout may invalidate cached keys, which is why `scripts/includes/bw-session.sh` validates every candidate.
 
 ## Repository Structure
 
@@ -71,8 +71,8 @@ See `ansible/CLAUDE.md` for full Ansible documentation (layout, running, secrets
 
 ### Tooling: mise + fnox + usage
 
-- **mise** (`mise.toml`) pins tool versions (terraform, terragrunt, helm, kubectl, task, fnox, usage, age) and provides the task runner (`mise run bootstrap | secrets:sync | ansible | test:smoke`). Non-secret identifiers live in `[env]`. Run `mise install` after cloning.
-- **fnox** is the secret-injection layer over Bitwarden for env-var secrets (Terraform/CLI tokens). Declared in `fnox.toml`; providers (bitwarden, age) in global `~/.config/fnox/config.toml`. Secrets are injected per-command via `fnox exec` / `scripts/with-secrets.sh` -- never ambiently. There is NO `.env`/`.envrc`. `BW_SESSION` is age-encrypted in the global fnox config.
+- **mise** (`mise.toml`) pins tool versions (terraform, terragrunt, helm, kubectl, task, fnox, usage) and provides the task runner (`mise run bootstrap | secrets:sync | ansible | test:smoke`). Non-secret identifiers live in `[env]`. Run `mise install` after cloning.
+- **fnox** is the secret-injection layer over Bitwarden for env-var secrets (Terraform/CLI tokens). Declared in `fnox.toml`; the bitwarden provider in global `~/.config/fnox/config.toml`. Secrets are injected per-command via `fnox exec` / `scripts/with-secrets.sh` -- never ambiently. There is NO `.env`/`.envrc`. `BW_SESSION` comes from the single cache `~/.bw_session` (fish `bw-unlock`), resolved and validated by `scripts/includes/bw-session.sh`.
 - **usage** drives arg parsing for `bootstrap.sh`, `bw-sync.sh`, and `run-ansible.sh` (shebang `#!/usr/bin/env -S usage bash`, `#USAGE` directives -- note: no space after `#`).
 
 ### Secrets Sync
@@ -83,8 +83,9 @@ Two consumers, one source (Bitwarden): cluster secrets flow through `bw-sync.sh`
 scripts/
   bw-sync.sh          # Sync script -- reads BW, writes to ansible vault and/or K8s
   bw-sync-config.yaml # Mapping of BW item names to ansible_var and k8s_secret targets
-  with-secrets.sh     # Wraps a command in `fnox exec` (+ seeds BW_SESSION)
+  with-secrets.sh     # Wraps a command in `fnox exec` (+ resolves BW_SESSION)
   vault-pass.sh       # Ansible vault-password client (fnox get ANSIBLE_VAULT_PASSWORD)
+  includes/bw-session.sh  # Shared BW_SESSION resolver (env -> ~/.bw_session, validated)
 ```
 
 Usage (prefer `mise run secrets:sync`, which wraps bw-sync in `fnox exec`):
