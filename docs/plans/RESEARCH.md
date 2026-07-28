@@ -6,7 +6,7 @@
 
 ## Agent Instructions
 
-<!-- RESEARCH-PROTOCOL:START — Do not remove this block -->
+<!-- RESEARCH-PROTOCOL:START -- Do not remove this block -->
 
 ### When to update this file
 
@@ -168,7 +168,7 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ### R02: GitLab vs Gitea
 
-- **Status**: open
+- **Status**: closed
 - **Roadmap link**: Phase 2 (Source Control)
 - **Key questions**:
   1. GitLab CE minimum resource requirements (CPU, RAM, disk) vs Gitea?
@@ -183,8 +183,8 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [Terraform GitLab Provider](https://registry.terraform.io/providers/gitlabhq/gitlab/latest/docs)
   - [Gitea on Docker Hub](https://hub.docker.com/r/gitea/gitea)
   - [Forgejo](https://forgejo.org/) (Gitea fork -- worth evaluating)
-- **Findings**: _Not yet researched._
-- **Decision**: _Pending._
+- **Findings**: Gitea was deployed (chart `irl-gitea`, upstream gitea 10.6.0, image 1.22-rootless) and has served well; GitLab CE rejected on resource weight alone (multi-GB RAM floor vs Gitea's 512Mi limit). Forgejo evaluation (2026-07): community-owned hard fork under Codeberg e.V., same built-in OCI/package registry, Gitea-compatible v1 API (tea CLI and existing tooling keep working), values-compatible helm chart. Critical constraint: Forgejo only supports in-place migration from Gitea <= 1.22 -- exactly our deployed version -- and the door closes permanently on any Gitea upgrade past 1.22. Migration is one-way (no Forgejo -> Gitea path).
+- **Decision**: Migrate to Forgejo, preceded by enabling the built-in package/OCI registry and a full backup-restore rehearsal on a throwaway k3d cluster. Gitea stays pinned at 1.22 until cutover. Full plan: `docs/plans/2026-07-21-gitea-registry-forgejo-migration.md`. Status: closed (2026-07-21).
 
 ---
 
@@ -452,18 +452,18 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ---
 
-### R14: Git DAG — Repo Dependency Graph Engine
+### R14: Git DAG -- Repo Dependency Graph Engine
 
 - **Status**: open
 - **Roadmap link**: Future / Sister Projects (Git DAG)
 - **Key questions**:
   1. What git primitives are available for efficiently discovering cross-repo relationships? (`git submodule`, `git worktree list`, subtree metadata, custom conventions?)
-  2. Existing tools in this space — `meta`, `git-subrepo`, `josh`, `gita`, Bazel/Buck repo graphs, Google's `repo` tool — what do they cover and where do they fall short?
-  3. Graph representation — in-memory from git queries on demand, or materialized into a lightweight store (SQLite, flat file, git notes)?
-  4. Efficient change detection — can `git rev-parse` + `git status` across N repos be parallelized cheaply, or does this need a daemon / filesystem watcher?
-  5. API surface — REST? GraphQL? gRPC? What makes sense for a tool that's primarily queried by CI systems and UIs?
-  6. UI framework — lightweight dashboard (Svelte, htmx) or TUI for terminal-native workflows?
-  7. Language choice — Go and Rust both have strong git libraries (`go-git`, `gitoxide`). Which gives better ergonomics for this use case?
+  2. Existing tools in this space -- `meta`, `git-subrepo`, `josh`, `gita`, Bazel/Buck repo graphs, Google's `repo` tool -- what do they cover and where do they fall short?
+  3. Graph representation -- in-memory from git queries on demand, or materialized into a lightweight store (SQLite, flat file, git notes)?
+  4. Efficient change detection -- can `git rev-parse` + `git status` across N repos be parallelized cheaply, or does this need a daemon / filesystem watcher?
+  5. API surface -- REST? GraphQL? gRPC? What makes sense for a tool that's primarily queried by CI systems and UIs?
+  6. UI framework -- lightweight dashboard (Svelte, htmx) or TUI for terminal-native workflows?
+  7. Language choice -- Go and Rust both have strong git libraries (`go-git`, `gitoxide`). Which gives better ergonomics for this use case?
 - **Resources**:
   - [git-submodule](https://git-scm.com/docs/git-submodule)
   - [git-worktree](https://git-scm.com/docs/git-worktree)
@@ -482,7 +482,7 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 - **Status**: open
 - **Roadmap link**: Future / Public exposure hardening (prerequisite for exposing any internal service beyond Tailscale)
 - **Key questions**:
-  1. Authentik embedded outpost + Traefik ForwardAuth middleware — exact wiring for our hostNetwork Traefik (chart 39.0.7) and existing authentik 2026.2.1 install?
+  1. Authentik embedded outpost + Traefik ForwardAuth middleware -- exact wiring for our hostNetwork Traefik (chart 39.0.7) and existing authentik 2026.2.1 install?
   2. Bearer-token auth for headless/API clients (e.g. ollama's OpenAI-compatible API): do authentik service-account tokens / app passwords validate through ForwardAuth, and what scopes/expiry policy fits?
   3. Per-service vs shared middleware: one auth gateway middleware reused across IngressRoutes, or per-app proxy providers?
   4. Which services are candidates? ollama first (zero built-in auth, currently ClusterIP-only); anything we later expose publicly (Cloudflare Tunnel plan in docs/plans/2026-07-10-gitops-cloudflare-tunnel-exposure.md) should sit behind this.
@@ -493,5 +493,26 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [authentik + Traefik ForwardAuth integration](https://docs.goauthentik.io/docs/add-secure-apps/providers/proxy/server_traefik)
   - [Traefik ForwardAuth middleware](https://doc.traefik.io/traefik/middlewares/http/forwardauth/)
   - [authentik outposts](https://docs.goauthentik.io/docs/add-secure-apps/outposts/)
-- **Findings**: _Not yet researched._ (Origin: 2026-07-12 karakeep deployment session — question raised about putting ollama behind authentik with bearer-auth proxy.)
+- **Findings**: _Not yet researched._ (Origin: 2026-07-12 karakeep deployment session -- question raised about putting ollama behind authentik with bearer-auth proxy.)
 - **Decision**: _Pending._
+
+---
+
+### R16: Public-Showcase Readiness (repo layout, conventions, verifiability)
+
+- **Status**: research done, execution open
+- **Roadmap link**: Future / Public repo showcase (make this repo withstand scrutiny from top-of-their-game DevOps reviewers)
+- **Key questions**:
+  1. Which community conventions do we adopt from the admired Flux-homelab lineage (onedr0p/bjw-s/cluster-template, kubesearch.dev): README hardware+stack tables, strict directory split, visible-but-encrypted secrets, Renovate loop?
+  2. CLI front door: keep mise tasks as the interface (per clig.dev + task-runner doctrine) or add anything?
+  3. Docs scaffolding: adopt Diataxis / MADR-style ADRs / C4-lite -- which subset earns its keep for a solo repo?
+  4. Verifiability ladder: which cheap signals first (kubeconform, conftest, checkov/trivy in CI), and is drift-detection-as-issues worth it before any SLSA/SBOM heaviness?
+  5. What must the public-readiness leak scrub change first (Tailscale IPs, `.lab.` domains, NodePorts are all currently in-repo)? Execution tooling: agent-ops `public-readiness` skill + `oss-health-checker` agent.
+- **Resources**:
+  - [Prior-art survey (salvaged 2026-07-28)](resources/2026-07-23-public-showcase-conventions.md)
+  - [onedr0p/home-ops](https://github.com/onedr0p/home-ops)
+  - [onedr0p/cluster-template](https://github.com/onedr0p/cluster-template)
+  - [kubesearch.dev](https://kubesearch.dev/)
+  - [clig.dev](https://clig.dev/)
+- **Findings**: Four-thread prior-art survey completed 2026-07-23 (showcase repo conventions, CLI doctrine, docs scaffolding, verifiability signals) -- full writeup in the resource doc. No IRL-specific decisions made yet.
+- **Decision**: _Pending -- next step is mapping the survey onto this repo (adopt/skip per convention) and running the public-readiness leak scrub._
