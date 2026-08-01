@@ -51,6 +51,7 @@
         - ghostfolio
         - firefly-importer
         - karakeep
+        - satisfactory
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -1059,6 +1060,55 @@
         wait: true
         timeout: "30m0s"
       tags: [phase5, ollama]
+
+    # ── Satisfactory (dedicated game server) ──────────────────────
+    # IRL chart (irl-satisfactory). Requires pv-satisfactory-config (k3s.yml),
+    # the chowned satisfactory-config dataset (zfs.yml), and NodePorts
+    # 30777 tcp+udp / 30888 tcp in the nftables allowlist (security playbook)
+    # for LAN clients like the Steam Deck. No secrets -- the admin password
+    # is set in-game at claim time and lives on the PVC.
+    - name: "Phase 5: Create Satisfactory config PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: satisfactory-data-pvc
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            volumeName: pv-satisfactory-config
+            resources:
+              requests:
+                storage: "40Gi"
+      tags: [phase5, satisfactory]
+
+    - name: "Phase 5: Upload Satisfactory values"
+      ansible.builtin.copy:
+        src: ../helm/satisfactory/values.yaml
+        dest: "{{ helm_values_path }}/satisfactory/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase5, satisfactory]
+
+    # wait: false on purpose -- first boot blocks on a ~10Gi SteamCMD pull
+    # behind a 30-minute startupProbe. Watch it instead:
+    #   kubectl -n irl logs -f deploy/satisfactory
+    - name: "Phase 5: Deploy Satisfactory (irl-satisfactory chart)"
+      kubernetes.core.helm:
+        name: satisfactory
+        chart_ref: irl/irl-satisfactory
+        chart_version: "0.1.0"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/satisfactory/values.yaml"
+        wait: false
+      tags: [phase5, satisfactory]
 
     # ── Deploy summary ────────────────────────────────────────────
 

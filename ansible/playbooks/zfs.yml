@@ -84,6 +84,17 @@
         recurse: true
       tags: [karakeep]
 
+    # Satisfactory server runs as PUID/PGID 1000. fsGroup does not apply to
+    # hostPath PVs, so this chown is what actually makes /config writable.
+    - name: Chown satisfactory-config dataset to UID 1000 (container user)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/satisfactory-config"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        recurse: true
+      tags: [satisfactory]
+
     # ── ZFS scrub schedule ─────────────────────────────────────────
     - name: Schedule weekly ZFS scrub (Sunday 3am)
       ansible.builtin.cron:

@@ -1,0 +1,27 @@
+# Satisfactory dedicated server -- environment overrides for irl-satisfactory.
+# Chart defaults live in helm-charts/charts/irl-satisfactory/values.yaml.
+#
+# LAN players (Steam Deck, no Tailscale): Server Manager -> Add Server ->
+#   192.168.2.2:30777
+# Tailnet players: 100.86.213.22:30777.
+# NodePorts 30777 tcp+udp / 30888 tcp must be in the nftables allowlist
+# (group_vars/homelab/main.yml) for LAN traffic to get through.
+
+# Without this the fullname helper renders "satisfactory-irl-satisfactory"
+# for release "satisfactory".
+fullnameOverride: "satisfactory"
+
+image:
+  tag: "v1.9.10"
+
+server:
+  maxPlayers: 4
+
+# Node has 40GB total shared with the rest of the stack. Bump the limit if
+# late-game saves start OOMing (upstream recommends 8-16GB).
+resources:
+  requests:
+    memory: "6Gi"
+    cpu: "2"
+  limits:
+    memory: "12Gi"

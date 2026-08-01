@@ -15,11 +15,17 @@ irl_firewall_allowed_tcp_ports:
   - 6881   # Deluge BitTorrent peer listen (LAN + Tailscale)
   - 8112   # Deluge Web UI (LAN + Tailscale)
   - 58846  # Deluge daemon RPC (LAN + Tailscale)
+  # Satisfactory dedicated server (k3s NodePorts). Deliberately LAN-reachable:
+  # the Steam Deck has no Tailscale, so it connects to 192.168.2.2:30777.
+  # Game traffic only -- server is claimed + password-protected in-game.
+  - 30777  # Satisfactory game port (HTTPS API handshake)
+  - 30888  # Satisfactory reliable-messaging port (advertised to clients)
 
 # UDP ports are accepted unconditionally on the tailscale0 interface
 # (see nftables.conf.j2); this list is for LAN-originated UDP.
 irl_firewall_allowed_udp_ports:
   - 6881   # Deluge BitTorrent DHT / uTP / UDP trackers
+  - 30777  # Satisfactory game traffic (LAN clients, e.g. Steam Deck)
 
 # NFS -- allowed networks (LAN + Tailscale)
 irl_nfs_allowed_subnets:

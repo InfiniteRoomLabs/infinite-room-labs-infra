@@ -465,6 +465,13 @@
           app: karakeep
           capacity: "20Gi"
           hostPath: "{{ irl_zfs_mount }}/karakeep-meilisearch"
+        # ── Satisfactory ──
+        # /config: gamefiles (redownloadable) + saves (irreplaceable).
+        # Dataset chowned to 1000 in zfs.yml (fsGroup ignores hostPath PVs).
+        - name: pv-satisfactory-config
+          app: satisfactory
+          capacity: "40Gi"
+          hostPath: "{{ irl_zfs_mount }}/satisfactory-config"
 
     - name: Create zfs-local StorageClass
       kubernetes.core.k8s:

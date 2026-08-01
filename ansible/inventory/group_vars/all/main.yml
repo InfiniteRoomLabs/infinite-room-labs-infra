@@ -92,6 +92,16 @@ irl_zfs_datasets:
     properties:
       atime: "off"
       compression: "lz4"
+  # ── Satisfactory (game server) ───────────────────────────────
+  # /config for wolveix/satisfactory-server: gamefiles (~10G, redownloadable
+  # via SteamCMD) + saved/ (irreplaceable) + backups/ + logs/. Runs as
+  # 1000:1000 (PUID/PGID + fsGroup), chowned in zfs.yml.
+  - name: "{{ irl_zfs_pool }}/satisfactory-config"
+    mountpoint: "{{ irl_zfs_mount }}/satisfactory-config"
+    quota: "40G"
+    properties:
+      atime: "off"
+      compression: "lz4"
 
 # ── NFS (hand-managed on homelab, not via ansible) ──────────────────
 # The homelab already exports /media/root/storage1/nfs-share via NFSv4.2
@@ -203,6 +213,10 @@ irl_services:
     cluster_svc: "karakeep"
     cluster_port: 3000
     health_path: "/api/health"
+  satisfactory:
+    subdomain: "satisfactory"
+    internal: true
+    cluster_only: true  # Game traffic, not HTTP -- NodePort 30777/30888, no Traefik route
   # qbittorrent:                 # PAUSED -- DNS resolution blocker, see
   #   subdomain: "torrents"      # ~/projects/infinite-room-labs/qbittorrent-operator/deploy/irl/README.md
   #   internal: false            # Alpine/musl + k8s ndots:5 breaks tracker hostname resolution.
