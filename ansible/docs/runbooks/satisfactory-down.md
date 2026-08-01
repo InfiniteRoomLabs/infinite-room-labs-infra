@@ -42,12 +42,21 @@ join. Fix: bump `image.tag` in `ansible/helm/satisfactory/values.yaml` (check
 https://hub.docker.com/r/wolveix/satisfactory-server/tags) and redeploy.
 
 ### Reachable on tailnet but not from LAN
-nftables allowlist regressed (default-drop for LAN, `tailscale0` is accepted
-unconditionally). Verify 30777 tcp+udp and 30888 tcp are in
-`irl_firewall_allowed_tcp_ports` / `_udp_ports`
-(`ansible/inventory/group_vars/homelab/main.yml`) and re-run the security
-playbook. WARNING: re-applying nftables flushes libvirt NAT rules -- restart
-libvirt networks after if VMs lose connectivity.
+Two layers must both allow LAN traffic; check both:
+
+1. **nftables allowlist** (default-drop for LAN; `tailscale0` is accepted
+   unconditionally): 30777 tcp+udp and 30888 tcp in
+   `irl_firewall_allowed_tcp_ports` / `_udp_ports`
+   (`ansible/inventory/group_vars/homelab/main.yml`); re-run the security
+   playbook. WARNING: re-applying nftables flushes libvirt NAT rules --
+   restart libvirt networks after if VMs lose connectivity.
+2. **NetworkPolicy** `allow-satisfactory-game-lan` (k3s.yml, kube-router
+   enforced). The namespace is default-deny + allow-ingress-tailscale;
+   NodePort traffic hits netpol with its ORIGINAL LAN source IP (masquerade
+   happens post-filter), so without this policy LAN clients get
+   "connection refused" while tailnet clients work -- exactly this
+   signature. Reapply: `uv run ansible-playbook playbooks/k3s.yml --tags
+   satisfactory`.
 
 ### Permission denied on /config
 Dataset ownership regressed (must be 1000:1000; fsGroup does not apply to

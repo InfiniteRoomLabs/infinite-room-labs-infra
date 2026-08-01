@@ -363,6 +363,40 @@
                   - protocol: TCP
                     port: 6443
 
+    # Satisfactory is deliberately LAN-playable (Steam Deck has no Tailscale).
+    # NodePort traffic from LAN clients reaches kube-router's filter hooks
+    # with its ORIGINAL source IP (masquerade happens later in POSTROUTING),
+    # so default-deny-all + allow-ingress-tailscale reject 192.168.2.x
+    # players. Tailnet players are already covered by allow-ingress-tailscale.
+    - name: Allow Satisfactory game traffic from the LAN
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: allow-satisfactory-game-lan
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: irl-satisfactory
+            policyTypes:
+              - Ingress
+            ingress:
+              - from:
+                  - ipBlock:
+                      cidr: 192.168.2.0/24
+                ports:
+                  - protocol: TCP
+                    port: 30777
+                  - protocol: UDP
+                    port: 30777
+                  - protocol: TCP
+                    port: 30888
+      tags: [satisfactory]
+
     # ── Create PersistentVolumes for ZFS-backed storage ───────────
     # These use hostPath pointing to ZFS dataset mountpoints.
     # k3s local-path-provisioner handles PVCs that don't need ZFS.
