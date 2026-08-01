@@ -36,6 +36,23 @@ All services are accessed via Caddy reverse proxy with internal TLS (Tailscale-o
 | **Karakeep** (bookmarks) | https://bookmarks.lab.infiniteroomlabs.cloud | Homelab | Single admin `wes@infiniteroomlabs.com`, password in BW `IRL/Services/Karakeep` (signups disabled) |
 | **CoreDNS** (Split DNS) | N/A (hostNetwork port 53) | Homelab | No UI -- DNS resolver only |
 | **Ollama** (LLM inference) | ClusterIP only | Homelab | See kubectl access below |
+| **Satisfactory** (game server) | Game client only -- see below | Homelab | Admin password set in-game at claim time |
+
+## Connecting to the Satisfactory Server
+
+No HTTP UI and no Traefik route -- game traffic goes straight to NodePorts,
+which are deliberately open on the LAN so devices without Tailscale (the
+Steam Deck) can play:
+
+- **From the LAN**: Server Manager -> Add Server -> `192.168.2.2:30777`
+- **From the tailnet**: `100.86.213.22:30777`
+
+Ports: 30777 tcp+udp (game + HTTPS API), 30888 tcp (reliable messaging,
+advertised to clients automatically). The server was claimed once in-game;
+the admin password lives on the server's PVC, not in Bitwarden. Saves are
+snapshotted hourly (sanoid) -- recovery procedures in
+`ansible/docs/sops/backup-and-restore.md` and
+`ansible/docs/runbooks/satisfactory-down.md`.
 
 ## Accessing Ollama (ClusterIP-only)
 

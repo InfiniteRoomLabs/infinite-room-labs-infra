@@ -72,8 +72,14 @@ the SteamCMD pull only if gamefiles are missing.
 ## Data Recovery
 
 Saves live at `/config/saved/server/` on the `main/satisfactory-config`
-dataset. Recover via ZFS snapshot (`zfs list -t snapshot | grep satisfactory`)
-or re-upload a local `.sav` with:
+dataset, snapshotted hourly by sanoid (`service_data` template). Full
+procedures -- single-save restore from a snapshot, full-dataset rollback, and
+disaster recovery from pool loss -- are in
+`ansible/docs/sops/backup-and-restore.md` (Satisfactory section).
+
+Quick version: scale to 0, copy the `.sav` out of
+`/media/root/storage1/satisfactory-config/.zfs/snapshot/<snap>/saved/server/`,
+chown 1000:1000, scale back to 1. Or re-upload a local copy:
 
 ```bash
 kubectl -n irl cp ./MySave.sav <pod>:/config/saved/server/MySave.sav
@@ -82,3 +88,20 @@ kubectl -n irl cp ./MySave.sav <pod>:/config/saved/server/MySave.sav
 The Session Name is baked inside the `.sav` -- renaming the file changes
 nothing. The server must be re-claimed (admin password) only if
 `/config/saved` itself was wiped.
+
+## Disaster Recovery (pool or node loss)
+
+Sanoid snapshots live on the same RAIDZ1 pool -- they do not survive pool
+loss. Until an off-box backup CronJob exists, periodically pull saves off the
+box (see the SOP). Rebuild order from a clean slate:
+
+```bash
+uv run ansible-playbook playbooks/zfs.yml --tags satisfactory   # dataset + chown
+uv run ansible-playbook playbooks/k3s.yml                       # PV (or apply manually)
+uv run ansible-playbook playbooks/security-hardening.yml        # nftables 30777/30888
+uv run ansible-playbook playbooks/helm-deploy.yml --tags satisfactory
+```
+
+Then restore saves per the SOP, claim the server in-game, and re-set the
+Auto-Load Session. NOTE: security-hardening flushes libvirt NAT rules --
+restart the `irl-vms` network afterwards if VMs lose connectivity.
