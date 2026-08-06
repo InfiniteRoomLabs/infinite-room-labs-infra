@@ -37,6 +37,7 @@ All services are accessed via Caddy reverse proxy with internal TLS (Tailscale-o
 | **CoreDNS** (Split DNS) | N/A (hostNetwork port 53) | Homelab | No UI -- DNS resolver only |
 | **Ollama** (LLM inference) | ClusterIP only | Homelab | See kubectl access below |
 | **Satisfactory** (game server) | Game client only -- see below | Homelab | Admin password set in-game at claim time |
+| **Palworld** (game server) | Game client only -- see below | Homelab | RCON admin password in BW `IRL/Services/Palworld` |
 
 ## Connecting to the Satisfactory Server
 
@@ -53,6 +54,22 @@ the admin password lives on the server's PVC, not in Bitwarden. Saves are
 snapshotted hourly (sanoid) -- recovery procedures in
 `ansible/docs/sops/backup-and-restore.md` and
 `ansible/docs/runbooks/satisfactory-down.md`.
+
+## Connecting to the Palworld Server
+
+Same LAN-open NodePort pattern as Satisfactory, but the game protocol is
+UDP-only on a single port:
+
+- **From the LAN**: Join Multiplayer Game -> direct connect -> `192.168.2.2:30211`
+- **From the tailnet**: `100.86.213.22:30211`
+
+Port: 30211/udp only. RCON (25575) and the REST API (8212) stay pod-internal;
+the RCON admin password is env-injected from Secret `palworld-secrets`
+(BW item `palworld-admin-password`). No join password -- reachability is
+LAN + tailnet only and the server never appears in the community browser.
+Saves are snapshotted hourly (sanoid) plus the image's own daily tar backups --
+recovery procedures in `ansible/docs/sops/backup-and-restore.md` and
+`ansible/docs/runbooks/palworld-down.md`.
 
 ## Accessing Ollama (ClusterIP-only)
 

@@ -131,3 +131,65 @@ Rebuild from nothing:
 
 The claim state (`ServerSettings.*`) rides along with `saved/` -- if it was
 restored, no re-claim is needed.
+
+## Palworld
+
+One dataset, `main/palworld-data` (sanoid `service_data`: hourly x24, daily
+x30, weekly x4, monthly x6). Layout on the dataset:
+
+- `Pal/Saved/` -- **the only irreplaceable data**: world save (`SaveGames/`),
+  player saves, and `Config/` (server settings)
+- `backups/` -- the image's own daily tar backups of the save dir (30-day
+  retention); a second recovery source on the same dataset
+- everything else -- the ~6Gi server install, fully redownloadable via
+  SteamCMD; never worth restoring
+
+### Recover a save from backup (the common case)
+
+Same shape as Satisfactory: pull files out of a snapshot rather than
+`zfs rollback` (a rollback drags the server install back in time and forces a
+SteamCMD re-verify for nothing).
+
+```bash
+# Stop the server so it doesn't autosave over what you're restoring
+kubectl scale -n irl deploy/palworld --replicas=0
+
+# Pick a snapshot (hourly granularity)
+ssh homelab-ts "sudo zfs list -t snapshot -o name,creation main/palworld-data | tail -30"
+
+# Copy the save tree back out of the read-only snapshot dir
+ssh homelab-ts "sudo cp -a /media/root/storage1/palworld-data/.zfs/snapshot/<snap>/Pal/Saved/. \
+  /media/root/storage1/palworld-data/Pal/Saved/ && \
+  sudo chown -R 1000:1000 /media/root/storage1/palworld-data/Pal/Saved"
+
+kubectl scale -n irl deploy/palworld --replicas=1
+```
+
+Alternative: untar one of the image's own backups from `backups/` on the
+dataset (same scale-down/chown/scale-up dance).
+
+### Full-dataset rollback (config corruption, unknown blast radius)
+
+```bash
+kubectl scale -n irl deploy/palworld --replicas=0
+ssh homelab-ts "sudo zfs rollback main/palworld-data@<snapshot>"  # DESTRUCTIVE
+kubectl scale -n irl deploy/palworld --replicas=1
+```
+
+### Disaster recovery (dataset/pool lost)
+
+Snapshots live on the same RAIDZ1 pool as the data. After significant play
+sessions, pull a copy of the save off the box:
+
+```bash
+kubectl -n irl cp \
+  $(kubectl get pod -n irl -l app.kubernetes.io/name=irl-palworld -o name | cut -d/ -f2):/palworld/Pal/Saved \
+  ./palworld-saves-$(date +%Y%m%d)
+```
+
+Rebuild from nothing: follow the Disaster Recovery section of
+`ansible/docs/runbooks/palworld-down.md` (zfs -> k3s PV/netpol ->
+security-hardening -> secrets:sync -> helm-deploy), then copy the save tree
+back into `/palworld/Pal/Saved/` and chown 1000:1000. The RCON admin password
+is env-injected from `palworld-secrets`, so no in-game re-claim exists --
+world settings ride along with `Config/`.
