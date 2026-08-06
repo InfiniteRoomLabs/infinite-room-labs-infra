@@ -264,6 +264,14 @@ secrets:
     k8s_secret: "gemini-api-key"
     k8s_key: "api-key"
 
+  # ── Palworld (game server RCON admin) ───────────────────────
+  # Consumed as env ADMIN_PASSWORD by the irl-palworld chart; RCON is what
+  # makes SIGTERM saves and the daily auto-reboot graceful.
+  - bw_item: "palworld-admin-password"
+    ansible_var: "vault_palworld_admin_password"
+    k8s_secret: "palworld-secrets"
+    k8s_key: "ADMIN_PASSWORD"
+
   # ── JobOps (separate namespace: "jobops") ───────────────────
   # Example shape for secrets that must land in the "jobops" namespace instead
   # of the default "irl". Uncomment and replace the placeholder bw_item names

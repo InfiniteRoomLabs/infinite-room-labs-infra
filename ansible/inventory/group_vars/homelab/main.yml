@@ -26,6 +26,7 @@ irl_firewall_allowed_tcp_ports:
 irl_firewall_allowed_udp_ports:
   - 6881   # Deluge BitTorrent DHT / uTP / UDP trackers
   - 30777  # Satisfactory game traffic (LAN clients, e.g. Steam Deck)
+  - 30211  # Palworld game traffic (UDP-only protocol; LAN clients, e.g. Steam Deck)
 
 # NFS -- allowed networks (LAN + Tailscale)
 irl_nfs_allowed_subnets:

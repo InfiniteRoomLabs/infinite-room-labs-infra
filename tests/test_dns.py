@@ -17,6 +17,7 @@ EXPECTED_RECORDS = [
     "home.lab.infiniteroomlabs.cloud",
     "bookmarks.lab.infiniteroomlabs.cloud",
     "satisfactory.internal.lab.infiniteroomlabs.cloud",
+    "palworld.internal.lab.infiniteroomlabs.cloud",
 ]
 
 

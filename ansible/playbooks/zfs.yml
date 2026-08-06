@@ -95,6 +95,17 @@
         recurse: true
       tags: [satisfactory]
 
+    # Palworld server runs as PUID/PGID 1000. Same hostPath-PV chown story
+    # as satisfactory.
+    - name: Chown palworld-data dataset to UID 1000 (container user)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/palworld-data"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        recurse: true
+      tags: [palworld]
+
     # ── ZFS scrub schedule ─────────────────────────────────────────
     - name: Schedule weekly ZFS scrub (Sunday 3am)
       ansible.builtin.cron:

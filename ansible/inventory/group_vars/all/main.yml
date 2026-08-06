@@ -102,6 +102,16 @@ irl_zfs_datasets:
     properties:
       atime: "off"
       compression: "lz4"
+  # ── Palworld (game server) ───────────────────────────────────
+  # /palworld for thijsvanloef/palworld-server-docker: server install
+  # (~8-20G, redownloadable via SteamCMD) + saves/ + backups/ (irreplaceable).
+  # Runs as 1000:1000 (PUID/PGID + fsGroup), chowned in zfs.yml.
+  - name: "{{ irl_zfs_pool }}/palworld-data"
+    mountpoint: "{{ irl_zfs_mount }}/palworld-data"
+    quota: "30G"
+    properties:
+      atime: "off"
+      compression: "lz4"
 
 # ── NFS (hand-managed on homelab, not via ansible) ──────────────────
 # The homelab already exports /media/root/storage1/nfs-share via NFSv4.2
@@ -217,6 +227,10 @@ irl_services:
     subdomain: "satisfactory"
     internal: true
     cluster_only: true  # Game traffic, not HTTP -- NodePort 30777/30888, no Traefik route
+  palworld:
+    subdomain: "palworld"
+    internal: true
+    cluster_only: true  # Game traffic, not HTTP -- NodePort 30211/udp, no Traefik route
   # qbittorrent:                 # PAUSED -- DNS resolution blocker, see
   #   subdomain: "torrents"      # ~/projects/infinite-room-labs/qbittorrent-operator/deploy/irl/README.md
   #   internal: false            # Alpine/musl + k8s ndots:5 breaks tracker hostname resolution.

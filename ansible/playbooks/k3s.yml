@@ -397,6 +397,33 @@
                     port: 30888
       tags: [satisfactory]
 
+    # Palworld gets the same LAN-play treatment as Satisfactory (see above
+    # for the original-source-IP rationale). Game protocol is UDP-only.
+    - name: Allow Palworld game traffic from the LAN
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ k3s_kubeconfig_host_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: allow-palworld-game-lan
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: irl-palworld
+            policyTypes:
+              - Ingress
+            ingress:
+              - from:
+                  - ipBlock:
+                      cidr: 192.168.2.0/24
+                ports:
+                  - protocol: UDP
+                    port: 30211
+      tags: [palworld]
+
     # ── Create PersistentVolumes for ZFS-backed storage ───────────
     # These use hostPath pointing to ZFS dataset mountpoints.
     # k3s local-path-provisioner handles PVCs that don't need ZFS.
@@ -506,6 +533,13 @@
           app: satisfactory
           capacity: "40Gi"
           hostPath: "{{ irl_zfs_mount }}/satisfactory-config"
+        # ── Palworld ──
+        # /palworld: server install (redownloadable) + saves (irreplaceable).
+        # Dataset chowned to 1000 in zfs.yml (fsGroup ignores hostPath PVs).
+        - name: pv-palworld-data
+          app: palworld
+          capacity: "30Gi"
+          hostPath: "{{ irl_zfs_mount }}/palworld-data"
 
     - name: Create zfs-local StorageClass
       kubernetes.core.k8s:

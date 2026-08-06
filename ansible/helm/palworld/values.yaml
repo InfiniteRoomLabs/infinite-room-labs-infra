@@ -1,0 +1,34 @@
+# Palworld dedicated server -- environment overrides for irl-palworld.
+# Chart defaults live in helm-charts/charts/irl-palworld/values.yaml.
+#
+# LAN players (Steam Deck, no Tailscale): Join Multiplayer Game ->
+#   direct connect -> 192.168.2.2:30211
+# Tailnet players: 100.86.213.22:30211.
+# NodePort 30211/udp must be in the nftables allowlist
+# (group_vars/homelab/main.yml) for LAN traffic to get through.
+#
+# RCON admin password comes from Secret palworld-secrets (bw-sync item
+# palworld-admin-password); the server join password is deliberately unset
+# (LAN + tailnet reachability only, COMMUNITY=false).
+
+# Without this the fullname helper renders "palworld-irl-palworld"
+# for release "palworld".
+fullnameOverride: "palworld"
+
+image:
+  tag: "v2.7.1"
+
+server:
+  name: "IRL Palworld"
+  players: 8
+
+# Node has 40GB total shared with the rest of the stack (Satisfactory
+# requests 6Gi beside this). Palworld idles ~4-6GB and leaks upward; the
+# daily 5 AM auto-reboot (chart default) is the mitigation, the 16Gi limit
+# is the backstop.
+resources:
+  requests:
+    memory: "6Gi"
+    cpu: "2"
+  limits:
+    memory: "16Gi"
