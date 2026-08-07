@@ -82,18 +82,24 @@ jobs:
           sudo tar -C /usr/local/bin -xzf /tmp/conftest.tgz conftest
           conftest --version
 
-      # irl-postgres, irl-valkey, and irl-gitea declare remote dependencies
-      # (Chart.lock present but tgz not vendored, unlike irl-monitoring).
-      # `helm dependency build` requires the repos to be configured first.
+      # Six charts declare remote dependencies (Chart.lock present, but the
+      # submodule gitignores charts/*/charts/ and *.tgz, so no dependency
+      # archive is ever checked in). `helm dependency build` needs the HTTP
+      # chart repos configured first; irl-paperless's OCI dependency
+      # (oci://ghcr.io/gabe565/charts) resolves without a repo add.
       - name: Add helm repos for chart dependencies
         run: |
           helm repo add cnpg https://cloudnative-pg.github.io/charts
           helm repo add valkey-helm https://valkey-io.github.io/valkey-helm/
           helm repo add gitea-charts https://dl.gitea.com/charts/
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add vaultwarden https://guerzon.github.io/vaultwarden
 
       - name: Build chart dependencies
         run: |
-          for chart in irl-postgres irl-valkey irl-gitea; do
+          for chart in irl-postgres irl-valkey irl-gitea irl-monitoring irl-paperless irl-vaultwarden; do
             helm dependency build "helm-charts/charts/$chart"
           done
 

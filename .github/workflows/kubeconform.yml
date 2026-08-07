@@ -46,10 +46,13 @@ jobs:
       # Skipped charts: any chart whose Chart.yaml declares dependencies that
       # are not vendored as archives in its charts/ directory cannot be
       # rendered offline (helm template would need a network `helm dependency
-      # build` against remote chart repos). Currently that is irl-gitea,
-      # irl-postgres, and irl-valkey. The skip is detected dynamically via
-      # `helm dependency list` STATUS=missing, so vendoring a dependency
-      # automatically brings its chart into validation.
+      # build` against remote chart repos). The submodule gitignores
+      # charts/*/charts/ and *.tgz, so on a fresh checkout that is all six
+      # dependency-declaring charts: irl-gitea, irl-monitoring, irl-paperless,
+      # irl-postgres, irl-valkey, and irl-vaultwarden (the conftest workflow
+      # covers those via `helm dependency build`). The skip is detected
+      # dynamically via `helm dependency list` STATUS=missing, so vendoring a
+      # dependency automatically brings its chart into validation.
       - name: Validate rendered charts with kubeconform
         run: |
           set -euo pipefail
