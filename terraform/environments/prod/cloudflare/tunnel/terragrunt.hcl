@@ -47,8 +47,16 @@ inputs = {
   # cloudflared sidecar reaches the app over pod-localhost (no in-cluster Service).
   app_service = "http://localhost:3001"
 
+  # MCP portal route (codifies the rule the dashboard MCP Server setup created).
+  mcp_hostname = "jops-mcp.infiniteroomlabs.com"
+
   # Single operator allowed through Access.
   operator_email = "wes.gilleland@gmail.com"
+
+  # 1 month (Access max). Matches the dashboard-managed MCP portal + MCP server
+  # apps (set via API 2026-08-07) -- the claude.ai connector's OAuth session
+  # follows the portal's Access session, so 24h anywhere = daily re-auth.
+  session_duration = "730h"
 
   # Provider auth: bootstrap token from the global tokens dependency, falling back
   # to CLOUDFLARE_API_TOKEN via the generated provider (see cloudflare/provider.hcl).

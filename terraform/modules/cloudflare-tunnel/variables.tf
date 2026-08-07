@@ -74,3 +74,9 @@ variable "read_connector_token" {
   description = "Temporarily read the connector token into state for a one-shot bootstrap. Keep false in steady state."
   default     = false
 }
+
+variable "mcp_hostname" {
+  type        = string
+  description = "Optional hostname routing path ^/mcp to the app for the Cloudflare MCP portal (e.g. jops-mcp.infiniteroomlabs.com). null omits the ingress rule."
+  default     = null
+}

@@ -15,23 +15,38 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "this" {
 }
 
 # ── Tunnel ingress configuration (remotely managed) ───────────────────────────
-# One hostname rule for JobOps, then a terminal catch-all that 404s anything else.
+# One hostname rule for JobOps, an optional MCP-portal route, then a terminal
+# catch-all that 404s anything else. The MCP rule carries the route the
+# Cloudflare MCP Server setup created out-of-band (2026-07): the portal
+# reaches the app's MCP endpoint via mcp_hostname + path ^/mcp. Its DNS CNAME
+# (jops-mcp -> tunnel) remains dashboard-managed, out of Terraform.
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
   account_id = var.account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.this.id
   source     = "cloudflare"
 
   config = {
-    ingress = [
-      {
-        hostname = var.hostname
-        service  = var.app_service
-      },
+    ingress = concat(
+      [
+        {
+          hostname = var.hostname
+          service  = var.app_service
+        },
+      ],
+      var.mcp_hostname != null ? [
+        {
+          hostname = var.mcp_hostname
+          path     = "^/mcp"
+          service  = var.app_service
+        },
+      ] : [],
       # Terminal catch-all: required last rule, must have no hostname.
-      {
-        service = "http_status:404"
-      },
-    ]
+      [
+        {
+          service = "http_status:404"
+        },
+      ],
+    )
   }
 }
 
