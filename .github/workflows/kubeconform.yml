@@ -1,0 +1,76 @@
+name: kubeconform
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Least privilege: repo introspection only.
+permissions:
+  contents: read
+
+jobs:
+  kubeconform:
+    runs-on: ubuntu-latest
+    env:
+      # Pinned tool versions. HELM_VERSION matches the mise-pinned local toolchain.
+      # KUBERNETES_VERSION matches the homelab k3s cluster (v1.31.4+k3s1).
+      HELM_VERSION: v3.16.4
+      KUBECONFORM_VERSION: v0.6.7
+      KUBECONFORM_SHA256: 95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73
+      KUBERNETES_VERSION: 1.31.4
+    steps:
+      # helm-charts is a git submodule (InfiniteRoomLabs/helm-charts) -- charts
+      # under helm-charts/charts/ only exist after submodule checkout.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          curl -sSL -o kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum --check
+          tar xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+          rm -f kubeconform kubeconform.tar.gz
+          kubeconform -v
+      # Render every chart with its default values and schema-validate the
+      # manifests. -strict rejects unknown fields; -ignore-missing-schemas
+      # keeps CRD-typed resources (ServiceMonitor, PrometheusRule, CNPG
+      # Cluster, etc.) from failing -- kubeconform has no schemas for them.
+      #
+      # Skipped charts: any chart whose Chart.yaml declares dependencies that
+      # are not vendored as archives in its charts/ directory cannot be
+      # rendered offline (helm template would need a network `helm dependency
+      # build` against remote chart repos). Currently that is irl-gitea,
+      # irl-postgres, and irl-valkey. The skip is detected dynamically via
+      # `helm dependency list` STATUS=missing, so vendoring a dependency
+      # automatically brings its chart into validation.
+      - name: Validate rendered charts with kubeconform
+        run: |
+          set -euo pipefail
+          failed=0
+          for chart in helm-charts/charts/*/; do
+            chart="${chart%/}"
+            name="$(basename "$chart")"
+            if helm dependency list "$chart" 2>/dev/null \
+                | awk 'NR>1 && $NF=="missing" {found=1} END {exit !found}'; then
+              echo "SKIP ${name}: unvendored chart dependencies (cannot resolve offline)"
+              continue
+            fi
+            echo "::group::${name}"
+            if helm template "$name" "$chart" \
+                | kubeconform -strict -ignore-missing-schemas \
+                    -kubernetes-version "${KUBERNETES_VERSION}" -summary; then
+              echo "OK ${name}"
+            else
+              echo "FAIL ${name}"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$failed"

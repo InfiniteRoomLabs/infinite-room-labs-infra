@@ -1,0 +1,129 @@
+name: conftest
+
+# Policy gate over rendered Helm chart output. Same contract as hygiene.yml:
+# repo introspection only -- no cluster or secret access (KUBECONFIG never
+# used; `helm template` is offline apart from chart dependency downloads).
+#
+# Enforced policies (policy/*.rego) -- all verified green against the 2026-08
+# rendered output of the 11 IRL charts with deployed values:
+#   - deny-privileged-and-privilege-escalation
+#   - readonly-rootfs-ratchet
+#   - hostpath-only-via-documented-pv-pattern
+#
+# CANDIDATE POLICIES -- fail today, do NOT enforce until the violations below
+# are fixed (then add a policy/*.rego and they are picked up automatically):
+#
+#   no-latest-or-floating-tags: ban :latest / untagged images. Known
+#   violations as of 2026-08:
+#     - helm-charts/charts/irl-garage/values.yaml:78 webui image
+#       khairul169/garage-webui:latest
+#     - ansible/helm/paperless/values.yaml:90 deliberate tika.image
+#       docker.io/apache/tika:latest override (chart default image path 403s)
+#     - helm-charts/charts/irl-paperless/values.yaml:233 backup uploader
+#       amazon/aws-cli:latest
+#     - irl-gitea vendored gitea-10.6.0 subchart: helm test hook Pod uses
+#       busybox:latest (override via ansible/helm/gitea/values.yaml test.image,
+#       or exclude helm.sh/hook resources in the policy)
+#     - helm-charts/charts/irl-jobops/values.yaml:17,101 default digest
+#       placeholder REPLACE_WITH_DIGEST renders an invalid image ref from repo
+#       defaults (real digest is injected at deploy time)
+#   A strict digest-only variant fails far wider (floating channel tags are
+#   the house norm for upstream charts: gitea 1.22-rootless, gotenberg 8,
+#   nginx-unprivileged 1.27-alpine, vault 1.17, authentik 2024.10, CNPG
+#   postgresql:16) and is not a candidate.
+#
+#   containers-define-resource-requests: every container must set
+#   resources.requests cpu+memory. All IRL-authored containers comply, but 20
+#   rendered containers (verified 2026-08) do not: 15 in the irl-monitoring
+#   vendored subcharts (node-exporter, kube-state-metrics, prometheus-operator,
+#   grafana init/sidecars, admission Jobs, loki-canary, loki-gateway,
+#   loki-sc-rules, loki, tempo, test Pods), 3 in irl-valkey (metrics and
+#   valkey-init sidecars plus the test-auth test Pod), the irl-gitea
+#   test-connection test Pod, and the CNPG operator manager Deployment in
+#   irl-postgres. Closest adoptable variant: fix the irl-valkey sidecars, set
+#   the missing requests via ansible/helm/monitoring/values.yaml, and exclude
+#   helm.sh/hook test Pods -- or scope the rule to IRL-authored charts only.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Least privilege: repo introspection only.
+permissions:
+  contents: read
+
+jobs:
+  conftest:
+    runs-on: ubuntu-latest
+    env:
+      CONFTEST_VERSION: "0.56.0"
+      # sha256 of conftest_0.56.0_Linux_x86_64.tar.gz, verified against the
+      # release's checksums.txt.
+      CONFTEST_SHA256: "620f41640d63bbde1646a108ce2816ba54c980466ceebb7e754dda2d508e8cd5"
+    steps:
+      # Unlike hygiene.yml, this job needs the helm-charts submodule checked
+      # out: charts are rendered from the local submodule path, same as the
+      # ansible chart_ref pattern documented in CLAUDE.md.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # Pin helm to the mise.toml version so CI renders match local renders.
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Install conftest
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/conftest.tgz "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          echo "${CONFTEST_SHA256}  /tmp/conftest.tgz" | sha256sum --check
+          sudo tar -C /usr/local/bin -xzf /tmp/conftest.tgz conftest
+          conftest --version
+
+      # irl-postgres, irl-valkey, and irl-gitea declare remote dependencies
+      # (Chart.lock present but tgz not vendored, unlike irl-monitoring).
+      # `helm dependency build` requires the repos to be configured first.
+      - name: Add helm repos for chart dependencies
+        run: |
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          helm repo add valkey-helm https://valkey-io.github.io/valkey-helm/
+          helm repo add gitea-charts https://dl.gitea.com/charts/
+
+      - name: Build chart dependencies
+        run: |
+          for chart in irl-postgres irl-valkey irl-gitea; do
+            helm dependency build "helm-charts/charts/$chart"
+          done
+
+      # Release names match ansible/playbooks/helm-deploy.yml (jobops is not
+      # ansible-deployed; its release name is jobops). Values overlays are the
+      # deployed environment values from ansible/helm/*/values.yaml where one
+      # exists for the chart. The readonly-rootfs-ratchet baseline keys on the
+      # rendered metadata.name, so keep these release names in sync with the
+      # playbook and with policy/readonly-rootfs-ratchet.rego.
+      - name: Render charts
+        run: |
+          mkdir -p rendered
+          render() {
+            release="$1"; chart="$2"; values="$3"
+            args=""
+            if [ -n "$values" ]; then args="-f ansible/helm/$values/values.yaml"; fi
+            # shellcheck disable=SC2086
+            helm template "$release" "helm-charts/charts/$chart" --namespace irl $args > "rendered/$chart.yaml"
+          }
+          render garage       irl-garage       ""
+          render gitea        irl-gitea        gitea
+          render jobops       irl-jobops       ""
+          render monitoring   irl-monitoring   monitoring
+          render openviking   irl-openviking   ""
+          render palworld     irl-palworld     palworld
+          render paperless    irl-paperless    paperless
+          render postgresql   irl-postgres     postgres
+          render satisfactory irl-satisfactory satisfactory
+          render valkey       irl-valkey       ""
+          render vaultwarden  irl-vaultwarden  vaultwarden
+
+      - name: Run conftest
+        run: conftest test --policy policy --all-namespaces rendered/*.yaml
