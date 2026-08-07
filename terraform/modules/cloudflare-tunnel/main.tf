@@ -87,16 +87,19 @@ resource "cloudflare_zero_trust_access_policy" "operator" {
 }
 
 # ── Access application: gate the hostname ─────────────────────────────────────
-# Self-hosted app over the tunnel hostname. Restricted to the OTP IdP and
-# auto-redirected to it (single IdP), enforcing the operator policy above.
+# Self-hosted app over the tunnel hostname. The module-owned OTP IdP is always
+# allowed; extra_idp_ids admits dashboard-managed IdPs (e.g. Google) too.
+# Auto-redirect only works with a single IdP -- with extras, Access shows a
+# login-method picker instead. The email-based operator policy applies
+# identically regardless of which IdP asserted the identity.
 resource "cloudflare_zero_trust_access_application" "this" {
   account_id                = var.account_id
   name                      = var.app_name
   domain                    = var.hostname
   type                      = "self_hosted"
   session_duration          = var.session_duration
-  allowed_idps              = [cloudflare_zero_trust_access_identity_provider.otp.id]
-  auto_redirect_to_identity = true
+  allowed_idps              = concat([cloudflare_zero_trust_access_identity_provider.otp.id], var.extra_idp_ids)
+  auto_redirect_to_identity = length(var.extra_idp_ids) == 0
 
   policies = [
     {

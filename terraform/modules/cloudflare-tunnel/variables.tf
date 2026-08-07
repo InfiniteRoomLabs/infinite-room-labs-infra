@@ -80,3 +80,9 @@ variable "mcp_hostname" {
   description = "Optional hostname routing path ^/mcp to the app for the Cloudflare MCP portal (e.g. jops-mcp.infiniteroomlabs.com). null omits the ingress rule."
   default     = null
 }
+
+variable "extra_idp_ids" {
+  type        = list(string)
+  description = "Additional Access identity provider IDs allowed on the app besides the module-owned OTP IdP. Non-empty disables auto-redirect (login-method picker shown)."
+  default     = []
+}

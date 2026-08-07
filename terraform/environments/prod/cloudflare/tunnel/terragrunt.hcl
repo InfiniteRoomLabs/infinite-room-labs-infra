@@ -53,6 +53,10 @@ inputs = {
   # Single operator allowed through Access.
   operator_email = "wes.gilleland@gmail.com"
 
+  # HomeOauth (Google, dashboard-managed IdP) alongside the module's OTP.
+  # Disables auto-redirect: the login page shows a method picker.
+  extra_idp_ids = ["8edd7e06-6a95-42de-bcdf-7fc9e77f0b3f"]
+
   # 1 month (Access max). Matches the dashboard-managed MCP portal + MCP server
   # apps (set via API 2026-08-07) -- the claude.ai connector's OAuth session
   # follows the portal's Access session, so 24h anywhere = daily re-auth.

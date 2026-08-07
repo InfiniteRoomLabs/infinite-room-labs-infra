@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **JobOps origin Access app now offers Google login (HomeOauth) alongside OTP.** New `extra_idp_ids` module input on `cloudflare-tunnel`; auto-redirect is off when extras are present, so the login page shows a method picker. The email-based operator policy is IdP-agnostic, so authorization is unchanged.
 - **JobOps MCP connector session extended 24h -> 730h (1 month, the Access max).** The claude.ai connector's OAuth session follows the Cloudflare Access session, and all three apps in the path (IRL MCP Portal `mcp_portal`, JobOps `mcp` server app, JobOps `self_hosted` origin app) defaulted to 24h -- hence the every-other-day re-auth. Portal + MCP apps are dashboard-managed, updated via API (PUT, not PATCH -- Access apps reject PATCH with 10405); origin app via terraform (`session_duration = "730h"` in the prod tunnel leaf). Also codified drift the dashboard MCP Server setup created out-of-band: the tunnel ingress rule `jops-mcp.infiniteroomlabs.com` path `^/mcp` -> app is now a module-level `mcp_hostname` input (terraform would have deleted the portal's route on the next apply); its DNS CNAME stays dashboard-managed.
 
 ### Added
