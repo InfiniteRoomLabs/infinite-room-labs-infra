@@ -34,7 +34,7 @@ Positive, verified in-repo:
 - Gitea SSH is plain `ssh` to port 2222 through Traefik's TCP entrypoint; the port-forward workflow is retired (the old fish functions are documented as obsolete).
 - No custom image or build step. The stock chart also brought zero-code-change capabilities later switched on in values.yaml alone: native Prometheus metrics and OTel tracing for all HTTP requests (commit `3003c50`), plus a Traefik ingress Grafana dashboard (`cc15d75`).
 - Route definitions live with their services; adding a routed service is a chart template or one dict entry, exercised by every service added since (karakeep, paperless, firefly, ghostfolio per CHANGELOG).
-- Test coverage carried over and widened: `test_caddy.py` was replaced by `test_ingress.py` asserting the same TLS/health behavior across all 16 routed services (derived from the 17-entry `irl_services` registry; `cluster_only` entries are excluded by `tests/conftest.py`), and the dead goss `caddy-pod-running` check (silently collapsed by a duplicate YAML key) was replaced by a working `traefik-pod-running` check (commit `3cb8fb4`).
+- Test coverage carried over and widened: `test_caddy.py` was replaced by `test_ingress.py` asserting the same TLS/health behavior across every routed service in the `irl_services` registry (`cluster_only` entries are excluded by `tests/conftest.py`; 16 routed of 19 registry entries as of this writing), and the dead goss `caddy-pod-running` check (silently collapsed by a duplicate YAML key) was replaced by a working `traefik-pod-running` check (commit `3cb8fb4`).
 
 Negative and costs, also verified in-repo:
 

@@ -20,7 +20,7 @@ jobs:
       matrix:
         scan-dir: [terraform, ansible, docker, helm-charts]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # helm-charts/ is a git submodule (InfiniteRoomLabs/helm-charts).
           submodules: true
@@ -31,7 +31,7 @@ jobs:
       # under ansible/, not the playbooks themselves (checkov/KICS would be
       # the tools for actual Ansible analysis).
       - name: Trivy config scan (${{ matrix.scan-dir }})
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # 0.29.0
         with:
           scan-type: config
           scan-ref: ${{ matrix.scan-dir }}
@@ -47,7 +47,7 @@ jobs:
         # security-events: write, so the upload would fail there. Skip it for
         # fork PRs (the scan itself still runs and its log is visible).
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3
         with:
           sarif_file: trivy-config-${{ matrix.scan-dir }}.sarif
           # Distinct category per directory so results do not overwrite each

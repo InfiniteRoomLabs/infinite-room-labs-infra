@@ -500,7 +500,7 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ### R16: Public-Showcase Readiness (repo layout, conventions, verifiability)
 
-- **Status**: leak scrub + publication DONE 2026-08-07 (repo public at github.com/InfiniteRoomLabs/infinite-room-labs-infra: history rewritten via git-filter-repo, personal taxonomy externalized, fresh GitHub repo to shed PR-pinned objects, MIT LICENSE + SECURITY.md + hygiene CI). Topology (tailscale IPs, .lab. domains, NodePorts) deliberately published per the Thread-1 community norm. Remaining open: conventions adoption (README hardware/stack tables, Renovate loop, kubesearch tagging), docs scaffolding, verifiability ladder (kubeconform/conftest in CI)
+- **Status**: leak scrub + publication DONE 2026-08-07 (repo public at github.com/InfiniteRoomLabs/infinite-room-labs-infra: history rewritten via git-filter-repo, personal taxonomy externalized, fresh GitHub repo to shed PR-pinned objects, MIT LICENSE + SECURITY.md + hygiene CI). Topology (tailscale IPs, .lab. domains, NodePorts) deliberately published per the Thread-1 community norm. 2026-08-07 polish pass: ADRs (docs/decisions/), kubeconform+conftest+trivy CI, README hardware/stack/topology header, Renovate config -- all landed. Remaining open: drift-detection-as-issues (needs public-repo creds design), Renovate noise tuning, kubesearch/topics
 - **Roadmap link**: Future / Public repo showcase (make this repo withstand scrutiny from top-of-their-game DevOps reviewers)
 - **Key questions**:
   1. Which community conventions do we adopt from the admired Flux-homelab lineage (onedr0p/bjw-s/cluster-template, kubesearch.dev): README hardware+stack tables, strict directory split, visible-but-encrypted secrets, Renovate loop?

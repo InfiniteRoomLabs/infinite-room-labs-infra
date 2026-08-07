@@ -65,12 +65,12 @@ jobs:
       # Unlike hygiene.yml, this job needs the helm-charts submodule checked
       # out: charts are rendered from the local submodule path, same as the
       # ansible chart_ref pattern documented in CLAUDE.md.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: true
 
       # Pin helm to the mise.toml version so CI renders match local renders.
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: v3.16.4
 
