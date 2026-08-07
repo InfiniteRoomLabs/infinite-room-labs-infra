@@ -106,9 +106,16 @@ jobs:
       # Release names match ansible/playbooks/helm-deploy.yml (jobops is not
       # ansible-deployed; its release name is jobops). Values overlays are the
       # deployed environment values from ansible/helm/*/values.yaml where one
-      # exists for the chart. The readonly-rootfs-ratchet baseline keys on the
-      # rendered metadata.name, so keep these release names in sync with the
-      # playbook and with policy/readonly-rootfs-ratchet.rego.
+      # exists for the chart AND the playbook actually deploys with it.
+      # Exception: irl-postgres renders with chart defaults -- its deployed
+      # values are inline in the helm-deploy.yml task (operator.enabled: false,
+      # storageClass, nodePort 30432), and ansible/helm/postgres/values.yaml is
+      # the stale Bitnami-era file ADR 0003 flags as dead (its keys don't map
+      # to the CNPG wrapper chart). Defaults render the CNPG operator subchart
+      # in-release, which is why Deployment/postgresql-cloudnative-pg/manager
+      # sits in the ratchet baseline. The readonly-rootfs-ratchet baseline keys
+      # on the rendered metadata.name, so keep these release names in sync with
+      # the playbook and with policy/readonly-rootfs-ratchet.rego.
       - name: Render charts
         run: |
           mkdir -p rendered
@@ -126,7 +133,7 @@ jobs:
           render openviking   irl-openviking   ""
           render palworld     irl-palworld     palworld
           render paperless    irl-paperless    paperless
-          render postgresql   irl-postgres     postgres
+          render postgresql   irl-postgres     ""
           render satisfactory irl-satisfactory satisfactory
           render valkey       irl-valkey       ""
           render vaultwarden  irl-vaultwarden  vaultwarden
