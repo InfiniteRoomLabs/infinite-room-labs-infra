@@ -128,7 +128,6 @@ flowchart LR
 terraform/          Terraform + Terragrunt (cloud resources, domains, DNS, compute)
 ansible/            Ansible (homelab server config, Helm deployments, secrets)
 helm-charts/        Helm charts (git submodule -> InfiniteRoomLabs/helm-charts)
-docker/             Custom container image builds (Dockerfiles)
 scripts/            Bootstrap, secrets sync, and shared helpers
 docs/               Architecture plans, access guides, research
 tests/              Acceptance test suite (smoke, validate)
@@ -369,14 +368,6 @@ See `ansible/CLAUDE.md` for full documentation (layout, running, secrets, SSH ac
 | `irl-vaultwarden` | Bitwarden-compatible password manager |
 
 Charts are deployed via Ansible (`ansible/playbooks/helm-deploy.yml`), never manually. Values overrides live in `ansible/helm/{name}/values.yaml`.
-
----
-
-## Docker
-
-Custom container image Dockerfiles live under `docker/`. It currently contains:
-
-- `docker/caddy/` -- Custom Caddy build with the Cloudflare DNS plugin
 
 ---
 

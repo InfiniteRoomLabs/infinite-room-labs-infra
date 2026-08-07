@@ -18,7 +18,9 @@ jobs:
       # Security tab and one bad directory does not mask findings in another.
       fail-fast: false
       matrix:
-        scan-dir: [terraform, ansible, docker, helm-charts]
+        # No docker/ leg: the directory has no committed content today (the
+        # old custom Caddy build was retired). Re-add when Dockerfiles land.
+        scan-dir: [terraform, ansible, helm-charts]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
