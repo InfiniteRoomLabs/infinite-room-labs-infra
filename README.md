@@ -43,7 +43,7 @@ Multi-tool IaC monorepo for the IRL homelab: a k3s cluster on an HP Z600 plus on
 |---|---|
 | k3s | Single-server cluster on the Z600 with a DigitalOcean agent joined over Tailscale; every IRL service lives in the `irl` namespace, replacing the old per-service Docker Compose stacks |
 | Terraform + Terragrunt | One leaf per resource group under `environments/{env}/{provider}/{rg}`; TFC workspace names derived from the path (e.g. `homelab-tailscale-acl`), so state layout mirrors the directory tree exactly |
-| Terraform Cloud | Remote state for every leaf, bootstrapped by a chicken-and-egg local-state script that mints the TFC workspaces and a scoped Cloudflare API token |
+| Terraform Cloud | Remote state for every non-bootstrap leaf; the chicken-and-egg bootstrap leaves (TFC workspace + scoped Cloudflare token minting) necessarily keep local state |
 | Ansible | Flat playbooks (no roles) imported by a phase-tagged site.yml; the only sanctioned path for Helm deploys - charts are never installed by hand |
 | Helm | Custom `irl-*` charts in a git-submodule repo (irl-gitea, irl-garage, irl-monitoring, irl-postgres, ...); environment overrides live in `ansible/helm/{name}/values.yaml`, applied by the helm-deploy playbook |
 | mise | Pins exact versions of the core IaC toolchain (terraform/terragrunt/helm/kubectl/packer/fnox) and runs the task surface: `mise run bootstrap \| secrets:sync \| ansible \| test:smoke` |

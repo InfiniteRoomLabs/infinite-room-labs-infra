@@ -43,7 +43,7 @@ Positive:
 - One place to create, rotate, or revoke a secret; both fan-out paths are re-runs of an idempotent sync, and `--verify-k8s` detects drift between Bitwarden and the cluster.
 - No ambient credentials: a shell sitting in the repo directory holds nothing; only the exact command under `fnox exec` sees the declared env vars. `scripts/mcp-grafana.sh` goes further, fetching a single token via `fnox get` under `env -i` so a third-party binary never sees infra-wide credentials.
 - The mappings themselves (`bw-sync-config.yaml`, `fnox.toml`) are reviewable, diffable code; the hygiene test suite asserts every `existingSecret` in `ansible/helm/*/values.yaml` maps to a `bw-sync-config.yaml` entry (commit 3cb8fb4).
-- Rotation policy is enforceable mechanically (`--check-rotation`, run by a daily cron per the parent CLAUDE.md).
+- Rotation policy is enforceable mechanically: `--check-rotation` reports overdue secrets on demand (also wrapped as `mise run` tasks). A cron template for a daily check exists in-tree (`ansible/templates/bw-sync-cron.j2`) but is not currently installed by any playbook -- scheduling it is an open loose end, so today the check runs when an operator or agent invokes it.
 
 Negative / accepted costs:
 
