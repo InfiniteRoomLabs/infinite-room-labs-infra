@@ -5,9 +5,12 @@ name: conftest
 # used; `helm template` is offline apart from chart dependency downloads).
 #
 # Enforced policies (policy/*.rego) -- all verified green against the 2026-08
-# rendered output of the 11 IRL charts with deployed values:
-#   - deny-privileged-and-privilege-escalation
-#   - readonly-rootfs-ratchet
+# rendered output of the 11 IRL charts with deployed values, plus the
+# separately installed cnpg/cloudnative-pg operator release:
+#   - deny-privileged-and-privilege-escalation (carries a shrink-only baseline
+#     of containers that omit allowPrivilegeEscalation: false)
+#   - readonly-rootfs-ratchet (value regressions in rego; the presence half is
+#     the baseline-vs-render diff step at the end of this job)
 #   - hostpath-only-via-documented-pv-pattern
 #
 # CANDIDATE POLICIES -- fail today, do NOT enforce until the violations below
@@ -39,8 +42,8 @@ name: conftest
 #   grafana init/sidecars, admission Jobs, loki-canary, loki-gateway,
 #   loki-sc-rules, loki, tempo, test Pods), 3 in irl-valkey (metrics and
 #   valkey-init sidecars plus the test-auth test Pod), the irl-gitea
-#   test-connection test Pod, and the CNPG operator manager Deployment in
-#   irl-postgres. Closest adoptable variant: fix the irl-valkey sidecars, set
+#   test-connection test Pod, and the manager Deployment of the cnpg-operator
+#   release. Closest adoptable variant: fix the irl-valkey sidecars, set
 #   the missing requests via ansible/helm/monitoring/values.yaml, and exclude
 #   helm.sh/hook test Pods -- or scope the rule to IRL-authored charts only.
 
@@ -57,6 +60,9 @@ jobs:
   conftest:
     runs-on: ubuntu-latest
     env:
+      # Must match the chart_version on the "Phase 2: Install CNPG operator"
+      # task in ansible/playbooks/helm-deploy.yml.
+      CNPG_CHART_VERSION: "0.28.3"
       CONFTEST_VERSION: "0.56.0"
       # sha256 of conftest_0.56.0_Linux_x86_64.tar.gz, verified against the
       # release's checksums.txt.
@@ -107,24 +113,33 @@ jobs:
       # ansible-deployed; its release name is jobops). Values overlays are the
       # deployed environment values from ansible/helm/*/values.yaml where one
       # exists for the chart AND the playbook actually deploys with it.
-      # Exception: irl-postgres renders with chart defaults -- its deployed
-      # values are inline in the helm-deploy.yml task (operator.enabled: false,
-      # storageClass, nodePort 30432), and ansible/helm/postgres/values.yaml is
-      # the stale Bitnami-era file ADR 0003 flags as dead (its keys don't map
-      # to the CNPG wrapper chart). Defaults render the CNPG operator subchart
-      # in-release, which is why Deployment/postgresql-cloudnative-pg/manager
-      # sits in the ratchet baseline. The readonly-rootfs-ratchet baseline keys
-      # on the rendered metadata.name, so keep these release names in sync with
-      # the playbook and with policy/readonly-rootfs-ratchet.rego.
+      #
+      # irl-postgres is the exception: it has no values-file overlay, because
+      # its deployed values are inline in the helm-deploy.yml task, and
+      # ansible/helm/postgres/values.yaml is the stale Bitnami-era file ADR
+      # 0003 flags as dead (its keys don't map to the CNPG wrapper chart). The
+      # --set flags below are those inline values verbatim; keep them in sync
+      # with the playbook task. They matter: operator.enabled=false means the
+      # CNPG operator is NOT rendered in-release, so irl-postgres reduces to
+      # the Cluster CR. The operator is a separate release (cnpg-operator, from
+      # cnpg/cloudnative-pg, namespace cnpg-system), rendered below at the same
+      # pinned chart version the playbook installs -- which is where
+      # Deployment/cnpg-operator-cloudnative-pg/manager in the ratchet baseline
+      # comes from.
+      #
+      # The readonly-rootfs-ratchet baseline keys on the rendered
+      # metadata.name, so keep these release names in sync with the playbook
+      # and with policy/readonly-rootfs-ratchet.rego.
       - name: Render charts
         run: |
+          set -euo pipefail
           mkdir -p rendered
           render() {
-            release="$1"; chart="$2"; values="$3"
+            release="$1"; chart="$2"; values="$3"; shift 3
             args=""
             if [ -n "$values" ]; then args="-f ansible/helm/$values/values.yaml"; fi
             # shellcheck disable=SC2086
-            helm template "$release" "helm-charts/charts/$chart" --namespace irl $args > "rendered/$chart.yaml"
+            helm template "$release" "helm-charts/charts/$chart" --namespace irl $args "$@" > "rendered/$chart.yaml"
           }
           render garage       irl-garage       ""
           render gitea        irl-gitea        gitea
@@ -133,10 +148,60 @@ jobs:
           render openviking   irl-openviking   ""
           render palworld     irl-palworld     palworld
           render paperless    irl-paperless    paperless
-          render postgresql   irl-postgres     ""
+          render postgresql   irl-postgres     "" \
+            --set operator.enabled=false \
+            --set cluster.storage.storageClass=local-path \
+            --set cluster.nodePort=30432
           render satisfactory irl-satisfactory satisfactory
           render valkey       irl-valkey       ""
           render vaultwarden  irl-vaultwarden  vaultwarden
+          # The CNPG operator, as actually deployed: its own release from the
+          # upstream repo, pinned to the same chart version as the
+          # "Phase 2: Install CNPG operator" task in helm-deploy.yml.
+          helm template cnpg-operator cnpg/cloudnative-pg \
+            --version "${CNPG_CHART_VERSION}" --namespace cnpg-system \
+            > rendered/cloudnative-pg.yaml
 
       - name: Run conftest
         run: conftest test --policy policy --all-namespaces rendered/*.yaml
+
+      # Presence half of the readonly-rootfs ratchet. The rego rule can only
+      # fire on a document that exists, so deleting or renaming a baselined
+      # workload silently drops the guarantee and CI stays green. Compare the
+      # baseline against the keys actually observed in the rendered output and
+      # fail on anything the baseline claims but the render no longer has.
+      # See .github/policy-introspect/observed-readonly-rootfs.rego.
+      - name: Verify readonly-rootfs ratchet baseline is still present
+        run: |
+          set -euo pipefail
+          # Match only whole key lines ("<kind>/<name>/<container>",) so a
+          # quoted string in a comment inside the fence cannot inject a
+          # phantom key.
+          sed -n '/# ROFS-BASELINE-BEGIN/,/# ROFS-BASELINE-END/p' \
+            policy/readonly-rootfs-ratchet.rego \
+            | sed -nE 's/^[[:space:]]*"([^"]+)",$/\1/p' \
+            | sort -u > baseline-keys.txt
+          conftest test --policy .github/policy-introspect --all-namespaces \
+            --output json rendered/*.yaml > observed.json || true
+          jq -r '.[].failures[]?.msg' observed.json | sort -u > observed-keys.txt
+          # Both files being non-empty is itself a check: an empty side would
+          # make the comparison below vacuously pass.
+          for f in baseline-keys.txt observed-keys.txt; do
+            if [ ! -s "$f" ]; then
+              echo "::error::${f} is empty -- the ratchet presence check is broken, not passing"
+              exit 1
+            fi
+          done
+          missing="$(comm -23 baseline-keys.txt observed-keys.txt)"
+          if [ -n "$missing" ]; then
+            echo "::error::readonly-rootfs ratchet baseline keys are no longer present in the rendered output:"
+            echo "$missing" | sed 's/^/  /'
+            echo ""
+            echo "A baselined container was renamed, removed, or moved to a different release."
+            echo "Renames require a baseline update: edit the ROFS-BASELINE block in"
+            echo "policy/readonly-rootfs-ratchet.rego to the new key in the same PR. If the"
+            echo "workload is genuinely gone, delete the entry. Do NOT delete an entry just"
+            echo "to make this pass -- that is exactly the silent guarantee loss it exists to catch."
+            exit 1
+          fi
+          echo "OK: all $(wc -l < baseline-keys.txt) ratchet baseline keys present in the render."
