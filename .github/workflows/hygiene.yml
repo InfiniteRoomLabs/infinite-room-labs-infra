@@ -1,0 +1,20 @@
+name: hygiene
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # Repo-introspection contract tests only: registry fan-out, secret-mapping
+      # completeness, runbook coverage, docs encoding. No cluster or secret access.
+      - name: Run hygiene suite
+        run: uv run pytest -m hygiene
+        working-directory: tests
+        env:
+          KUBECONFIG: /dev/null

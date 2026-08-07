@@ -313,3 +313,7 @@ Reduce Terraform parallelism:
 ```bash
 terragrunt run-all apply -- -parallelism=2
 ```
+
+## License
+
+[MIT](LICENSE). Charts, playbooks, and patterns are free to lift; the infrastructure they describe is, regrettably, mine.
