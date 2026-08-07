@@ -1,0 +1,46 @@
+---
+# inventory/group_vars/all/paperless_config.yml.example
+# ======================================================
+# Config-as-data for Paperless-ngx app-layer classification, applied idempotently
+# by playbooks/paperless-config.yml (NOT secrets -- the API token lives in
+# paperless-secrets / vault_paperless_api_token).
+#
+# The real taxonomy (correspondents, document types, tags, workflows) is
+# personal by nature -- it names the operator's actual banks, providers, and
+# legal matters -- so it lives in the gitignored sibling
+# `paperless_config_private.yml` (any file in group_vars/all/ auto-loads; the
+# playbook only needs the `paperless_config` var defined). Copy this file
+# there, drop the `.example` suffix from the var content below, and grow your
+# own lists.
+#
+# WHY THIS EXISTS: ansible/docs/sops/restore-paperless.md truncates the tag,
+# correspondent, document_type, and documents_workflow* tables on restore.
+# Without this data, a DB rebuild loses the entire classification setup.
+#
+# matching algorithm: none | any | all | exact | regex | fuzzy | auto
+#   - keyword modes (any/all/exact/regex/fuzzy) need `match:`
+#   - `auto` = ML classifier trained on already-tagged docs (no `match:`)
+paperless_config:
+
+  correspondents:
+    - { name: "Acme Bank", algorithm: any, match: "acme", insensitive: true }
+    - { name: "Example Utility Co", algorithm: any, match: "example utility", insensitive: true }
+
+  document_types:
+    - { name: "Invoice", algorithm: auto }
+    - { name: "Statement", algorithm: auto }
+    - { name: "Correspondence", algorithm: auto }
+
+  tags:
+    - { name: "Inbox", color: "#000000", algorithm: none }
+    - { name: "Financial", color: "#b15928", algorithm: auto }
+    - { name: "Tax-Year-2026", color: "#33a02c", algorithm: any, match: "2026", insensitive: true }
+
+  # Deterministic supplement to the per-object matching rules above.
+  workflows:
+    - name: "Route scanner intake"
+      order: 10
+      triggers:
+        - { type: 1, sources: [1], filter_filename: "*scan*" }
+      actions:
+        - { type: 1, assign_tags_by_name: ["Inbox"] }

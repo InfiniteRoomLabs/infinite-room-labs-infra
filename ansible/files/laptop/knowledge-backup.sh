@@ -23,9 +23,17 @@ REMOTE_DEST="/media/root/storage1/backups/laptop-knowledge"
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10)
 SOURCES=(
     "$HOME/claude-ai-export"
-    "$HOME/private-email-archive"
     "$HOME/threadwatch"
 )
+# Private archives join the list from a local, uncommitted file: one absolute
+# path per line, `#` comments allowed. Missing dirs are skipped either way.
+EXTRA_DIRS_FILE="$HOME/.config/knowledge-backup/dirs"
+if [ -f "$EXTRA_DIRS_FILE" ]; then
+    while IFS= read -r d; do
+        case "$d" in ''|'#'*) continue ;; esac
+        SOURCES+=("${d/#\~/$HOME}")
+    done < "$EXTRA_DIRS_FILE"
+fi
 
 log() { printf '{"event":"knowledge_backup",%s}\n' "$1"; }
 

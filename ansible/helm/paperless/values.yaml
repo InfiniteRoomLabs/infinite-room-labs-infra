@@ -56,8 +56,8 @@ paperless:
   # The product is "peak OCR threads"; how you SPLIT it is a throughput-vs-latency
   # choice. A single huge scan only ever uses THREADS_PER_WORKER threads -- so a
   # WORKERS-heavy split (e.g. 8x2) leaves one 300-page scan crawling on 2 threads
-  # while 7 workers idle. That is what bit the 2026-06 bulk archival
-  # intake (a 295-page scan nearly hit the 3600s timeout at 2 threads).
+  # while 7 workers idle. That is what bit a 2026-06 bulk archival intake
+  # (a 295-page scan nearly hit the 3600s timeout at 2 threads).
   #
   # Profiles (pick per expected workload; keep product <= 24):
   #   batch     8 x 2  -> max doc-throughput; WORST for a lone monster doc

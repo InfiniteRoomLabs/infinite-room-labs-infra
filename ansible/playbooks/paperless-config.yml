@@ -3,7 +3,8 @@
 # ==============================
 # Idempotent post-deploy configuration of Paperless-ngx app-layer classification
 # (correspondents, document types, tags, and workflows) from config-as-data in
-# inventory/group_vars/all/paperless_config.yml, applied via the REST API.
+# inventory/group_vars/all/paperless_config_private.yml (gitignored; see the
+# committed .example for the shape), applied via the REST API.
 #
 # WHY: ansible/docs/sops/restore-paperless.md truncates the tag / correspondent /
 # document_type / documents_workflow* tables on restore, so a DB rebuild loses the
@@ -19,7 +20,7 @@
 # Or via site.yml: --tags paperless-config
 #
 # Mail-account / mail-rule monitoring is intentionally DEFERRED (printer scans are
-# the primary ingestion path). See docs/plans/2026-06-02-proactive-paperless.md.
+# the primary ingestion path). The original design doc was retired from the public tree.
 
 - name: Paperless-ngx app-layer configuration
   hosts: homelab

@@ -15,8 +15,8 @@ or backed up; this runbook is the order of operations to get it running again.
 | alloy | always-on shipper: tails the four units' journals -> homelab OTel Collector (`100.86.213.22:30418`) -> Loki | infra `ansible/files/laptop/` (mise-installed binary) | `~/.config/alloy/` + `~/.config/systemd/user` |
 | deploy driver | installs + enables all of the above | infra `ansible/playbooks/laptop.yml` | run with `uv run ansible-playbook` |
 
-Data archives (the "knowledge"): `~/claude-ai-export`, `~/private-email-archive`,
-`~/threadwatch`.
+Data archives (the "knowledge"): `~/claude-ai-export`, `~/threadwatch`, plus any
+private archives listed in `~/.config/knowledge-backup/dirs` (local, uncommitted).
 
 Backup location: homelab `main/backups` ZFS dataset at
 `/media/root/storage1/backups/laptop-knowledge` (owned by `wes`, 500G quota),
@@ -39,9 +39,10 @@ reached by rsync over SSH to the `homelab-ts` alias (`100.86.213.22`) over Tails
 
 ```bash
 ssh homelab-ts 'cat /media/root/storage1/backups/laptop-knowledge/LAST-BACKUP.txt'   # check freshness
-rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/claude-ai-export/        ~/claude-ai-export/
-rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/private-email-archive/ ~/private-email-archive/
-rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/threadwatch/             ~/threadwatch/
+rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/claude-ai-export/ ~/claude-ai-export/
+rsync -a homelab-ts:/media/root/storage1/backups/laptop-knowledge/threadwatch/      ~/threadwatch/
+# ...and one rsync per private archive named in ~/.config/knowledge-backup/dirs
+# (each backs up to laptop-knowledge/<basename>/).
 ```
 
 Alternative (or in addition): re-clone `claude-ai-export` from Gitea and let the
@@ -115,8 +116,9 @@ Staggered so each later job sees fresh output from the earlier one.
 
 ## Backup details
 
-- Scope: `~/claude-ai-export`, `~/private-email-archive`, `~/threadwatch`
-  (excludes `.venv`, `__pycache__`, caches, reindex runtime state).
+- Scope: `~/claude-ai-export`, `~/threadwatch`, and the private archives from
+  `~/.config/knowledge-backup/dirs` (excludes `.venv`, `__pycache__`, caches,
+  reindex runtime state).
 - Append-only (no `--delete`): a local wipe can never propagate to the backup.
   Git history (in the repos) and ZFS snapshots (if sanoid covers the `nfs-share`
   dataset) are the point-in-time versioning layer.
