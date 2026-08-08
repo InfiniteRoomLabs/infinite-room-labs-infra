@@ -90,6 +90,9 @@
       kubernetes.core.helm:
         name: cnpg-operator
         chart_ref: cnpg/cloudnative-pg
+        # Matches the live cluster. Keep in sync with CNPG_CHART_VERSION in
+        # .github/workflows/conftest.yml, which policy-tests this chart.
+        chart_version: "0.28.3"
         release_namespace: cnpg-system
         create_namespace: true
         kubeconfig: "{{ kubeconfig }}"

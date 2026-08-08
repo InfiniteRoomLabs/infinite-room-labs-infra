@@ -1,0 +1,275 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Renovate config for infinite-room-labs-infra.",
+    "Scope: helm chart_version pins in ansible/playbooks/helm-deploy.yml (custom regex manager -- no built-in manager parses kubernetes.core.helm task fields), docker image repository+tag pairs and digest pins in in-repo helm values files (helm-values + custom digest regex; tag-only overrides with no repository key, e.g. authentik/jenkins/postgres, cannot be resolved to a depName and ride chart defaults instead), Dockerfiles under docker/ (dockerfile manager), mise.toml tool pins (mise manager), GitHub Actions (github-actions manager), and the helm-charts submodule pointer (git-submodules manager).",
+    "Note: helm-charts/ is a git submodule; Renovate cannot edit files inside it from this repo. Image digests in helm-charts/charts/*/values.yaml are updated by installing this same config (helm-values + docker-digest custom manager) on the InfiniteRoomLabs/helm-charts repo; this repo then picks up the result via the weekly git-submodules pointer bump.",
+    "Conservative defaults: weekly schedule, grouped PRs per ecosystem, pinned ranges, 7-day minimum release age matching the machine-wide supply-chain policy."
+  ],
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "America/New_York",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "rangeStrategy": "pin",
+  "minimumReleaseAge": "7 days",
+  "labels": [
+    "dependencies"
+  ],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "enabledManagers": [
+    "custom.regex",
+    "helm-values",
+    "dockerfile",
+    "mise",
+    "github-actions",
+    "git-submodules"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "ansible/.venv/**",
+    "ansible/collections/**"
+  ],
+  "git-submodules": {
+    "enabled": true
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Helm chart_version pins in the Ansible helm-deploy playbook (chart_ref + chart_version pairs on consecutive lines). The chart_ref repo-alias prefix is matched but discarded; registry resolution comes from the packageRules registryUrls mappings below.",
+      "managerFilePatterns": [
+        "/^ansible/playbooks/helm-deploy\\.yml$/"
+      ],
+      "matchStrings": [
+        "chart_ref:\\s*(?:[\\w.-]+)/(?<depName>[\\w.-]+)\\s*(?:#[^\\n]*)?\\n\\s*chart_version:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm"
+    },
+    {
+      "customType": "regex",
+      "description": "Docker image digest pins (repository + digest key pairs) in helm values files. currentValueTemplate tracks the default tag stream for digest refresh; placeholder digests (REPLACE_WITH_DIGEST) are intentionally not matched.",
+      "managerFilePatterns": [
+        "/(^|/)values\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "repository:\\s*\"?(?<depName>[a-z0-9][\\w./-]*[\\w])\"?\\s*(?:#[^\\n]*)?\\n\\s*digest:\\s*\"(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "docker",
+      "currentValueTemplate": "latest"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Group all helm chart bumps into one weekly PR.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "groupName": "helm charts"
+    },
+    {
+      "description": "Group all container image bumps (tags and digests) into one weekly PR.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "groupName": "docker images"
+    },
+    {
+      "description": "Group GitHub Actions bumps into one weekly PR.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Group mise.toml tool pin bumps into one weekly PR.",
+      "matchManagers": [
+        "mise"
+      ],
+      "groupName": "mise tooling"
+    },
+    {
+      "description": "Group submodule pointer bumps (helm-charts) into one weekly PR.",
+      "matchManagers": [
+        "git-submodules"
+      ],
+      "groupName": "git submodules"
+    },
+    {
+      "description": "Registry mapping for the helm custom manager: IRL charts (chart_ref prefix irl/).",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "irl-*"
+      ],
+      "registryUrls": [
+        "https://infiniteroomlabs.github.io/helm-charts/"
+      ]
+    },
+    {
+      "description": "Registry mapping: traefik charts.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "traefik"
+      ],
+      "registryUrls": [
+        "https://traefik.github.io/charts"
+      ]
+    },
+    {
+      "description": "Traefik is deliberately held below 40: 39.0.7 is the last release schema-compatible with our values (see helm-deploy.yml comment); the 40+ upgrade is a separate task. Renovate may only propose 39.x patches.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "traefik"
+      ],
+      "allowedVersions": "<40.0.0"
+    },
+    {
+      "description": "Registry mapping: karakeep.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "karakeep"
+      ],
+      "registryUrls": [
+        "https://karakeep-app.github.io/helm-charts"
+      ]
+    },
+    {
+      "description": "Registry mappings for remaining repos declared in helm-deploy.yml, so future chart_version pins resolve without config changes.",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "vault"
+      ],
+      "registryUrls": [
+        "https://helm.releases.hashicorp.com"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "cloudnative-pg"
+      ],
+      "registryUrls": [
+        "https://cloudnative-pg.github.io/charts"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "authentik"
+      ],
+      "registryUrls": [
+        "https://charts.goauthentik.io"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "coredns"
+      ],
+      "registryUrls": [
+        "https://coredns.github.io/helm"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "homepage"
+      ],
+      "registryUrls": [
+        "https://jameswynn.github.io/helm-charts"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "nextcloud"
+      ],
+      "registryUrls": [
+        "https://nextcloud.github.io/helm/"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "firefly-iii",
+        "importer"
+      ],
+      "registryUrls": [
+        "https://firefly-iii.github.io/kubernetes/"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "ghostfolio"
+      ],
+      "registryUrls": [
+        "https://bythehugo.github.io/ghostfolio-helm/"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "ollama"
+      ],
+      "registryUrls": [
+        "https://otwld.github.io/ollama-helm/"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "jenkins"
+      ],
+      "registryUrls": [
+        "https://charts.jenkins.io"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "vaultwarden"
+      ],
+      "registryUrls": [
+        "https://guerzon.github.io/vaultwarden"
+      ]
+    }
+  ]
+}

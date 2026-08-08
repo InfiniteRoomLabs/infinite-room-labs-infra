@@ -1,0 +1,57 @@
+name: trivy
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Least privilege: read the repo, write scan results to the Security tab.
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy-config:
+    runs-on: ubuntu-latest
+    strategy:
+      # One scan per IaC surface so each gets its own SARIF category in the
+      # Security tab and one bad directory does not mask findings in another.
+      fail-fast: false
+      matrix:
+        # No docker/ leg: the directory has no committed content today (the
+        # old custom Caddy build was retired). Re-add when Dockerfiles land.
+        scan-dir: [terraform, ansible, helm-charts]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # helm-charts/ is a git submodule (InfiniteRoomLabs/helm-charts).
+          submodules: true
+      # IaC misconfiguration scan only (trivy "config" scanner): Terraform,
+      # Kubernetes YAML, Dockerfiles, Helm charts. No image or dependency
+      # scanning here. Trivy has no Ansible playbook analyzer -- the ansible/
+      # leg exists to catch k8s-shaped manifests and Dockerfiles that live
+      # under ansible/, not the playbooks themselves (checkov/KICS would be
+      # the tools for actual Ansible analysis).
+      - name: Trivy config scan (${{ matrix.scan-dir }})
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: ${{ matrix.scan-dir }}
+          format: sarif
+          output: trivy-config-${{ matrix.scan-dir }}.sarif
+          # Deliberately non-blocking for now: exit-code 0 means findings never
+          # fail the build. The point of this workflow is Security-tab
+          # visibility via SARIF, not gating. Once the baseline is triaged,
+          # tighten by setting exit-code: '1' with severity: HIGH,CRITICAL.
+          exit-code: '0'
+      - name: Upload SARIF to the Security tab
+        # GITHUB_TOKEN on pull_request runs from forks never gets
+        # security-events: write, so the upload would fail there. Skip it for
+        # fork PRs (the scan itself still runs and its log is visible).
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+        uses: github/codeql-action/upload-sarif@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3
+        with:
+          sarif_file: trivy-config-${{ matrix.scan-dir }}.sarif
+          # Distinct category per directory so results do not overwrite each
+          # other across matrix legs.
+          category: trivy-config-${{ matrix.scan-dir }}

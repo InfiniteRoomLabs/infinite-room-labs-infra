@@ -38,6 +38,7 @@ BANNED = re.compile("[‘’“”–—→←]")
 DEAD_REFS = ("caddy_proxy",)
 HISTORICAL_PREFIXES = (
     "docs/plans/",
+    "docs/decisions/",  # ADRs document retirements; naming the retired system is their job
     "docs/superpowers/",
     "kitty-specs/",
     ".kittify/",

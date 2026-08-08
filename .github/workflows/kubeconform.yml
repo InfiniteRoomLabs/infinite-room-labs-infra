@@ -1,0 +1,106 @@
+name: kubeconform
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Least privilege: repo introspection only.
+permissions:
+  contents: read
+
+jobs:
+  kubeconform:
+    runs-on: ubuntu-latest
+    env:
+      # Pinned tool versions. HELM_VERSION matches the mise-pinned local toolchain.
+      # KUBERNETES_VERSION matches the homelab k3s cluster (v1.31.4+k3s1).
+      HELM_VERSION: v3.16.4
+      KUBECONFORM_VERSION: v0.6.7
+      KUBECONFORM_SHA256: 95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73
+      KUBERNETES_VERSION: 1.31.4
+      # Matches the chart_version on the "Phase 2: Install CNPG operator" task
+      # in ansible/playbooks/helm-deploy.yml.
+      CNPG_CHART_VERSION: "0.28.3"
+    steps:
+      # helm-charts is a git submodule (InfiniteRoomLabs/helm-charts) -- charts
+      # under helm-charts/charts/ only exist after submodule checkout.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: true
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          curl -sSL -o kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum --check
+          tar xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+          rm -f kubeconform kubeconform.tar.gz
+          kubeconform -v
+      # Six charts declare remote dependencies (Chart.lock present, but the
+      # submodule gitignores charts/*/charts/ and *.tgz, so no dependency
+      # archive is ever checked in). Without this step those six cannot render
+      # on a fresh checkout and would be skipped -- which would leave more than
+      # half the charts schema-unvalidated. `helm dependency build` needs the
+      # HTTP chart repos configured first; irl-paperless's OCI dependency
+      # (oci://ghcr.io/gabe565/charts) resolves without a repo add.
+      #
+      # Kept in sync with the identical step in conftest.yml. That workflow
+      # runs POLICY checks, not schema validation, so it is not a substitute
+      # for validating these charts here.
+      - name: Add helm repos for chart dependencies
+        run: |
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          helm repo add valkey-helm https://valkey-io.github.io/valkey-helm/
+          helm repo add gitea-charts https://dl.gitea.com/charts/
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add vaultwarden https://guerzon.github.io/vaultwarden
+
+      - name: Build chart dependencies
+        run: |
+          set -euo pipefail
+          for chart in irl-postgres irl-valkey irl-gitea irl-monitoring irl-paperless irl-vaultwarden; do
+            helm dependency build "helm-charts/charts/$chart"
+          done
+
+      # Render every chart with its default values and schema-validate the
+      # manifests. -strict rejects unknown fields; -ignore-missing-schemas
+      # keeps CRD-typed resources (ServiceMonitor, PrometheusRule, CNPG
+      # Cluster, etc.) from failing -- kubeconform has no schemas for them.
+      #
+      # Every chart under helm-charts/charts/ is validated; there is no skip
+      # list. The upstream cnpg/cloudnative-pg chart is validated too, for
+      # symmetry with conftest.yml -- ansible installs it as its own release,
+      # so it is part of the deployed surface even though it is not an IRL
+      # chart.
+      - name: Validate rendered charts with kubeconform
+        run: |
+          set -euo pipefail
+          failed=0
+          validate() {
+            name="$1"; shift
+            echo "::group::${name}"
+            if helm template "$@" \
+                | kubeconform -strict -ignore-missing-schemas \
+                    -kubernetes-version "${KUBERNETES_VERSION}" -summary; then
+              echo "OK ${name}"
+            else
+              echo "FAIL ${name}"
+              failed=1
+            fi
+            echo "::endgroup::"
+          }
+          for chart in helm-charts/charts/*/; do
+            chart="${chart%/}"
+            name="$(basename "$chart")"
+            validate "$name" "$name" "$chart"
+          done
+          validate cloudnative-pg cnpg-operator cnpg/cloudnative-pg \
+            --version "${CNPG_CHART_VERSION}"
+          exit "$failed"

@@ -1,6 +1,17 @@
+<div align="center">
+
 # Infinite Room Labs Infrastructure
 
-Infrastructure as code for Infinite Room Labs. This monorepo provisions cloud and DNS resources with Terraform/Terragrunt and manages the homelab k3s cluster with Ansible and Helm.
+Multi-tool IaC monorepo for the IRL homelab: a k3s cluster on an HP Z600 plus one cloud agent node, managed end to end with Terraform, Ansible, and Helm.
+
+[![hygiene](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/hygiene.yml/badge.svg)](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/hygiene.yml)
+[![kubeconform](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/kubeconform.yml/badge.svg)](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/kubeconform.yml)
+[![conftest](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/conftest.yml/badge.svg)](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/conftest.yml)
+[![trivy](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/trivy.yml/badge.svg)](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/trivy.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
+</div>
+
 
 ## Start Here
 
@@ -16,13 +27,107 @@ Infrastructure as code for Infinite Room Labs. This monorepo provisions cloud an
 | Work on Terraform | [Terraform](#terraform) |
 | Work on Ansible | [Ansible](#ansible) and [ansible/CLAUDE.md](ansible/CLAUDE.md) |
 
+## Hardware
+
+| Component | Spec |
+|---|---|
+| Server (on-prem) | HP Z600 workstation - dual Xeon (24 threads), 40GB RAM (4GB OS reserve, ZFS ARC capped at 8GB), k3s server + all stateful workloads |
+| Storage | ZFS RAIDZ1 pool `main` at /media/root/storage1 - 13 quota'd datasets (garage-data 500G @ 1M recordsize, vms 300G @ 64K recordsize matching qcow2 clusters, paperless-media 500G, gitea-lfs 100G, ...), lz4 compression, sanoid snapshot automation |
+| Cloud agent node | DigitalOcean droplet s-4vcpu-8gb (NYC3, ~$48/mo) - k3s agent joined to the on-prem server over Tailscale, provisioned by Terraform |
+| Virtualization | KVM/libvirt on the Z600 - declarative VM inventory with a hard 12GB summed-RAM budget; ubuntu-vm-01 (4 vCPU / 8GB / 40GB) cloned from versioned Packer gold masters stored on `main/vms` |
+| Network | Tailscale mesh (homelab node 100.86.213.22) for kubectl/SSH/DNS; LAN 192.168.2.2 exposes game-server NodePorts to devices without Tailscale (the Steam Deck); CoreDNS on hostNetwork port 53 |
+
+## Stack
+
+| Tool | Why |
+|---|---|
+| k3s | Single-server cluster on the Z600 with a DigitalOcean agent joined over Tailscale; every IRL service lives in the `irl` namespace, replacing the old per-service Docker Compose stacks |
+| Terraform + Terragrunt | One leaf per resource group under `environments/{env}/{provider}/{rg}`; TFC workspace names derived from the path (e.g. `homelab-tailscale-acl`), so state layout mirrors the directory tree exactly |
+| Terraform Cloud | Remote state for every non-bootstrap leaf; the chicken-and-egg bootstrap leaves (TFC workspace + scoped Cloudflare token minting) necessarily keep local state |
+| Ansible | Flat playbooks (no roles) imported by a phase-tagged site.yml; the only sanctioned path for Helm deploys - charts are never installed by hand |
+| Helm | Custom `irl-*` charts in a git-submodule repo (irl-gitea, irl-garage, irl-monitoring, irl-postgres, ...); environment overrides live in `ansible/helm/{name}/values.yaml`, applied by the helm-deploy playbook |
+| mise | Pins exact versions of the core IaC toolchain (terraform/terragrunt/helm/kubectl/packer/fnox) and runs the task surface: `mise run bootstrap \| secrets:sync \| ansible \| test:smoke` |
+| fnox | Bitwarden-backed secret injection per command via `fnox exec` / `with-secrets.sh` - there is no `.env` or `.envrc`, and entering the repo loads nothing into the shell |
+| Bitwarden + bw-sync.sh | Single secret source of truth; one script syncs it to both Ansible Vault and Kubernetes Secrets and enforces a 180/365-day rotation policy (`--check-rotation`, `--verify-k8s`) |
+| Traefik | In-cluster hostNetwork reverse proxy terminating TLS with Let's Encrypt DNS-01 via Cloudflare; services stay ClusterIP and get routed by IngressRoute CRDs - defined in the `irl-*` charts, or Ansible-templated standalone IngressRoutes for upstream charts |
+| CloudNativePG (CNPG) | One PostgreSQL 16 cluster (`irl-postgres` chart) serving nine app databases - gitea, vault, authentik, grafana, vaultwarden, nextcloud, paperless, firefly, ghostfolio |
+| Valkey | Redis-compatible key-value store as a shared ClusterIP-only cache/queue backend for the stack |
+| Prometheus + Grafana + Loki | kube-prometheus-stack + single-binary Loki via the `irl-monitoring` chart, retention tuned to the box (30d / 15GB Prometheus, 30d Loki) |
+| Tailscale | The transport for everything operational: kubectl and SSH from the laptop, the DO agent's cluster join, and split DNS routing for `*.lab.infiniteroomlabs.cloud` - no VPN server, no port-forwards |
+| CoreDNS (split DNS) | Runs hostNetwork on port 53 serving zones generated from the `irl_services` dict by an Ansible template; Tailscale Split DNS points the tailnet at it so internal domains never leak to public resolvers |
+| Cloudflare Tunnel + Access | The only public ingress: JobOps exposed through cloudflared with Access OTP + Google login for browsers and a 1-year service token (`non_identity` policy) so headless MCP agents pass with CF-Access headers |
+| Cloudflare DNS | Porkbun-registered domains delegated to Terraform-managed Cloudflare zones; a module updates Porkbun nameservers from the zone outputs automatically |
+| ZFS + sanoid | Per-service datasets with quotas and tuned recordsizes; sanoid templates give hourly snapshots to irreplaceable data like game saves ('point-in-time recovery for fat-fingered factories') and minimal retention to redownloadable model blobs |
+| Packer + KVM/libvirt | Versioned Ubuntu 24.04 gold masters built on the laptop and published to the `main/vms` dataset; VMs are declared in host_vars and provisioned by `vms.yml` against a hard RAM-budget assertion |
+| Goss + pytest + Task | Acceptance suite: `task smoke` (17 health checks), `task validate` (full Goss + pytest pipeline), plus repo-hygiene contract tests that run in a GitHub Actions workflow on every PR and push to master |
+| usage | Declarative `#USAGE` arg specs give bootstrap.sh, bw-sync.sh, and run-ansible.sh real flag parsing and `--help` from a shebang, not hand-rolled getopts |
+
+## Topology
+
+```mermaid
+flowchart LR
+    subgraph internet[Internet]
+        pub[Public clients / MCP agents]
+    end
+
+    subgraph cf[Cloudflare]
+        zones[DNS zones - Porkbun-delegated]
+        access[Access - OTP, Google login, 1yr service tokens]
+        tunnel[cloudflared Tunnel]
+    end
+
+    subgraph tailnet[Tailnet - Tailscale]
+        laptop[Laptop - kubectl, SSH, git]
+        splitdns[Split DNS - *.lab.infiniteroomlabs.cloud]
+    end
+
+    subgraph lan[LAN 192.168.2.x]
+        deck[Steam Deck - no Tailscale]
+    end
+
+    subgraph z600[HP Z600 - k3s server, namespace irl]
+        coredns[CoreDNS - hostNetwork :53]
+        traefik[Traefik - hostNetwork, LE DNS-01 via Cloudflare]
+        jobops[JobOps]
+        websvcs[Gitea / Authentik / Vault / Grafana / Homepage / Vaultwarden / Nextcloud / Paperless / Firefly / Ghostfolio / Karakeep]
+        intsvcs[Prometheus / Alertmanager / Garage / OpenViking]
+        games[Satisfactory :30777-30888 / Palworld :30211 udp]
+        cnpg[CNPG PostgreSQL 16 - 9 databases]
+        valkey[Valkey - ClusterIP]
+        zfs[(ZFS RAIDZ1 pool main - sanoid snapshots)]
+    end
+
+    doagent[DO droplet NYC3 - k3s agent]
+
+    pub --> zones --> access --> tunnel --> jobops
+    laptop -.->|Tailscale| splitdns --> coredns
+    laptop -->|HTTPS| traefik
+    laptop -->|git SSH :30022| websvcs
+    traefik --> websvcs
+    traefik --> intsvcs
+    deck -->|LAN NodePorts| games
+    doagent -.->|joins cluster over Tailscale| z600
+    websvcs --> cnpg
+    websvcs --> valkey
+    cnpg --> zfs
+    games --> zfs
+    intsvcs --> zfs
+
+    subgraph secrets[Secrets flow]
+        bw[Bitwarden IRL/ vault]
+        fnox[fnox exec - per-command env]
+        bwsync[bw-sync.sh]
+    end
+    bw --> fnox -->|Terraform / CLI tokens| laptop
+    bw --> bwsync -->|Ansible Vault + k8s Secrets| z600
+```
+
 ## Repository Layout
 
 ```
 terraform/          Terraform + Terragrunt (cloud resources, domains, DNS, compute)
 ansible/            Ansible (homelab server config, Helm deployments, secrets)
 helm-charts/        Helm charts (git submodule -> InfiniteRoomLabs/helm-charts)
-docker/             Custom container image builds (Dockerfiles)
 scripts/            Bootstrap, secrets sync, and shared helpers
 docs/               Architecture plans, access guides, research
 tests/              Acceptance test suite (smoke, validate)
@@ -263,14 +368,6 @@ See `ansible/CLAUDE.md` for full documentation (layout, running, secrets, SSH ac
 | `irl-vaultwarden` | Bitwarden-compatible password manager |
 
 Charts are deployed via Ansible (`ansible/playbooks/helm-deploy.yml`), never manually. Values overrides live in `ansible/helm/{name}/values.yaml`.
-
----
-
-## Docker
-
-Custom container image Dockerfiles live under `docker/`. It currently contains:
-
-- `docker/caddy/` -- Custom Caddy build with the Cloudflare DNS plugin
 
 ---
 
