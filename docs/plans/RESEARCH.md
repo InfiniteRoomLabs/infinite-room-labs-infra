@@ -516,3 +516,17 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - [clig.dev](https://clig.dev/)
 - **Findings**: Four-thread prior-art survey completed 2026-07-23 (showcase repo conventions, CLI doctrine, docs scaffolding, verifiability signals) -- full writeup in the resource doc. No IRL-specific decisions made yet.
 - **Decision**: _Pending -- next step is mapping the survey onto this repo (adopt/skip per convention) and running the public-readiness leak scrub._
+
+### R17: Cloudflare MCP Server config -- origin Authorization header injection
+
+- **Status**: open (resolves during the gunio-mcp rollout, step 7 of the plan doc)
+- **Roadmap link**: Phase 1.5 (gunio-mcp public serving; gates enabling GUNIO_MCP_AUTH_TOKEN and, downstream, MCP writes)
+- **Key questions**:
+  1. Does the Cloudflare Zero Trust MCP Server entry (the portal's per-server config) support injecting a STATIC origin Authorization header (upstream credentials distinct from the portal's own OAuth, which occupies the client-side Authorization header)?
+  2. If yes, is it a bearer-style header we control verbatim (gunio-mcp needs exactly `Authorization: Bearer <token>` for its constant-time static verifier)?
+  3. If no, is there another edge-side injection point (Access header policies, a Worker in front of the tunnel) worth the complexity vs leaving writes disabled?
+- **Resources**:
+  - [Cloudflare MCP server portals docs](https://developers.cloudflare.com/cloudflare-one/access-controls/mcp-servers/)
+  - `docs/plans/2026-08-12-gunio-mcp-cloudflare-serving.md` (step 7 records the outcome)
+- **Findings**: _Pending -- dashboard verification is an operator rollout step; cannot be resolved from documentation alone (the MCP portal feature surface has been shifting through 2026)._
+- **Decision**: _Pending. Until resolved: GUNIO_MCP_AUTH_TOKEN unset, GUNIO_MCP_WRITE_SCOPE unset (writes disabled) -- the app-level token is the prerequisite for ever enabling writes on the public endpoint._
