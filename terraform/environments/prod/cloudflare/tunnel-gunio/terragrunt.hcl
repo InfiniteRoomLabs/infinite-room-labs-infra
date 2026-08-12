@@ -64,11 +64,14 @@ inputs = {
   # Single operator allowed through Access (same as the jobops leaf).
   operator_email = "wes.gilleland@gmail.com"
 
-  # HomeOauth (Google, dashboard-managed IdP) alongside the module's OTP --
-  # same IdP id as the jobops leaf. The module creates a second OTP IdP for
-  # this app (JobOps precedent; Access IdPs are cheap and per-app OTP keeps
-  # the leaves independent).
+  # HomeOauth (Google, dashboard-managed IdP) alongside OTP -- same IdP id as
+  # the jobops leaf.
   extra_idp_ids = ["8edd7e06-6a95-42de-bcdf-7fc9e77f0b3f"]
+
+  # Cloudflare allows exactly ONE onetimepin IdP per account (API 12132
+  # conflict on a second create); the jobops leaf owns it, so this leaf
+  # references it by id instead of creating its own.
+  existing_otp_idp_id = "bbf79c9b-920c-4a77-bb1d-54a7aabeddcc"
 
   # 1 month (Access max), matching the jobops leaf -- the claude.ai
   # connector's OAuth session follows the Access session.

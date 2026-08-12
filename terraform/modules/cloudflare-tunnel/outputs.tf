@@ -29,8 +29,8 @@ output "access_policy_id" {
 }
 
 output "identity_provider_id" {
-  value       = cloudflare_zero_trust_access_identity_provider.otp.id
-  description = "UUID of the one-time PIN identity provider."
+  value       = local.otp_idp_id
+  description = "UUID of the one-time PIN identity provider allowed on the app (module-owned or existing_otp_idp_id)."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

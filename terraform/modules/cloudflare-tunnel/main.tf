@@ -65,11 +65,25 @@ resource "cloudflare_dns_record" "tunnel" {
 
 # ── Access identity provider: one-time PIN ────────────────────────────────────
 # onetimepin needs no OAuth config; the config block is required but stays empty.
+# Only one onetimepin IdP can exist per account: created here only when
+# existing_otp_idp_id is null (see variables.tf).
 resource "cloudflare_zero_trust_access_identity_provider" "otp" {
+  count      = var.existing_otp_idp_id == null ? 1 : 0
   account_id = var.account_id
   name       = var.idp_name
   type       = "onetimepin"
   config     = {}
+}
+
+locals {
+  otp_idp_id = var.existing_otp_idp_id != null ? var.existing_otp_idp_id : cloudflare_zero_trust_access_identity_provider.otp[0].id
+}
+
+# The count above changed the resource address; keep the first instance's
+# (jobops) existing state entry from being destroy/recreated.
+moved {
+  from = cloudflare_zero_trust_access_identity_provider.otp
+  to   = cloudflare_zero_trust_access_identity_provider.otp[0]
 }
 
 # ── Access policy: allow a single operator email ──────────────────────────────
@@ -99,7 +113,7 @@ resource "cloudflare_zero_trust_access_application" "this" {
   domain                    = var.hostname
   type                      = "self_hosted"
   session_duration          = var.session_duration
-  allowed_idps              = concat([cloudflare_zero_trust_access_identity_provider.otp.id], var.extra_idp_ids)
+  allowed_idps              = concat([local.otp_idp_id], var.extra_idp_ids)
   auto_redirect_to_identity = length(var.extra_idp_ids) == 0
 
   policies = [

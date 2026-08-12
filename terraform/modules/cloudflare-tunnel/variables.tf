@@ -86,3 +86,13 @@ variable "extra_idp_ids" {
   description = "Additional Access identity provider IDs allowed on the app besides the module-owned OTP IdP. Non-empty disables auto-redirect (login-method picker shown)."
   default     = []
 }
+
+# Cloudflare allows exactly ONE onetimepin IdP per account (API error 12132
+# conflict on a second create -- surfaced by the provider as the opaque
+# "failed to make http request"). The first module instance creates it; every
+# later instance must reference it instead.
+variable "existing_otp_idp_id" {
+  type        = string
+  description = "ID of the account's existing One-time PIN IdP. When set, the module does not create its own OTP IdP and allows this one on the app instead."
+  default     = null
+}
