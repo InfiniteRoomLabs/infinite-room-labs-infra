@@ -519,7 +519,7 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
 
 ### R17: Cloudflare MCP Server config -- origin Authorization header injection
 
-- **Status**: open (resolves during the gunio-mcp rollout, step 7 of the plan doc)
+- **Status**: RESOLVED 2026-08-12 (gunio-mcp rollout, step 7). **Answer: YES.** The MCP Server dialog's "Custom headers" authentication type sends arbitrary static headers on every upstream request -- explicitly including `Authorization: Bearer` tokens -- alongside multiple rows (we use it for the CF-Access service-token pair). Q2 yes: header name and value are verbatim operator input. Q3 moot. Consequence: `GUNIO_MCP_AUTH_TOKEN` can be enabled any time (Vault `irl/gunio-mcp/app` + a third portal header + rollout restart), which unblocks the separate decision on `GUNIO_MCP_WRITE_SCOPE`.
 - **Roadmap link**: Phase 1.5 (gunio-mcp public serving; gates enabling GUNIO_MCP_AUTH_TOKEN and, downstream, MCP writes)
 - **Key questions**:
   1. Does the Cloudflare Zero Trust MCP Server entry (the portal's per-server config) support injecting a STATIC origin Authorization header (upstream credentials distinct from the portal's own OAuth, which occupies the client-side Authorization header)?

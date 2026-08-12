@@ -1,7 +1,7 @@
 # gunio-mcp behind Cloudflare, secrets via HashiCorp Vault (phase 1.5)
 
 **Date:** 2026-08-12
-**Status:** Branch complete -- awaiting operator rollout (this doc IS the rollout)
+**Status:** DEPLOYED 2026-08-12 -- rollout executed end-to-end (auth_status authenticated:true through the tunnel; smoke suite green; R17 resolved YES)
 **Related:** `docs/runbooks/gunio-mcp.md` (incident response + cookie rotation),
 `docs/plans/2026-07-10-gitops-cloudflare-tunnel-exposure.md` (parked platform plan;
 this deployment reuses its sidecar-per-app JobOps pattern, not the shared connector),
@@ -259,7 +259,12 @@ OAuth). Then:
 
 Record the outcome here (edit this doc) AND close RESEARCH.md item R17.
 
-**Outcome (fill in at rollout):** _pending_
+**Outcome (2026-08-12 rollout):** YES -- the MCP Server entry's "Custom headers"
+authentication type injects arbitrary static headers on every upstream request
+(explicitly including `Authorization: Bearer`); multiple header rows supported.
+We use it for the CF-Access service-token pair (`CF-Access-Client-Id`/`-Secret`).
+Adding `GUNIO_MCP_AUTH_TOKEN` as a third header is therefore available whenever
+we choose to enable it; writes remain a separate, deliberate decision. R17 closed.
 
 ### Step 8: verification
 
