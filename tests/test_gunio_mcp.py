@@ -13,6 +13,7 @@ means the chart has not been installed.
 """
 
 import ipaddress
+import urllib.parse
 
 import dns.exception
 import dns.resolver
@@ -90,9 +91,11 @@ class TestGunioAccessGate:
             f"expected an Access gate (redirect/deny), got {resp.status_code}"
         )
         if resp.status_code in (301, 302, 303, 307, 308):
-            assert "cloudflareaccess.com" in resp.headers.get("Location", ""), (
-                f"redirect target is not the Access login: {resp.headers.get('Location')}"
-            )
+            location = resp.headers.get("Location", "")
+            host = urllib.parse.urlparse(location).hostname or ""
+            assert host == "cloudflareaccess.com" or host.endswith(
+                ".cloudflareaccess.com"
+            ), f"redirect target is not the Access login: {location}"
         assert "jsonrpc" not in resp.text[:2048], "MCP response leaked past Access"
         assert "text/event-stream" not in resp.headers.get("Content-Type", ""), (
             "MCP SSE stream leaked past Access"
