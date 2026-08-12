@@ -16,7 +16,7 @@ variable "tunnel_name" {
 
 variable "hostname" {
   type        = string
-  description = "Public hostname routed through the tunnel to the JobOps app."
+  description = "Public hostname routed through the tunnel to the app."
   default     = "jops.infiniteroomlabs.com"
 }
 
@@ -29,9 +29,9 @@ variable "dns_record_name" {
 variable "app_service" {
   type        = string
   description = <<-EOT
-    Origin the tunnel forwards matched requests to. This deployment has NO in-cluster
-    Service: the cloudflared connector runs as a sidecar in the JobOps pod and reaches
-    the app over pod-localhost, so this is http://localhost:3001.
+    Origin the tunnel forwards matched requests to. These deployments have NO
+    in-cluster Service: the cloudflared connector runs as a sidecar in the app pod
+    and reaches the app over pod-localhost, e.g. http://localhost:3001.
   EOT
   default     = "http://localhost:3001"
 }

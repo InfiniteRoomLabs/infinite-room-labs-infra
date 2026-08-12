@@ -1,9 +1,10 @@
-# Cloudflare Tunnel + Access fronting the self-hosted JobOps deployment.
+# Cloudflare Tunnel + Access fronting a self-hosted deployment (instances:
+# JobOps via the tunnel/ leaf, gunio-mcp via tunnel-gunio/).
 #
-# Topology: cloudflared runs as a sidecar in the JobOps pod (there is NO in-cluster
+# Topology: cloudflared runs as a sidecar in the app pod (there is NO in-cluster
 # Service). The connector dials Cloudflare's edge outbound and forwards requests for
-# var.hostname to the app over pod-localhost:3001. Access sits in front of the
-# hostname and gates it to a single operator email via one-time PIN.
+# var.hostname to the app over pod-localhost (var.app_service). Access sits in front
+# of the hostname and gates it to a single operator email via one-time PIN.
 
 # ── Tunnel ────────────────────────────────────────────────────────────────────
 # config_src = "cloudflare" -> ingress is managed remotely (dashboard/API/Terraform)
@@ -15,7 +16,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "this" {
 }
 
 # ── Tunnel ingress configuration (remotely managed) ───────────────────────────
-# One hostname rule for JobOps, an optional MCP-portal route, then a terminal
+# One hostname rule for the app, an optional MCP-portal route, then a terminal
 # catch-all that 404s anything else. The MCP rule carries the route the
 # Cloudflare MCP Server setup created out-of-band (2026-07): the portal
 # reaches the app's MCP endpoint via mcp_hostname + path ^/mcp. Its DNS CNAME
