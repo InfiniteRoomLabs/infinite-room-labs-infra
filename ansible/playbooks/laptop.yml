@@ -163,6 +163,38 @@
         XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
 
+    # -- gunio-cookie-refresh (weekly gun.io cookie -> Vault, Mon 09:00) -------
+    # Pushes the local browser's live gun.io session cookie into Vault so the
+    # public gunio-mcp deployment keeps a valid session without manual rotation.
+    # Auth is a dedicated WRITE-ONLY Vault AppRole (creds in BW item
+    # vault-gunio-cookie-writer, read live -- nothing committed). Needs the
+    # gunio-mcp repo present for its harvest script; a locked BW is a clean skip.
+    - name: Install the gunio-cookie-refresh wrapper
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/gunio-cookie-refresh.sh"
+        dest: "{{ ansible_user_dir }}/.local/bin/gunio-cookie-refresh"
+        mode: "0755"
+
+    - name: Install the gunio-cookie-refresh user units
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/laptop/{{ item }}"
+        dest: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+        mode: "0644"
+      loop:
+        - gunio-cookie-refresh.service
+        - gunio-cookie-refresh.timer
+
+    - name: Enable and start the gunio-cookie-refresh timer
+      ansible.builtin.systemd_service:
+        name: gunio-cookie-refresh.timer
+        scope: user
+        enabled: true
+        state: started
+        daemon_reload: true
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
+
     # -- alloy (ship the timers' journals to homelab Loki via OTel) -----------
     # Long-running --user daemon (not a timer): reads the journals of the four
     # units above and forwards them to the homelab OTel Collector NodePort

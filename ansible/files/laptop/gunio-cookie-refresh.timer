@@ -1,0 +1,20 @@
+# gunio-cookie-refresh.timer -- push the gun.io cookie into Vault once a week.
+# Monday 09:00 with a 30min jitter. The gun.io session outlives a week, so
+# weekly keeps Vault comfortably fresh; the run is a no-op-shaped re-push (same
+# cookie -> same value, one stateless pod restart) when nothing has changed.
+# Runs only while logged in (no linger -- harvesting needs the user's unlocked
+# browser and Bitwarden anyway); Persistent catches up one missed run on login.
+# Shipped from this infra repo (ansible/files/laptop/), copied into place by playbooks/laptop.yml.
+# Run standalone: systemctl --user enable --now gunio-cookie-refresh.timer
+[Unit]
+Description=Weekly gun.io cookie refresh into Vault (gunio-mcp)
+
+[Timer]
+OnCalendar=Mon *-*-* 09:00:00
+Persistent=true
+RandomizedDelaySec=1800
+AccuracySec=1min
+Unit=gunio-cookie-refresh.service
+
+[Install]
+WantedBy=timers.target

@@ -3,7 +3,8 @@
 // IRL laptop -> homelab log shipping.
 //
 // Reads the journals of the laptop's --user timer services (threadwatch,
-// claudesync, claudesync-indexer, claudesync-embed, knowledge-backup) and forwards them, via the
+// claudesync, claudesync-indexer, claudesync-embed, knowledge-backup,
+// gunio-cookie-refresh) and forwards them, via the
 // loki -> OTLP bridge, to the homelab OpenTelemetry Collector at
 // 100.86.213.22:30418 (OTLP/HTTP). That collector's `logs` pipeline already
 // exports to Loki (otlphttp/loki -> monitoring-loki-gateway), so no homelab
@@ -28,15 +29,15 @@ loki.relabel "keep_timers" {
   rule {
     source_labels = ["__journal__systemd_user_unit", "__journal_user_unit"]
     separator     = ";"
-    regex         = ".*?((?:claudesync-indexer|claudesync-embed|claudesync|threadwatch|knowledge-backup)\\.service).*"
+    regex         = ".*?((?:claudesync-indexer|claudesync-embed|claudesync|threadwatch|knowledge-backup|gunio-cookie-refresh)\\.service).*"
     target_label  = "unit"
     replacement   = "${1}"
   }
 
-  // Keep only lines that resolved to one of our five units; drop everything else.
+  // Keep only lines that resolved to one of our units; drop everything else.
   rule {
     source_labels = ["unit"]
-    regex         = "(?:claudesync-indexer|claudesync-embed|claudesync|threadwatch|knowledge-backup)\\.service"
+    regex         = "(?:claudesync-indexer|claudesync-embed|claudesync|threadwatch|knowledge-backup|gunio-cookie-refresh)\\.service"
     action        = "keep"
   }
 

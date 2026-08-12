@@ -1,0 +1,24 @@
+# gunio-cookie-refresh.service -- weekly gun.io cookie -> Vault push for the
+# public gunio-mcp deployment. Oneshot invoked by gunio-cookie-refresh.timer.
+# Write-only AppRole (creds in Bitwarden item vault-gunio-cookie-writer); a
+# locked Bitwarden is a clean skip. See the wrapper header + docs/runbooks/gunio-mcp.md.
+# Shipped from this infra repo (ansible/files/laptop/), copied into place by playbooks/laptop.yml.
+# Run standalone: systemctl --user start gunio-cookie-refresh.service ; journalctl --user -u gunio-cookie-refresh -e
+[Unit]
+Description=Push the local browser's gun.io session cookie into Vault (gunio-mcp)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/gunio-cookie-refresh
+# Boot-readiness gate: the Persistent catch-up run can fire before Tailscale is
+# up. Block up to 120s for Vault reachability, then proceed (the wrapper skips
+# cleanly if it still cannot reach anything).
+# Reachability only (any HTTP response = up; curl without --fail exits 0 even on
+# a sealed 503). No query string -> no '&' for systemd's parser to choke on.
+ExecStartPre=/usr/bin/bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null --max-time 3 https://vault.lab.infiniteroomlabs.cloud/v1/sys/health && exit 0; sleep 2; done; echo "gunio-cookie-refresh: vault not reachable after 120s, proceeding"; exit 0'
+TimeoutStartSec=600
+NoNewPrivileges=true
+MemoryMax=512M
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gunio-cookie-refresh

@@ -122,6 +122,34 @@ Phase 2 (credential login, `GUNIO_USERNAME`/`GUNIO_PASSWORD` at the same
 Vault path) deletes this whole section -- the server will establish its own
 sessions.
 
+### Automated weekly refresh (the manual steps above, on a timer)
+
+The manual rotation is also run weekly by a laptop `--user` systemd timer
+(`gunio-cookie-refresh.timer`, Mon 09:00), deployed by
+`ansible/playbooks/laptop.yml` from `ansible/files/laptop/gunio-cookie-refresh.*`.
+It does exactly steps 1-3 above unattended: harvest -> Vault write -> force ESO
+sync -> rollout restart. A locked Bitwarden is a clean skip (logged, shipped to
+Loki via Alloy); genuine staleness is still caught by the `auth_status` monitor.
+
+It authenticates NOT with the root token but a dedicated **write-only** AppRole
+(policy `gunio-cookie-writer`: create/update on `irl/data/gunio-mcp/app` only --
+cannot read the cookie back or touch any other path). One-time bootstrap (root
+token, same env setup as above):
+
+```bash
+vault policy write gunio-cookie-writer ansible/templates/configs/vault/gunio-cookie-writer-policy.hcl
+vault write auth/approle/role/gunio-cookie-writer \
+  token_policies=gunio-cookie-writer token_ttl=5m token_max_ttl=15m \
+  secret_id_ttl=0 secret_id_num_uses=0
+vault read -field=role_id auth/approle/role/gunio-cookie-writer/role-id   # -> BW username
+vault write -f -field=secret_id auth/approle/role/gunio-cookie-writer/secret-id  # -> BW password
+```
+
+Store both in the Bitwarden Login item `vault-gunio-cookie-writer`
+(username=role-id, password=secret-id, notes `{"rotation_days": 180}`). The
+timer reads them live with `bw get`; nothing is committed. Rotate the secret-id
+by re-running the last command and updating the BW item.
+
 ## Sealed-Vault Caveat
 
 Vault re-seals on k3s restart (see `docs/runbooks/vault-sealed.md`). A sealed
