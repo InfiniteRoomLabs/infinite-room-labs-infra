@@ -474,9 +474,17 @@ run_verify_k8s() {
       k8s_key="${pair%%=*}"
       bw_field="${pair#*=}"
 
-      # Get value from BW (pipe to checksum immediately -- never stored in var)
-      local bw_checksum
+      # Get value from BW (pipe to checksum immediately -- never stored in var).
+      # An empty field is a Bitwarden item-shape problem, not a k8s drift --
+      # report it as such instead of a misleading MISMATCH.
+      local bw_checksum empty_checksum
       bw_checksum=$(get_item_field "$item_name" "$bw_field" | compute_checksum)
+      empty_checksum=$(printf '' | compute_checksum)
+      if [[ "$bw_checksum" == "$empty_checksum" ]]; then
+        log_err "  [error]   $item_name -> $namespace/$k8s_secret/$k8s_key (no '$bw_field' field found in Bitwarden item)"
+        ((mismatches++)) || true
+        continue
+      fi
 
       # Get value from K8s (base64 decode, then checksum)
       local k8s_checksum
@@ -699,7 +707,7 @@ run_sync_k8s() {
       # One entry can contribute several keys (k8s_keys map) or one (k8s_key).
       # The item checksum covers ALL of its key values, so a change to any
       # field triggers a re-apply.
-      local pair k f value combined="" entry_error=false
+      local pair k f value combined="" raw_single="" entry_error=false
       local entry_literals=()
       while IFS= read -r pair; do
         [[ -z "$pair" ]] && continue
@@ -717,6 +725,7 @@ run_sync_k8s() {
 
         entry_literals+=("--from-literal=${k}=${value}")
         combined+="${k}=${value}"$'\n'
+        raw_single="$value"
         unset value
       done < <(entry_k8s_pairs "$i")
 
@@ -725,10 +734,18 @@ run_sync_k8s() {
         continue
       fi
 
-      # Detect change via checksum
+      # Detect change via checksum. Single-key entries keep the pre-k8s_keys
+      # checksum input (the raw value) so existing stored checksums stay valid
+      # across the upgrade; only multi-key entries (new shape, no stored
+      # checksums predating it) use the key=value line format.
       local new_checksum
-      new_checksum=$(printf '%s' "$combined" | compute_checksum)
+      if [[ ${#entry_literals[@]} -eq 1 ]]; then
+        new_checksum=$(printf '%s' "$raw_single" | compute_checksum)
+      else
+        new_checksum=$(printf '%s' "$combined" | compute_checksum)
+      fi
       combined=""
+      raw_single=""
       local old_checksum
       old_checksum=$(get_stored_checksum "$item_name" "k8s")
       [[ "$new_checksum" != "$old_checksum" ]] && secret_changed=true

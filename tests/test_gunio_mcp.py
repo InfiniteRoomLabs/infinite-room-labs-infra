@@ -14,6 +14,7 @@ means the chart has not been installed.
 
 import ipaddress
 
+import dns.exception
 import dns.resolver
 import pytest
 import requests
@@ -44,6 +45,10 @@ def _public_ips():
     try:
         return [r.address for r in resolver.resolve(GUNIO_HOSTNAME, "A")]
     except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return None
+    except (dns.resolver.NoNameservers, dns.exception.Timeout):
+        # Egress-restricted/offline runner: public resolvers unreachable.
+        # Treat like pre-rollout so the suite skips instead of erroring.
         return None
 
 

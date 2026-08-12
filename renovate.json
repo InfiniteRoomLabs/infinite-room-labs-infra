@@ -165,6 +165,17 @@
         "helm"
       ],
       "matchDepNames": [
+        "external-secrets"
+      ],
+      "registryUrls": [
+        "https://charts.external-secrets.io"
+      ]
+    },
+    {
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
         "cloudnative-pg"
       ],
       "registryUrls": [

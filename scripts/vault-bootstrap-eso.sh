@@ -55,9 +55,15 @@ fi
 
 [[ -f "$POLICY_FILE" ]] || { echo "Error: policy file not found: $POLICY_FILE" >&2; exit 1; }
 
-sealed=$(vault status -format=json 2>/dev/null | jq -r '.sealed' || echo "unreachable")
-if [[ "$sealed" != "false" ]]; then
-  echo "Error: Vault at VAULT_ADDR is sealed or unreachable (sealed=$sealed)." >&2
+# vault status exits 2 when sealed but still emits valid JSON -- capture output
+# and reachability separately so the error names the actual problem.
+status_json=$(vault status -format=json 2>/dev/null) || true
+if [[ -z "$status_json" ]]; then
+  echo "Error: Vault at VAULT_ADDR is unreachable. Check the port-forward / address." >&2
+  exit 1
+fi
+if [[ "$(jq -r '.sealed' <<<"$status_json")" != "false" ]]; then
+  echo "Error: Vault at VAULT_ADDR is sealed." >&2
   echo "Unseal first: kubectl exec -n irl vault-0 -- vault operator unseal (3x)." >&2
   exit 1
 fi
@@ -71,7 +77,16 @@ if vault secrets list -format=json | jq -e --arg m "$MOUNT/" 'has($m)' >/dev/nul
     echo "Error: mount $MOUNT/ exists but is type '$mount_type', not kv. Refusing to touch it." >&2
     exit 1
   fi
-  echo "[ok]       KV mount $MOUNT/ already enabled"
+  # The policy grants irl/{data,metadata}/* and the ClusterSecretStore is
+  # version: v2 -- a KV v1 mount at this path would "succeed" here and 403
+  # every ExternalSecret read later.
+  mount_version=$(vault secrets list -format=json | jq -r --arg m "$MOUNT/" '.[$m].options.version // "1"')
+  if [[ "$mount_version" != "2" ]]; then
+    echo "Error: mount $MOUNT/ is KV v$mount_version, not v2. Refusing to proceed." >&2
+    echo "Migrate it (vault kv enable-versioning) or move to a fresh path." >&2
+    exit 1
+  fi
+  echo "[ok]       KV v2 mount $MOUNT/ already enabled"
 else
   vault secrets enable -path="$MOUNT" -version=2 kv >/dev/null
   echo "[created]  KV v2 mount $MOUNT/"
@@ -98,14 +113,22 @@ fi
 # because the secret-id is delivered through the Bitwarden lane and rotated on
 # the 180-day infra policy, not by Vault expiry (an expired secret-id would
 # silently break every refresh).
+#
+# token_policies is a MERGE, not an overwrite: later workloads attach their own
+# eso-<name> policies to this shared role, and a re-run of this script must not
+# silently revoke them.
+existing_policies=$(vault read -format=json "auth/approle/role/$ROLE_NAME" 2>/dev/null \
+  | jq -r '.data.token_policies | join(",")' 2>/dev/null || true)
+merged_policies=$(printf '%s,%s' "$existing_policies" "$POLICY_NAME" \
+  | tr ',' '\n' | grep -v '^$' | sort -u | paste -sd, -)
 vault write "auth/approle/role/$ROLE_NAME" \
-  token_policies="$POLICY_NAME" \
+  token_policies="$merged_policies" \
   token_ttl=20m \
   token_max_ttl=1h \
   token_num_uses=0 \
   secret_id_ttl=0 \
   secret_id_num_uses=0 >/dev/null
-echo "[applied]  approle role $ROLE_NAME (policies: $POLICY_NAME)"
+echo "[applied]  approle role $ROLE_NAME (policies: $merged_policies)"
 
 ROLE_ID=$(vault read -field=role_id "auth/approle/role/$ROLE_NAME/role-id")
 

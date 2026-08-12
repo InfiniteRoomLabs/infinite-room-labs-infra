@@ -124,7 +124,7 @@ flowchart LR
     end
     bw --> fnox -->|Terraform / CLI tokens| laptop
     bw --> bwsync -->|Ansible Vault + k8s Secrets| z600
-    bw --> bwsync -->|bootstrap: vault-eso-approle| eso
+    bwsync -->|bootstrap: vault-eso-approle| eso
     hvault --> eso -->|workload k8s Secrets| gunio
 ```
 
