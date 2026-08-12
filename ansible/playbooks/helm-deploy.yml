@@ -39,6 +39,7 @@
       loop:
         - ""
         - vault
+        - external-secrets
         - ollama
         - coredns
         - homepage
@@ -64,6 +65,7 @@
       loop:
         - { name: irl, url: "https://infiniteroomlabs.github.io/helm-charts/" }
         - { name: hashicorp, url: "https://helm.releases.hashicorp.com" }
+        - { name: external-secrets, url: "https://charts.external-secrets.io" }
         - { name: cnpg, url: "https://cloudnative-pg.github.io/charts" }
         - { name: goauthentik, url: "https://charts.goauthentik.io" }
 
@@ -422,6 +424,86 @@
 
           See docs/runbooks/vault-sealed.md for the full procedure.
       tags: [phase2, vault]
+
+    # ------------------------------------------------------------------
+    # Phase 2 (cont.): External Secrets Operator (Vault -> k8s Secrets)
+    #
+    # ESO syncs workload secrets out of Vault (first consumer: gunio-mcp).
+    # Its own Vault credential (AppRole role-id + secret-id) is the ONE
+    # bootstrap secret still delivered by the Bitwarden lane: k8s Secret
+    # external-secrets/vault-eso-approle. Ordering: this deploy CREATES the
+    # external-secrets namespace, so `mise run secrets:sync` can only land
+    # that Secret afterwards -- the ClusterSecretStore below tolerates it
+    # (NotReady until the Secret exists, then ESO retries). Vault-side setup
+    # (irl/ KV mount, eso-gunio-mcp policy, approle role) is operator-run:
+    # scripts/vault-bootstrap-eso.sh.
+    # ------------------------------------------------------------------
+
+    - name: "Phase 2: Upload External Secrets Operator values file"
+      ansible.builtin.copy:
+        src: ../helm/external-secrets/values.yaml
+        dest: "{{ helm_values_path }}/external-secrets/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase2, external-secrets]
+
+    - name: "Phase 2: Deploy External Secrets Operator"
+      kubernetes.core.helm:
+        name: external-secrets
+        chart_ref: external-secrets/external-secrets
+        chart_version: "2.8.0"
+        release_namespace: external-secrets
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/external-secrets/values.yaml"
+        wait: true
+        timeout: "5m0s"
+      tags: [phase2, external-secrets]
+
+    # The ClusterSecretStore is a raw CRD object (k8s-secrets.yml pattern:
+    # inline kubernetes.core.k8s definition). CRD ORDERING: even with
+    # wait: true above, the ClusterSecretStore CRD + ESO webhook can lag the
+    # release by a few seconds on first install, so this apply retries until
+    # the API accepts it. Charts consuming the store (irl-gunio-mcp's
+    # ExternalSecrets) must be installed AFTER this task has succeeded.
+    #
+    # Vault address: the in-cluster Vault release (`vault`, ClusterIP :8200,
+    # namespace {{ k3s_namespace }}) -- same target the mcp-servers playbook
+    # uses. Auth is AppRole (NOT Kubernetes auth): both role-id and secret-id
+    # come from the bw-synced vault-eso-approle Secret.
+    - name: "Phase 2: Apply ClusterSecretStore vault-irl"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: external-secrets.io/v1
+          kind: ClusterSecretStore
+          metadata:
+            name: vault-irl
+          spec:
+            provider:
+              vault:
+                server: "http://vault.{{ k3s_namespace }}.svc.cluster.local:8200"
+                # KV v2 mount; ExternalSecret remoteRef keys are relative to it.
+                path: "irl"
+                version: "v2"
+                auth:
+                  appRole:
+                    path: "approle"
+                    roleRef:
+                      name: vault-eso-approle
+                      namespace: external-secrets
+                      key: role-id
+                    secretRef:
+                      name: vault-eso-approle
+                      namespace: external-secrets
+                      key: secret-id
+      register: eso_store_apply
+      retries: 10
+      delay: 15
+      until: eso_store_apply is not failed
+      tags: [phase2, external-secrets]
 
     # ══════════════════════════════════════════════════════════════
     # Phase 2.5: Traefik Reverse Proxy (in-cluster, hostNetwork)

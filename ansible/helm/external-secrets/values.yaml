@@ -1,0 +1,45 @@
+# helm/external-secrets/values.yaml
+# ==================================
+# External Secrets Operator (ESO) chart values for the IRL homelab.
+# Chart: external-secrets/external-secrets (pinned in helm-deploy.yml)
+# Docs: https://external-secrets.io/
+#
+# Role: sync workload secrets from the in-cluster HashiCorp Vault (release
+# `vault`, namespace irl) into Kubernetes Secrets, via AppRole auth against
+# ClusterSecretStore `vault-irl` (applied by helm-deploy.yml right after this
+# release). First consumer: gunio-mcp. Bitwarden -> bw-sync delivers exactly
+# ONE secret for this stack: external-secrets/vault-eso-approle (the AppRole
+# credential ESO logs in with).
+#
+# Values are deliberately minimal: pinned chart defaults + resource bounds.
+# CRDs install with the chart (installCRDs default true). The chart runs three
+# small controllers: core, webhook, cert-controller.
+
+# Single-replica everything -- single-node-ish homelab, leader election is
+# pointless overhead here but harmless at the default.
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "25m"
+  limits:
+    memory: "256Mi"
+    cpu: "250m"
+
+webhook:
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "10m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+certController:
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "10m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
