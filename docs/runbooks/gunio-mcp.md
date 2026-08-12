@@ -71,11 +71,32 @@ policy last.
 
 The gun.io session cookie expires or gets logged out; when it does the MCP
 `auth_status` tool reports `authenticated:false` (this is the observable --
-no raw errors). Rotation is host-side harvest -> Vault -> ESO -> rollout:
+no raw errors). Rotation is host-side harvest -> Vault -> ESO -> rollout.
+
+Preconditions on the operator laptop:
+
+- Firefox (or any local browser) has a live gun.io login. The harvest script
+  (`scripts/lib/harvest-cookie.sh` in the gunio-mcp repo) reads the browser
+  cookie store via a SHA256-pinned rookie-cli and prints
+  `sessionid=...; csrftoken=...` to stdout only -- no manual sqlite spelunking,
+  no cookie value in argv or shell history.
+- Bitwarden unlocked (`bw status` -> unlocked; else `scripts/bw-unlock-prompt.sh`).
+- Vault unsealed (`kubectl exec -n irl vault-0 -- vault status`); if sealed,
+  see `docs/runbooks/vault-sealed.md` -- unseal keys live in the BW item
+  `Vault Unseal Keys + Root Token` (folder `IRL/Services/Vault`).
+- PATH gotcha: `~/.local/bin/vault` is claude-code-tools' dotenv tool, which
+  shadows the HashiCorp CLI (mise, `aqua:hashicorp/vault`). Prepend the mise
+  shims dir as below or every `vault` call hits the wrong binary.
 
 ```bash
+# 0. Env: real vault CLI, port-forward, root token from BW (never echoed):
+export PATH="$HOME/.local/share/mise/shims:$PATH" VAULT_ADDR=http://127.0.0.1:8200
+kubectl -n irl port-forward svc/vault 8200:8200 &   # NodePort 30200 is not exposed
+export VAULT_TOKEN=$(bw get notes "Vault Unseal Keys + Root Token" | sed -n 's/^Root Token:[[:space:]]*//p')
+
 # 1. Re-harvest on the machine whose browser is logged in to gun.io:
-~/projects/gunio-mcp/scripts/lib/harvest-cookie.sh | vault kv put irl/gunio-mcp/app GUNIO_COOKIE=-
+~/projects/infinite-room-labs/gunio-mcp/scripts/lib/harvest-cookie.sh | vault kv put irl/gunio-mcp/app GUNIO_COOKIE=-
+# Success check: the command prints the new KV version metadata (no values).
 
 # 2. Wait for the ESO refresh (interval 1h) or force it now:
 kubectl -n gunio annotate externalsecret gunio-mcp-secrets force-sync="$(date +%s)" --overwrite
@@ -86,7 +107,16 @@ kubectl -n gunio rollout status deploy/irl-gunio-mcp
 
 # 4. Verify through the MCP endpoint (service-token headers) or a client:
 #    auth_status -> {"mode":"cookie","authenticated":true,...}
+
+# 5. Hygiene: kill the port-forward and drop the token from the shell:
+kill %1; unset VAULT_TOKEN
 ```
+
+Failure modes: harvest exits 1 -> no logged-in browser session found (log in
+to gun.io in Firefox and re-run); `vault kv put` 403s -> wrong/expired token
+or sealed Vault; pod restarts but `auth_status` still false -> ESO hasn't
+refreshed the Secret yet (re-run step 2, check
+`kubectl -n gunio get externalsecret`).
 
 Phase 2 (credential login, `GUNIO_USERNAME`/`GUNIO_PASSWORD` at the same
 Vault path) deletes this whole section -- the server will establish its own
