@@ -3,7 +3,7 @@
 Last updated: 2026-08-12
 
 Covers the gunio-mcp deployment: chart/release `irl-gunio-mcp`, namespace
-`gunio`, public hostname `gunio.mcp.infiniteroomlabs.com` (MCP endpoint at
+`gunio`, public hostname `gunio-mcp.infiniteroomlabs.com` (MCP endpoint at
 `/mcp`). The app binds pod-loopback `127.0.0.1:8000`; a cloudflared sidecar is
 the only path in. There is **no in-cluster Service** and no persistence --
 the workload is stateless. Secrets come from HashiCorp Vault via External
@@ -34,7 +34,7 @@ Run in order; 1-2 take under a minute.
 
 1. **Access Deny (cut the public path).** Zero Trust -> Access ->
    Applications -> `gunio MCP` -> Policies -> flip to explicit Deny.
-   Confirm: `curl -sS -o /dev/null -w '%{http_code}\n' https://gunio.mcp.infiniteroomlabs.com/mcp` -> 403.
+   Confirm: `curl -sS -o /dev/null -w '%{http_code}\n' https://gunio-mcp.infiniteroomlabs.com/mcp` -> 403.
 2. **Deny-all egress NetworkPolicy** (stops any in-flight exfil):
 
    ```bash

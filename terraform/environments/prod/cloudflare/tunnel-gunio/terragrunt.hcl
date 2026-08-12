@@ -1,28 +1,9 @@
 # Cloudflare Tunnel + Access for gunio-mcp (the unofficial gun.io MCP server),
-# public at https://gunio.mcp.infiniteroomlabs.com/mcp. Mirrors the jobops
-# tunnel/ leaf; same module, second instance. `*.mcp.infiniteroomlabs.com` is
-# the namespace for future exposed MCP servers.
-#
-# CERTIFICATE COVERAGE (dashboard/billing prerequisite -- BLOCKER):
-# Cloudflare Universal SSL covers only the apex and first-level
-# *.infiniteroomlabs.com. gunio.mcp. is a SECOND-level label, so TLS on this
-# hostname fails (525/SSL mismatch) until Advanced Certificate Manager (ACM,
-# recommended: one wildcard *.mcp.infiniteroomlabs.com covers all future MCP
-# hosts) or Total TLS (per-hostname certs) is enabled on the zone. See the
-# Cloudflare section of docs/plans/2026-08-12-gunio-mcp-cloudflare-serving.md.
-#
-# Once the ACM entitlement exists on the zone, the pack can be codified like
-# this (kept commented out: applying it WITHOUT the entitlement fails):
-#
-#   # In the cloudflare-tunnel module (or a sibling cert module):
-#   # resource "cloudflare_certificate_pack" "mcp_wildcard" {
-#   #   zone_id               = var.zone_id
-#   #   type                  = "advanced"
-#   #   hosts                 = ["infiniteroomlabs.com", "*.mcp.infiniteroomlabs.com"]
-#   #   validation_method     = "txt"
-#   #   validity_days         = 90
-#   #   certificate_authority = "lets_encrypt"
-#   # }
+# public at https://gunio-mcp.infiniteroomlabs.com/mcp. Mirrors the jobops
+# tunnel/ leaf; same module, second instance. `{name}-mcp.infiniteroomlabs.com`
+# is the naming convention for future exposed MCP servers (JobOps' jops-mcp.
+# already follows it): FIRST-level labels ride the free Universal SSL cert --
+# a `*.mcp.` hierarchy would need paid ACM/Total TLS for edge TLS.
 
 include "root" {
   path   = find_in_parent_folders("root.hcl")
@@ -67,8 +48,8 @@ inputs = {
   zone_id    = dependency.prod_zones.outputs.zone_ids["infiniteroomlabs.com"]
 
   tunnel_name     = "irl-gunio"
-  hostname        = "gunio.mcp.infiniteroomlabs.com"
-  dns_record_name = "gunio.mcp"
+  hostname        = "gunio-mcp.infiniteroomlabs.com"
+  dns_record_name = "gunio-mcp"
   app_name        = "gunio MCP"
 
   # cloudflared sidecar reaches gunio-mcp (--serve, bound to 127.0.0.1:8000)
@@ -77,7 +58,7 @@ inputs = {
 
   # No separate MCP-portal hostname: unlike JobOps (app on the main hostname,
   # MCP portal on a second one), this hostname IS the MCP endpoint. The
-  # dashboard MCP Server entry points at https://gunio.mcp.infiniteroomlabs.com/mcp.
+  # dashboard MCP Server entry points at https://gunio-mcp.infiniteroomlabs.com/mcp.
   mcp_hostname = null
 
   # Single operator allowed through Access (same as the jobops leaf).

@@ -1,7 +1,7 @@
 """gunio-mcp exposure tests: public DNS, Access gating, and cluster state.
 
 Covers the Cloudflare-fronted gunio-mcp deployment (chart/release
-`irl-gunio-mcp`, namespace `gunio`, hostname gunio.mcp.infiniteroomlabs.com).
+`irl-gunio-mcp`, namespace `gunio`, hostname gunio-mcp.infiniteroomlabs.com).
 Unlike the other suites this targets PUBLIC infrastructure: DNS resolves via a
 public resolver (the record is a proxied Cloudflare CNAME, not CoreDNS), and
 the hostname must always answer with an Access gate, never an MCP response.
@@ -19,7 +19,7 @@ import pytest
 import requests
 from kubernetes import client, config
 
-GUNIO_HOSTNAME = "gunio.mcp.infiniteroomlabs.com"
+GUNIO_HOSTNAME = "gunio-mcp.infiniteroomlabs.com"
 GUNIO_NAMESPACE = "gunio"
 GUNIO_DEPLOYMENT = "irl-gunio-mcp"
 GUNIO_ESO_SECRETS = ["gunio-mcp-secrets", "gunio-cloudflared-token"]

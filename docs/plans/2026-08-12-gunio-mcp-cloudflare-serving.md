@@ -10,11 +10,13 @@ RESEARCH.md R17 (portal origin-Authorization question)
 ## Objective
 
 Serve the gunio-mcp server (`ghcr.io/infiniteroomlabs/gunio-mcp`, `--serve`
-streamable HTTP) publicly at `https://gunio.mcp.infiniteroomlabs.com/mcp`,
+streamable HTTP) publicly at `https://gunio-mcp.infiniteroomlabs.com/mcp`,
 fronted by a Cloudflare tunnel + Access exactly like JobOps (cloudflared
 sidecar, no in-cluster Service, OTP + Google IdP + non_identity service-token
-policy). `*.mcp.infiniteroomlabs.com` becomes the namespace for future exposed
-MCP servers.
+policy). `{name}-mcp.infiniteroomlabs.com` is the naming convention for future
+exposed MCP servers (JobOps' `jops-mcp.` already follows it) -- first-level
+labels are covered by the zone's free Universal SSL cert, where a `*.mcp.`
+hierarchy would have required paid ACM/Total TLS.
 
 This is also the FIRST RUN of the Vault + ESO secrets pattern: workload
 secrets come from the homelab HashiCorp Vault via External Secrets Operator
@@ -44,7 +46,9 @@ Vault under `irl/gunio-mcp/...`.
 4. **`GUNIO_MCP_WRITE_SCOPE` stays UNSET** -- writes stay disabled until
    decision 3 resolves in favor of an app-level token (without it, anything
    that passes Access could invoke gated writes with `confirm=true`).
-5. Hostname `gunio.mcp.infiniteroomlabs.com`; JobOps hostnames do not move.
+5. Hostname `gunio-mcp.infiniteroomlabs.com` (first-level label, rides
+   Universal SSL -- an earlier `gunio.mcp.` two-level draft was dropped because
+   it required paid ACM); JobOps hostnames do not move.
 6. Namespace `gunio`; chart/release `irl-gunio-mcp`; tunnel `irl-gunio`; ESO
    in namespace `external-secrets`.
 7. Cookie auth (`GUNIO_COOKIE`) this phase. Phase 2 (credential login) only
@@ -109,32 +113,19 @@ docker buildx imagetools inspect cloudflare/cloudflared:latest --format '{{print
 #    submodule pointer here.
 ```
 
-### Step B (prereq, BLOCKER): certificate coverage for `*.mcp.infiniteroomlabs.com`
+### Step B: certificate coverage -- RESOLVED BY NAMING, no action
 
-Cloudflare Universal SSL covers only the apex and FIRST-level
-`*.infiniteroomlabs.com`. `gunio.mcp.` is a second-level label: nothing
-serves TLS on the hostname (browsers see an SSL mismatch / 525-class failure)
-until one of these is enabled on the `infiniteroomlabs.com` zone. Do this
-BEFORE the terraform apply so the DNS record never serves a broken cert.
+`gunio-mcp.infiniteroomlabs.com` is a first-level label, covered by the
+zone's free Universal SSL wildcard (`*.infiniteroomlabs.com`). No ACM, no
+Total TLS, no billing prerequisite. (An earlier draft used the two-level
+`gunio.mcp.` and needed paid ACM for edge TLS -- dropped 2026-08-12; future
+MCP servers use `{name}-mcp.` first-level names for the same reason.)
 
-- **Option 1 (recommended): Advanced Certificate Manager.** Dashboard:
-  `infiniteroomlabs.com` zone -> SSL/TLS -> Edge Certificates -> Advanced
-  Certificate Manager (paid add-on) -> order an advanced certificate with
-  hosts `infiniteroomlabs.com, *.mcp.infiniteroomlabs.com`. One wildcard
-  covers every future MCP hostname -- the reason this option wins, since more
-  MCP servers are planned under `*.mcp.`.
-- **Option 2 (alternative): Total TLS.** SSL/TLS -> Edge Certificates ->
-  Total TLS (requires ACM entitlement too on most plans): issues per-hostname
-  certs automatically for every proxied hostname. Fine for one host, noisier
-  at N hosts.
-
-Once the entitlement exists, the ACM pack can be codified later -- a
-commented `cloudflare_certificate_pack` snippet sits in the tunnel-gunio leaf
-as the template. Verify before proceeding:
+Optional post-DNS sanity check (after step 4):
 
 ```bash
-# After DNS exists (step 4) this must show a cert whose SAN covers gunio.mcp.:
-openssl s_client -connect gunio.mcp.infiniteroomlabs.com:443 -servername gunio.mcp.infiniteroomlabs.com </dev/null 2>/dev/null | openssl x509 -noout -text | grep -A1 "Subject Alternative Name"
+openssl s_client -connect gunio-mcp.infiniteroomlabs.com:443 -servername gunio-mcp.infiniteroomlabs.com </dev/null 2>/dev/null | openssl x509 -noout -text | grep -A1 "Subject Alternative Name"
+# Expect a SAN of *.infiniteroomlabs.com
 ```
 
 ### Step 1: Vault bootstrap (mount, policy, AppRole, Bitwarden item)
@@ -243,7 +234,7 @@ JobOps precedent: portal + MCP server apps are dashboard-managed (their
 session duration is set via API PUT -- Access apps reject PATCH with 10405).
 
 1. Zero Trust -> Access -> (AI controls) MCP servers -> Add MCP server:
-   URL `https://gunio.mcp.infiniteroomlabs.com/mcp`, name `gunio MCP`.
+   URL `https://gunio-mcp.infiniteroomlabs.com/mcp`, name `gunio MCP`.
 2. Attach it to the existing IRL MCP portal alongside JobOps.
 3. Set its Access app session duration to `730h` (API PUT, same as the
    2026-08-07 JobOps change) so the claude.ai connector is not re-authing daily.
@@ -274,13 +265,13 @@ Record the outcome here (edit this doc) AND close RESEARCH.md item R17.
 
 ```bash
 # 1. Unauthenticated request is Access-gated (302 to cloudflareaccess.com login or 403):
-curl -sS -o /dev/null -D - https://gunio.mcp.infiniteroomlabs.com/mcp | head -5
+curl -sS -o /dev/null -D - https://gunio-mcp.infiniteroomlabs.com/mcp | head -5
 
 # 2. Service-token request gets an MCP protocol response (initialize round-trip):
 cd terraform/environments/prod/cloudflare/tunnel-gunio
 CF_ID=$(../../../../../scripts/with-secrets.sh terragrunt output -raw mcp_service_token_client_id)
 CF_SECRET=$(../../../../../scripts/with-secrets.sh terragrunt output -raw mcp_service_token_client_secret)
-curl -sS https://gunio.mcp.infiniteroomlabs.com/mcp \
+curl -sS https://gunio-mcp.infiniteroomlabs.com/mcp \
   -H "CF-Access-Client-Id: $CF_ID" -H "CF-Access-Client-Secret: $CF_SECRET" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"rollout-check","version":"0"}}}'
@@ -316,8 +307,6 @@ cd tests && uv run pytest test_gunio_mcp.py -v
   is Ready.
 - **bw-sync vs external-secrets namespace**: bw-sync `kubectl apply` cannot
   create namespaces; the ESO helm release creates it. Sync AFTER the deploy.
-- **Cert coverage vs DNS record**: enable ACM/Total TLS before the terraform
-  apply, or the hostname serves a mismatched cert in the gap.
 - **Digest placeholders**: the chart renders with `REPLACE_WITH_DIGEST` on
   purpose (JobOps precedent, CI renders fine) but the pod cannot pull until
   step A's values commit replaces them.
