@@ -47,7 +47,16 @@ HOMEPAGE_GAPS = {
 }
 
 # ansible/helm/ dirs that are infrastructure, not registry services.
-INFRA_HELM_DIRS = {"coredns", "loki", "monitoring", "ollama", "postgres", "redis", "traefik"}
+INFRA_HELM_DIRS = {
+    "coredns",
+    "external-secrets",
+    "loki",
+    "monitoring",
+    "ollama",
+    "postgres",
+    "redis",
+    "traefik",
+}
 # jenkins: paused service (commented out in the registry pending plugin fix)
 PAUSED_HELM_DIRS = {"jenkins"}
 

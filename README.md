@@ -89,6 +89,7 @@ flowchart LR
         coredns[CoreDNS - hostNetwork :53]
         traefik[Traefik - hostNetwork, LE DNS-01 via Cloudflare]
         jobops[JobOps]
+        gunio[gunio-mcp - namespace gunio]
         websvcs[Gitea / Authentik / Vault / Grafana / Homepage / Vaultwarden / Nextcloud / Paperless / Firefly / Ghostfolio / Karakeep]
         intsvcs[Prometheus / Alertmanager / Garage / OpenViking]
         games[Satisfactory :30777-30888 / Palworld :30211 udp]
@@ -100,6 +101,7 @@ flowchart LR
     doagent[DO droplet NYC3 - k3s agent]
 
     pub --> zones --> access --> tunnel --> jobops
+    tunnel --> gunio
     laptop -.->|Tailscale| splitdns --> coredns
     laptop -->|HTTPS| traefik
     laptop -->|git SSH :30022| websvcs
@@ -117,10 +119,23 @@ flowchart LR
         bw[Bitwarden IRL/ vault]
         fnox[fnox exec - per-command env]
         bwsync[bw-sync.sh]
+        hvault[HashiCorp Vault - irl/ KV]
+        eso[External Secrets Operator]
     end
     bw --> fnox -->|Terraform / CLI tokens| laptop
     bw --> bwsync -->|Ansible Vault + k8s Secrets| z600
+    bwsync -->|bootstrap: vault-eso-approle| eso
+    hvault --> eso -->|workload k8s Secrets| gunio
 ```
+
+**Secrets: Vault + ESO (new pattern).** gunio-mcp is the first workload whose
+secrets come from HashiCorp Vault via External Secrets Operator instead of the
+Bitwarden -> bw-sync lane. The layering: Bitwarden stays the root of trust and
+delivers exactly one bootstrap credential (ESO's AppRole login,
+`vault-eso-approle`); everything workload-shaped lives in Vault under
+`irl/<workload>/...` and syncs into namespaced Secrets through
+`ClusterSecretStore/vault-irl`. Full design + rollout:
+[docs/plans/2026-08-12-gunio-mcp-cloudflare-serving.md](docs/plans/2026-08-12-gunio-mcp-cloudflare-serving.md).
 
 ## Repository Layout
 

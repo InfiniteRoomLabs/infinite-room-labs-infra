@@ -35,6 +35,9 @@ import rego.v1
 
 baseline := {
 	# ROFS-BASELINE-BEGIN
+	# irl-gunio-mcp (release: irl-gunio-mcp)
+	"Deployment/irl-gunio-mcp/gunio-mcp",
+	"Deployment/irl-gunio-mcp/cloudflared",
 	# irl-jobops (release: jobops)
 	"Deployment/jobops-irl-jobops/job-ops",
 	"Deployment/jobops-irl-jobops/cloudflared",
