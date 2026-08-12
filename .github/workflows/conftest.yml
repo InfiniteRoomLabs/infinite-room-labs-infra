@@ -143,6 +143,9 @@ jobs:
           }
           render garage       irl-garage       ""
           render gitea        irl-gitea        gitea
+          # gunio-mcp is not ansible-deployed (operator helm install, release
+          # irl-gunio-mcp in namespace gunio); no ansible/helm values overlay.
+          render irl-gunio-mcp irl-gunio-mcp   ""
           render jobops       irl-jobops       ""
           render monitoring   irl-monitoring   monitoring
           render openviking   irl-openviking   ""
