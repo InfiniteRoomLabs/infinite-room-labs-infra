@@ -26,7 +26,9 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/bw-sync-config.yaml"
+# BW_SYNC_CONFIG override exists for the hygiene test harness only -- normal
+# runs always use the checked-in mapping next to this script.
+CONFIG_FILE="${BW_SYNC_CONFIG:-$SCRIPT_DIR/bw-sync-config.yaml}"
 # shellcheck source=includes/bw-session.sh
 source "$SCRIPT_DIR/includes/bw-session.sh"
 STATE_DIR="$HOME/.local/share/irl"
@@ -231,6 +233,45 @@ get_item_password() {
     "$BW_ITEMS_FILE" | head -1
 }
 
+# get_item_field ITEM_NAME FIELD
+# Prints one field of the named item: "password" (same resolution as
+# get_item_password), "username" (Login username), or any custom field name.
+# Never echoed by callers -- piped or captured only.
+get_item_field() {
+  local item_name="$1" field="$2"
+  case "$field" in
+    password)
+      get_item_password "$item_name"
+      ;;
+    username)
+      jq -r --arg name "$item_name" \
+        '.[] | select(.name == $name) | (.login.username // empty)' \
+        "$BW_ITEMS_FILE" | head -1
+      ;;
+    *)
+      jq -r --arg name "$item_name" --arg f "$field" \
+        '.[] | select(.name == $name) | ((.fields[]? | select(.name == $f) | .value) // empty)' \
+        "$BW_ITEMS_FILE" | head -1
+      ;;
+  esac
+}
+
+# entry_k8s_pairs INDEX
+# Prints the "k8s_key=bw_field" pairs for config entry INDEX, one per line:
+# the k8s_keys map when present, else the single k8s_key backed by the
+# password field. Keys and field names never contain "=".
+entry_k8s_pairs() {
+  local idx="$1"
+  if [[ "$(secret_field "$idx" "k8s_keys")" != "null" ]]; then
+    yq e ".secrets[$idx].k8s_keys | to_entries | .[] | .key + \"=\" + .value" "$CONFIG_FILE"
+  else
+    local k8s_key
+    k8s_key=$(secret_field "$idx" "k8s_key")
+    [[ "$k8s_key" == "null" ]] && return 0
+    echo "${k8s_key}=password"
+  fi
+}
+
 # get_item_revision_date ITEM_NAME
 get_item_revision_date() {
   local item_name="$1"
@@ -412,41 +453,50 @@ run_verify_k8s() {
   n=$(secret_count)
 
   for ((i=0; i<n; i++)); do
-    local item_name k8s_secret k8s_key namespace
+    local item_name k8s_secret namespace
     item_name=$(secret_field "$i" "bw_item")
     k8s_secret=$(secret_field "$i" "k8s_secret")
-    k8s_key=$(secret_field "$i" "k8s_key")
     # Per-secret namespace, falling back to the global default.
     namespace=$(secret_field "$i" "k8s_namespace")
     [[ "$namespace" == "null" || -z "$namespace" ]] && namespace="$default_namespace"
 
-    if [[ "$k8s_secret" == "null" || "$k8s_key" == "null" ]]; then
+    local pairs
+    pairs=$(entry_k8s_pairs "$i")
+    if [[ "$k8s_secret" == "null" || -z "$pairs" ]]; then
       log "  [skip]    $item_name (no k8s target)"
       continue
     fi
 
-    # Get password from BW (pipe to checksum immediately -- never stored in var)
-    local bw_checksum
-    bw_checksum=$(get_item_password "$item_name" | compute_checksum)
+    # Verify every key the entry maps (one for k8s_key, several for k8s_keys).
+    local pair k8s_key bw_field
+    while IFS= read -r pair; do
+      [[ -z "$pair" ]] && continue
+      k8s_key="${pair%%=*}"
+      bw_field="${pair#*=}"
 
-    # Get value from K8s (base64 decode, then checksum)
-    local k8s_checksum
-    if k8s_checksum=$(kubectl get secret "$k8s_secret" \
-        --namespace "$namespace" \
-        --kubeconfig "$kubeconfig" \
-        -o jsonpath="{.data.${k8s_key}}" 2>/dev/null \
-        | base64 -d \
-        | compute_checksum); then
-      if [[ "$bw_checksum" == "$k8s_checksum" ]]; then
-        log "  [match]   $item_name -> $namespace/$k8s_secret/$k8s_key"
+      # Get value from BW (pipe to checksum immediately -- never stored in var)
+      local bw_checksum
+      bw_checksum=$(get_item_field "$item_name" "$bw_field" | compute_checksum)
+
+      # Get value from K8s (base64 decode, then checksum)
+      local k8s_checksum
+      if k8s_checksum=$(kubectl get secret "$k8s_secret" \
+          --namespace "$namespace" \
+          --kubeconfig "$kubeconfig" \
+          -o jsonpath="{.data.${k8s_key}}" 2>/dev/null \
+          | base64 -d \
+          | compute_checksum); then
+        if [[ "$bw_checksum" == "$k8s_checksum" ]]; then
+          log "  [match]   $item_name -> $namespace/$k8s_secret/$k8s_key"
+        else
+          log_err "  [MISMATCH] $item_name -> $namespace/$k8s_secret/$k8s_key (K8s differs from Bitwarden)"
+          ((mismatches++)) || true
+        fi
       else
-        log_err "  [MISMATCH] $item_name -> $namespace/$k8s_secret/$k8s_key (K8s differs from Bitwarden)"
+        log_err "  [missing]  $item_name -> $namespace/$k8s_secret/$k8s_key (secret or key not found in K8s)"
         ((mismatches++)) || true
       fi
-    else
-      log_err "  [missing]  $item_name -> $namespace/$k8s_secret/$k8s_key (secret or key not found in K8s)"
-      ((mismatches++)) || true
-    fi
+    done <<< "$pairs"
   done
 
   log ""
@@ -638,36 +688,53 @@ run_sync_k8s() {
     local item_names_for_secret=()
 
     for ((i=0; i<n; i++)); do
-      local item_name k8s_secret k8s_key ns
+      local item_name k8s_secret ns
       item_name=$(secret_field "$i" "bw_item")
       k8s_secret=$(secret_field "$i" "k8s_secret")
-      k8s_key=$(secret_field "$i" "k8s_key")
       ns=$(secret_field "$i" "k8s_namespace")
       [[ "$ns" == "null" || -z "$ns" ]] && ns="$default_namespace"
 
       [[ "$k8s_secret" != "$k8s_secret_name" || "$ns" != "$namespace" ]] && continue
 
-      local value
-      value=$(get_item_password "$item_name")
+      # One entry can contribute several keys (k8s_keys map) or one (k8s_key).
+      # The item checksum covers ALL of its key values, so a change to any
+      # field triggers a re-apply.
+      local pair k f value combined="" entry_error=false
+      local entry_literals=()
+      while IFS= read -r pair; do
+        [[ -z "$pair" ]] && continue
+        k="${pair%%=*}"
+        f="${pair#*=}"
+        value=$(get_item_field "$item_name" "$f")
 
-      if [[ -z "$value" ]]; then
-        log_err "  [error]   $item_name - no password found"
-        audit_log "$item_name" "k8s" "error" "no password found"
-        secret_error=true
+        if [[ -z "$value" ]]; then
+          log_err "  [error]   $item_name - no '$f' field found"
+          audit_log "$item_name" "k8s" "error" "no $f field found"
+          entry_error=true
+          unset value
+          continue
+        fi
+
+        entry_literals+=("--from-literal=${k}=${value}")
+        combined+="${k}=${value}"$'\n'
         unset value
+      done < <(entry_k8s_pairs "$i")
+
+      if [[ "$entry_error" == true || ${#entry_literals[@]} -eq 0 ]]; then
+        secret_error=true
         continue
       fi
 
       # Detect change via checksum
       local new_checksum
-      new_checksum=$(printf '%s' "$value" | compute_checksum)
+      new_checksum=$(printf '%s' "$combined" | compute_checksum)
+      combined=""
       local old_checksum
       old_checksum=$(get_stored_checksum "$item_name" "k8s")
       [[ "$new_checksum" != "$old_checksum" ]] && secret_changed=true
 
-      from_literal_args+=("--from-literal=${k8s_key}=${value}")
+      from_literal_args+=("${entry_literals[@]}")
       item_names_for_secret+=("$item_name:$new_checksum")
-      unset value
     done
 
     if [[ "$secret_error" == true ]]; then
