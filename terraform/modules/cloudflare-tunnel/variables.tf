@@ -96,3 +96,9 @@ variable "existing_otp_idp_id" {
   description = "ID of the account's existing One-time PIN IdP. When set, the module does not create its own OTP IdP and allows this one on the app instead."
   default     = null
 }
+
+variable "public_bypass_paths" {
+  type        = list(string)
+  description = "Paths on var.hostname exempted from Access via path-scoped Bypass apps (e.g. [\"cv/*\", \"health\"]). Wildcards match subpaths only, not the parent path. Empty list creates nothing."
+  default     = []
+}

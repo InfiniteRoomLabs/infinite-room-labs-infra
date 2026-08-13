@@ -166,3 +166,39 @@ resource "cloudflare_zero_trust_access_policy" "mcp_service" {
     },
   ]
 }
+
+# ── Public bypass paths ───────────────────────────────────────────────────────
+# Anonymous, by-design-public paths on the hostname (e.g. JobOps tracer links
+# /cv/* and the /health probe they depend on). Each path becomes its own
+# path-scoped Access app with a Bypass-everyone policy; Access matches the most
+# specific app, so the rest of the hostname stays gated by the app above.
+# Note: "cv/*" matches /cv/<anything> but NOT /cv itself.
+resource "cloudflare_zero_trust_access_policy" "public_bypass" {
+  count      = length(var.public_bypass_paths) > 0 ? 1 : 0
+  account_id = var.account_id
+  name       = "${var.app_name} public bypass"
+  decision   = "bypass"
+
+  include = [
+    {
+      everyone = {}
+    },
+  ]
+}
+
+resource "cloudflare_zero_trust_access_application" "public_bypass" {
+  for_each = toset(var.public_bypass_paths)
+
+  account_id           = var.account_id
+  name                 = "${var.app_name} public ${each.value}"
+  domain               = "${var.hostname}/${each.value}"
+  type                 = "self_hosted"
+  app_launcher_visible = false
+
+  policies = [
+    {
+      id         = cloudflare_zero_trust_access_policy.public_bypass[0].id
+      precedence = 1
+    },
+  ]
+}

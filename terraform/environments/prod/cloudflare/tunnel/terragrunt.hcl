@@ -62,6 +62,12 @@ inputs = {
   # follows the portal's Access session, so 24h anywhere = daily re-auth.
   session_duration = "730h"
 
+  # Recruiter-facing tracer links (/cv/<slug>) and the /health probe JobOps'
+  # tracer readiness check hits must be reachable anonymously. Path-scoped
+  # Bypass apps; everything else on the hostname stays Access-gated.
+  # Interim solution -- see job-ops TODO.md (edge-worker tracer idea).
+  public_bypass_paths = ["cv/*", "health"]
+
   # Provider auth: bootstrap token from the global tokens dependency, falling back
   # to CLOUDFLARE_API_TOKEN via the generated provider (see cloudflare/provider.hcl).
   bootstrap_api_token = dependency.bootstrap_tokens.outputs.api_token
