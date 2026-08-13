@@ -293,17 +293,18 @@ secrets:
       secret-id: "password"
 
   # ── JobOps (separate namespace: "jobops") ───────────────────
-  # Example shape for secrets that must land in the "jobops" namespace instead
-  # of the default "irl". Uncomment and replace the placeholder bw_item names
-  # with the real Bitwarden item names once they exist.
-  # - bw_item: "REPLACE-jobops-db-password"
-  #   ansible_var: "vault_jobops_db_password"
-  #   k8s_secret: "jobops-postgres"
-  #   k8s_key: "password"
-  #   k8s_namespace: "jobops"
-  #
-  # - bw_item: "REPLACE-jobops-api-key"
-  #   ansible_var: "vault_jobops_api_key"
-  #   k8s_secret: "jobops-secrets"
-  #   k8s_key: "api-key"
-  #   k8s_namespace: "jobops"
+  # Gmail OAuth client for the Tracking Inbox (GCP project infinite-room-labs,
+  # OAuth client "JobOps"). Keys are the exact env var names the app reads;
+  # the chart mounts the whole Secret via envFrom (values.existingSecret).
+  # Not ansible-managed, so no ansible_var.
+  - bw_item: "jobops-gmail-oauth-client-id"
+    ansible_var: null
+    k8s_secret: "jobops-secrets"
+    k8s_key: "GMAIL_OAUTH_CLIENT_ID"
+    k8s_namespace: "jobops"
+
+  - bw_item: "jobops-gmail-oauth-client-secret"
+    ansible_var: null
+    k8s_secret: "jobops-secrets"
+    k8s_key: "GMAIL_OAUTH_CLIENT_SECRET"
+    k8s_namespace: "jobops"
