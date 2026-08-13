@@ -6,7 +6,7 @@
 
 FROM python:3.12-slim
 
-ARG ANSIBLE_CORE_VERSION=2.17.8
+ARG ANSIBLE_CORE_VERSION=2.18.18
 # helm binary version -- must match what k3s cluster supports
 ARG HELM_VERSION=3.16.4
 

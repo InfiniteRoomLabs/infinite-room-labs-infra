@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.12"
 
 [options]
-exclude-newer = "2026-08-06T17:50:25.543434736Z"
+exclude-newer = "2026-08-06T18:02:38.819183418Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -130,7 +130,7 @@ wheels = [
 
 [[package]]
 name = "ansible-core"
-version = "2.17.14"
+version = "2.18.18"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -139,9 +139,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "resolvelib" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ff/80/2925a0564f6f99a8002c3be3885b83c3a1dc5f57ebf00163f528889865f5/ansible_core-2.17.14.tar.gz", hash = "sha256:7c17fee39f8c29d70e3282a7e9c10bd70d5cd4fd13ddffc5dcaa52adbd142ff8", size = 3119687, upload-time = "2025-09-08T18:28:03.158Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/69/09be86b5199333f254bdeeda685cfc9746bd9615b94fbfa164b70fd4f8d3/ansible_core-2.18.18.tar.gz", hash = "sha256:f339cc73d74382d3b9bc74326e0dd7938fd20023f4aede40fffc2eaa8ffe694c", size = 3103434, upload-time = "2026-06-18T19:38:52.632Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/86/29/d694562f1a875b50aa74f691521fe493704f79cf1938cd58f28f7e2327d2/ansible_core-2.17.14-py3-none-any.whl", hash = "sha256:34a49582a57c2f2af17ede2cefd3b3602a2d55d22089f3928570d52030cafa35", size = 2189656, upload-time = "2025-09-08T18:28:00.375Z" },
+    { url = "https://files.pythonhosted.org/packages/66/89/8e2a18bd4491633aec517f1e3f623dd629aad2272c593a5ad247c51b2686/ansible_core-2.18.18-py3-none-any.whl", hash = "sha256:01012447a40dbcd429b76c0a2d9af46d21bb77b75d9261adbf6e0c8bdd32a5cb", size = 2226828, upload-time = "2026-06-18T19:38:51.03Z" },
 ]
 
 [[package]]
@@ -478,7 +478,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ansible-core", specifier = "==2.17.14" },
+    { name = "ansible-core", specifier = "==2.18.18" },
     { name = "jmespath", specifier = ">=1.0" },
     { name = "kubernetes", specifier = ">=28.0" },
     { name = "openshift", specifier = ">=0.13" },

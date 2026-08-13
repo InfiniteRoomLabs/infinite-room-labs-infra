@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Ansible automation for Infinite Room Labs homelab"
 requires-python = ">=3.12"
 dependencies = [
-    "ansible-core==2.17.14",
+    "ansible-core==2.18.18",
     "jmespath>=1.0",
     "kubernetes>=28.0",
     "openshift>=0.13",
