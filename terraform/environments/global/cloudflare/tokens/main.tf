@@ -32,6 +32,12 @@ locals {
   perm_access_apps_write           = "1e13c5124ca64b72b1969a67e8829049"
   perm_access_orgs_idp_write       = "bfe0d8686a584fa680f4c53b5eb0de6d"
   perm_access_service_tokens_write = "a1c0fec57cf94af79479a6d827fa518c"
+  # Added for Email Routing IaC (prod/cloudflare/email-routing). UUIDs verified
+  # against GET /accounts/{id}/tokens/permission_groups on 2026-08-22.
+  perm_email_routing_rules_read      = "1b600d9d8062443e986a973f097e728a"
+  perm_email_routing_rules_write     = "79b3ec0d10ce4148a8f8bdc0cc5f97f2"
+  perm_email_routing_addresses_read  = "5272e56105d04b5897466995b9bd4643"
+  perm_email_routing_addresses_write = "e4589eb09e63436686cd64252a3aebeb"
 }
 
 resource "cloudflare_account_token" "infra" {
@@ -50,6 +56,10 @@ resource "cloudflare_account_token" "infra" {
         { id = local.perm_access_apps_write },
         { id = local.perm_access_orgs_idp_write },
         { id = local.perm_access_service_tokens_write },
+        { id = local.perm_email_routing_rules_read },
+        { id = local.perm_email_routing_rules_write },
+        { id = local.perm_email_routing_addresses_read },
+        { id = local.perm_email_routing_addresses_write },
       ]
       resources = jsonencode({
         "com.cloudflare.api.account.${var.account_id}" = "*"
