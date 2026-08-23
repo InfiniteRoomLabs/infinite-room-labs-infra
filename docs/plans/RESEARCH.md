@@ -530,3 +530,18 @@ This scaffolds a full research artifact under `kitty-specs/` with evidence logs 
   - `docs/plans/2026-08-12-gunio-mcp-cloudflare-serving.md` (step 7 records the outcome)
 - **Findings**: _Pending -- dashboard verification is an operator rollout step; cannot be resolved from documentation alone (the MCP portal feature surface has been shifting through 2026)._
 - **Decision**: _Pending. Until resolved: GUNIO_MCP_AUTH_TOKEN unset, GUNIO_MCP_WRITE_SCOPE unset (writes disabled) -- the app-level token is the prerequisite for ever enabling writes on the public endpoint._
+
+### R18: DMARC aggregate-report ingestion (parsedmarc or equivalent)
+
+- **Status**: open
+- **Roadmap link**: Client services (DMARC reporting pipeline; follows `docs/dmarc-client-reporting.md`, shipped 2026-08-22)
+- **Key questions**:
+  1. Pull reports from the destination mailbox (IMAP via gmail-ai-broker?) or re-route `clients-dmarc@` to an Email Worker that writes to R2/Garage?
+  2. parsedmarc on k3s (homelab) with Grafana dashboards vs a hosted free tier (e.g. dmarcian/Postmark free DMARC digests) -- per-client separation requirements?
+  3. Retention and how a client gets their own view (per-client Grafana folder? emailed weekly digest?).
+- **Resources**:
+  - [parsedmarc](https://github.com/domainaware/parsedmarc)
+  - [RFC 7489 section 7.1 (external report authorization)](https://www.rfc-editor.org/rfc/rfc7489#section-7.1)
+  - [Cloudflare Email Workers](https://developers.cloudflare.com/email-routing/email-workers/)
+- **Findings**: _Pending._
+- **Decision**: _Pending. Until resolved, reports accumulate unparsed in the destination mailbox._
