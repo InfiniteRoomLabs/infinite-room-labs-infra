@@ -17,6 +17,11 @@
 # CLOUDFLARE_ACCOUNT_ID is a non-secret id -> mise.toml [env].
 CLOUDFLARE_BOOTSTRAP_API_TOKEN = { provider = "bitwarden", value = "cloudflare-create-tokens/notes", description = "Cloudflare bootstrap token (API Tokens Write)" }
 
+# Email Routing forward target (personal mailbox -- repo is public, so it is
+# sourced here rather than hardcoded in env.hcl). Consumed by
+# terraform/environments/prod/env.hcl via get_env.
+IRL_EMAIL_ROUTING_DESTINATION = { provider = "bitwarden", value = "email-routing-destination/notes", description = "Cloudflare Email Routing destination address" }
+
 # ── Terraform state backend (Garage S3 over Tailscale) ───────
 # The global/cloudflare/tokens bootstrap leaf keeps state in the self-hosted
 # Garage S3 bucket `irl-tfstate` (endpoint over Tailscale). Its backend expects

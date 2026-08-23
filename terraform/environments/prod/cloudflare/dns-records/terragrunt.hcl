@@ -38,6 +38,6 @@ terraform {
 
 inputs = {
   zone_id             = dependency.prod_zones.outputs.zone_ids["infiniteroomlabs.com"]
-  records             = local.env_config.locals.sendgrid_dns_records
+  records             = local.env_config.locals.email_dns_records
   bootstrap_api_token = dependency.bootstrap_tokens.outputs.api_token
 }
