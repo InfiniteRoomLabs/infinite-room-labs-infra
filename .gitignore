@@ -1,4 +1,4 @@
-# Added by Spec Kitty CLI (auto-managed)
+# AI agent working dirs (not tracked)
 .codex/
 .opencode/
 .windsurf/
@@ -10,7 +10,6 @@
 .roo/
 .amazonq/
 .github/copilot/
-.kittify/.dashboard
 
 # Terraform
 .terraform/

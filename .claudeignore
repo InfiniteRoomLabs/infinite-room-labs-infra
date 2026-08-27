@@ -1,13 +1,8 @@
-# Spec Kitty Configuration and Templates
-# These are internal directories that shouldn't be scanned by AI assistants
+# Paths not worth scanning by AI assistants.
+# NOTE: `.claude/` is deliberately NOT ignored -- it holds hand-authored,
+# load-bearing content (hooks, skills, agents, settings.json, secrets-manager).
 
-# Template directories (not working code)
-.kittify/templates/
-.kittify/missions/
-.kittify/scripts/
-
-# Agent command directories (generated from templates, not source)
-.claude/
+# Other agents' working dirs (also gitignored)
 .codex/
 .gemini/
 .cursor/
