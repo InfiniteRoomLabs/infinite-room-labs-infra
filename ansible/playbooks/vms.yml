@@ -8,11 +8,14 @@
 # Per NEW vm this playbook:
 #   1. mints a single-use, non-ephemeral Tailscale pre-auth key via the
 #      Tailscale API (vault_tailscale_api_key) -- no stored authkey secret
-#   2. creates a qcow2 disk backed by the gold master image
+#   2. creates a qcow2 disk backed by the RESOLVED gold master image
 #   3. renders a NoCloud cloud-init seed (hostname, admin user, tailscale up)
 #   4. defines and starts the libvirt domain
 #
-# Existing VMs are left untouched apart from ensuring running + autostart.
+# Existing VMs are never modified: this playbook does NOT resize memory,
+# vcpus, or disks. It asserts that an existing domain still matches its
+# irl_vms declaration and fails loudly on drift -- recreating or hand-editing
+# the domain is an operator decision.
 # Removing an entry from irl_vms does NOT delete the VM -- teardown is a
 # manual `virsh destroy && virsh undefine --remove-all-storage` decision.
 #
@@ -20,6 +23,10 @@
 #
 # Run standalone:
 #   uv run ansible-playbook playbooks/vms.yml
+#
+# Escape hatch for an intentionally pre-seeded disk (a restored backup, a
+# manually rebased disk):
+#   uv run ansible-playbook playbooks/vms.yml -e irl_vm_adopt_orphan_disk=true
 
 - name: Ubuntu VMs from gold master images
   hosts: homelab
@@ -29,8 +36,12 @@
   vars:
     irl_vms_root: "{{ irl_zfs_mount }}/vms"
     irl_vm_default_image: "ubuntu-24.04-golden-latest.qcow2"
+    # Opt-in: accept an existing disks/<vm>.qcow2 for a VM libvirt does not
+    # know about, instead of failing the orphan-disk preflight.
+    irl_vm_adopt_orphan_disk: false
 
   tasks:
+    # ── Static budget assertions (no host state needed) ──────────────
     - name: Assert VM RAM total is within budget
       ansible.builtin.assert:
         that:
@@ -41,10 +52,180 @@
           over the {{ irl_vm_ram_budget_gb }}GB budget
           (irl_vm_ram_budget_gb in host_vars/homelab.yml).
 
+    - name: Assert declared VM virtual disk total is within budget
+      ansible.builtin.assert:
+        that:
+          - "(irl_vms.values() | map(attribute='disk_gb') | sum) <= irl_vm_virtual_disk_budget_gb"
+        fail_msg: >-
+          irl_vms declares
+          {{ irl_vms.values() | map(attribute='disk_gb') | sum }}GB of qcow2
+          virtual disk, over the {{ irl_vm_virtual_disk_budget_gb }}GB
+          administrative cap (irl_vm_virtual_disk_budget_gb in
+          host_vars/homelab.yml). This is a cap on DECLARED virtual sizes,
+          not a measurement of free space on the pool -- see the variable
+          comment before raising it.
+
     - name: List existing libvirt domains
       community.libvirt.virt:
         command: list_vms
       register: irl_existing_domains
+
+    - name: Index the VMs this run would provision
+      ansible.builtin.set_fact:
+        irl_vm_new_vms: "{{ irl_vms.keys() | list | difference(irl_existing_domains.list_vms) }}"
+
+    # ── Preflight: local disk state ─────────────────────────────────
+    # Everything below runs BEFORE the Tailscale key mint so that invalid
+    # local state cannot burn API calls and leave orphaned pre-auth keys.
+    - name: Stat managed VM disks
+      ansible.builtin.stat:
+        path: "{{ irl_vms_root }}/disks/{{ item }}.qcow2"
+      loop: "{{ irl_vms.keys() | list }}"
+      register: irl_vm_disk_stat
+
+    - name: Index which managed VM disks already exist
+      ansible.builtin.set_fact:
+        irl_vm_existing_disks: >-
+          {{ irl_vm_disk_stat.results | selectattr('stat.exists')
+             | map(attribute='item') | list }}
+
+    - name: Read backing-chain metadata for existing VM disks
+      ansible.builtin.command:
+        argv:
+          - qemu-img
+          - info
+          - --output=json
+          - "{{ irl_vms_root }}/disks/{{ item }}.qcow2"
+      loop: "{{ irl_vm_existing_disks }}"
+      changed_when: false
+      register: irl_vm_disk_info
+
+    # A disk whose qcow2 header records `<family>-latest.qcow2` is pinned to a
+    # symlink, not to an image: republishing the gold master silently swaps
+    # the backing file out from under a live guest. Audit, never auto-repair.
+    - name: Assert no existing VM disk is backed by a mutable -latest image
+      ansible.builtin.assert:
+        that:
+          - "(item.stdout | from_json).get('backing-filename', '') is not search('-latest\\.qcow2$')"
+          - "(item.stdout | from_json).get('full-backing-filename', '') is not search('-latest\\.qcow2$')"
+        fail_msg: >-
+          {{ irl_vms_root }}/disks/{{ item.item }}.qcow2 is backed by a mutable
+          symlink:
+          {{ (item.stdout | from_json).get('backing-filename', '(none)') }}.
+          Republishing the gold master would change this guest's backing file
+          underneath it. Remediate with the operator procedure in
+          docs/runbooks/vm-disk-rebase.md (shut the VM down, `qemu-img rebase -u`
+          the disk metadata onto the concrete versioned image the symlink
+          currently points at, verify with `qemu-img info`, boot). This
+          playbook never rebases automatically and never touches a running VM.
+      loop: "{{ irl_vm_disk_info.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Adoption still requires the audit above to have passed for that disk --
+    # it runs over every existing managed disk, defined domain or not.
+    - name: Assert no orphan disk exists for a VM libvirt does not know about
+      ansible.builtin.assert:
+        that:
+          - (irl_vm_orphan_disks | length) == 0 or (irl_vm_adopt_orphan_disk | bool)
+        fail_msg: >-
+          Disk(s) already exist for VM(s) libvirt has no domain for:
+          {{ irl_vm_orphan_disks | map('regex_replace', '^(.*)$',
+             irl_vms_root ~ '/disks/\\1.qcow2') | join(', ') }}.
+          Provisioning would define a new domain on top of pre-existing disk
+          state. Either remove the disk(s), or re-run with
+          -e irl_vm_adopt_orphan_disk=true to adopt them deliberately.
+      vars:
+        irl_vm_orphan_disks: "{{ irl_vm_existing_disks | difference(irl_existing_domains.list_vms) }}"
+
+    # ── Preflight: config drift on existing domains ─────────────────
+    # Compared against the PERSISTENT (inactive) definition, not live runtime
+    # values: a ballooned or hot-plugged guest must not read as drift.
+    # Parsed from `virsh dumpxml --inactive` rather than `virsh dominfo`
+    # (human-readable and locale-dependent) or the libvirt API's info() (live
+    # values). Regex over libvirt's canonical, machine-generated XML keeps
+    # this dependency-free -- no lxml on the hypervisor.
+    - name: Read persistent domain definitions for declared, existing VMs
+      ansible.builtin.command:
+        argv:
+          - virsh
+          - dumpxml
+          - --inactive
+          - "{{ item }}"
+      loop: "{{ irl_vms.keys() | list | intersect(irl_existing_domains.list_vms) }}"
+      changed_when: false
+      register: irl_vm_inactive_xml
+
+    - name: Index backing files of existing VM disks
+      ansible.builtin.set_fact:
+        irl_vm_disk_backing: >-
+          {{ dict(irl_vm_disk_info.results | map(attribute='item') | list
+             | zip(irl_vm_disk_info.results | map(attribute='stdout')
+                   | map('from_json')
+                   | map(attribute='backing-filename', default='') | list)) }}
+
+    - name: Assert existing domains still match their irl_vms declaration
+      ansible.builtin.assert:
+        that:
+          # libvirt canonicalises memory to KiB in dumped XML.
+          - item.stdout is search("<memory unit='KiB'>" ~ (irl_vms[item.item].ram_gb | int * 1048576) ~ "</memory>")
+          - item.stdout is search("<vcpu[^>]*>" ~ (irl_vms[item.item].vcpus | int) ~ "</vcpu>")
+          - (irl_vms_root ~ '/disks/' ~ item.item ~ '.qcow2') in item.stdout
+          - item.item in irl_vm_existing_disks
+          - (irl_vm_disk_backing[item.item] | basename) is match(irl_vm_expected_family | regex_escape ~ '-')
+        fail_msg: >-
+          Domain {{ item.item }} has drifted from its irl_vms declaration.
+          Declared: {{ irl_vms[item.item].ram_gb }}GB RAM
+          ({{ irl_vms[item.item].ram_gb | int * 1048576 }} KiB),
+          {{ irl_vms[item.item].vcpus }} vcpus, disk
+          {{ irl_vms_root }}/disks/{{ item.item }}.qcow2 backed by the
+          {{ irl_vm_expected_family }} image family.
+          Persistent definition reports:
+          {{ item.stdout | regex_search('<memory[^>]*>[0-9]+</memory>') }},
+          {{ item.stdout | regex_search('<vcpu[^>]*>[0-9]+</vcpu>') }},
+          backing file
+          {{ irl_vm_disk_backing[item.item] | default('(disk missing)') }}.
+          This playbook does not resize or repair domains. Recreate the VM, or
+          edit the domain by hand and reconcile irl_vms with reality.
+      vars:
+        irl_vm_expected_family: >-
+          {{ (irl_vms[item.item].image | default(irl_vm_default_image))
+             | regex_replace('-(latest|v.*)\\.qcow2$', '') }}
+      loop: "{{ irl_vm_inactive_xml.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # ── Advisory: pool headroom ─────────────────────────────────────
+    # irl_vm_virtual_disk_budget_gb is an administrative cap on declared
+    # sizes; this is the only thing here that looks at real free space. It is
+    # deliberately a warning: qcow2 disks are sparse, so a new VM whose
+    # virtual size exceeds free space is usually fine, right up until it is
+    # not.
+    - name: Read free space on the VM ZFS dataset
+      ansible.builtin.command:
+        argv: [zfs, list, -H, -p, -o, available, "{{ irl_zfs_pool }}/vms"]
+      changed_when: false
+      failed_when: false
+      register: irl_vm_zfs_avail
+      when: irl_vm_new_vms | length > 0
+
+    - name: Warn when pool free space is under the new VMs' declared virtual size
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: {{ irl_zfs_pool }}/vms has
+          {{ (irl_vm_zfs_avail.stdout | int / 1073741824) | round(1) }}GB free
+          but this run declares {{ irl_vm_new_disk_gb }}GB of new virtual disk.
+          qcow2 disks are sparse so provisioning will still succeed; the pool
+          can fill later. Not a gate -- check images, orphan disks, retained
+          image versions, and snapshots before growing the fleet.
+      vars:
+        irl_vm_new_disk_gb: >-
+          {{ irl_vms | dict2items | selectattr('key', 'in', irl_vm_new_vms)
+             | map(attribute='value.disk_gb') | sum }}
+      when:
+        - irl_vm_new_vms | length > 0
+        - (irl_vm_zfs_avail.rc | default(1)) == 0
+        - (irl_vm_zfs_avail.stdout | int) < (irl_vm_new_disk_gb | int) * 1073741824
 
     # ── Tailscale pre-auth keys (new VMs only) ──────────────────────
     - name: Mint single-use Tailscale pre-auth key per new VM
@@ -69,7 +250,7 @@
       loop: "{{ irl_vms | dict2items }}"
       loop_control:
         label: "{{ item.key }}"
-      when: item.key not in irl_existing_domains.list_vms
+      when: item.key in irl_vm_new_vms
       register: irl_ts_key_mint
       # Debug escape hatch: -e irl_debug_nolog=true (redact output yourself!)
       no_log: "{{ not (irl_debug_nolog | default(false)) }}"
@@ -90,14 +271,68 @@
       no_log: true
 
     # ── Disks: qcow2 backed by the gold master (new VMs only) ───────
+    # The image selector may be a `<family>-latest.qcow2` symlink or an
+    # already-concrete filename. Resolve it to a real path and hand THAT to
+    # qemu-img: a qcow2 header that records the symlink would follow the
+    # symlink wherever a later publish points it. readlink -e (not stat's
+    # lnk_source) because concrete files have no link target and symlink
+    # targets may be relative.
+    - name: Resolve the gold master image selector for new VMs
+      ansible.builtin.command:
+        argv:
+          - readlink
+          - -e
+          - "{{ irl_vms_root }}/images/{{ irl_vms[item].image | default(irl_vm_default_image) }}"
+      loop: "{{ irl_vm_authkeys.keys() | list }}"
+      changed_when: false
+      failed_when: false
+      register: irl_vm_image_resolved
+
+    - name: Stat the resolved gold master images
+      ansible.builtin.stat:
+        path: "{{ item.stdout }}"
+      loop: "{{ irl_vm_image_resolved.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc == 0
+      register: irl_vm_image_stat
+
+    - name: Assert each resolved image is a regular file in the managed images directory
+      ansible.builtin.assert:
+        that:
+          - item.item.rc == 0
+          - item.stat.isreg | default(false)
+          - item.item.stdout is match((irl_vms_root ~ '/images/') | regex_escape)
+        fail_msg: >-
+          Image selector
+          {{ irl_vms[item.item.item].image | default(irl_vm_default_image) }}
+          for VM {{ item.item.item }} did not resolve to a regular file inside
+          {{ irl_vms_root }}/images (resolved to
+          '{{ item.item.stdout | default("") }}'). Publish the gold master
+          with packer/scripts/publish-image.sh before provisioning.
+      loop: "{{ irl_vm_image_stat.results }}"
+      loop_control:
+        label: "{{ item.item.item }}"
+
+    - name: Index resolved gold master image paths by VM name
+      ansible.builtin.set_fact:
+        irl_vm_image_paths: >-
+          {{ dict(irl_vm_image_resolved.results | map(attribute='item') | list
+             | zip(irl_vm_image_resolved.results | map(attribute='stdout') | list)) }}
+
     - name: Create backing-file disks for new VMs
       ansible.builtin.command:
-        cmd: >-
-          qemu-img create -f qcow2
-          -b {{ irl_vms_root }}/images/{{ item.value.image | default(irl_vm_default_image) }}
-          -F qcow2
-          {{ irl_vms_root }}/disks/{{ item.key }}.qcow2
-          {{ item.value.disk_gb }}G
+        argv:
+          - qemu-img
+          - create
+          - -f
+          - qcow2
+          - -b
+          - "{{ irl_vm_image_paths[item.key] }}"
+          - -F
+          - qcow2
+          - "{{ irl_vms_root }}/disks/{{ item.key }}.qcow2"
+          - "{{ item.value.disk_gb }}G"
         creates: "{{ irl_vms_root }}/disks/{{ item.key }}.qcow2"
       loop: "{{ irl_vms | dict2items }}"
       loop_control:
@@ -105,41 +340,56 @@
       when: item.key in irl_vm_authkeys
 
     # ── NoCloud cloud-init seeds (new VMs only) ─────────────────────
-    # The rendered user-data contains the (single-use, 1h-expiry) authkey;
-    # keep it root-only and let cloud-localds pack it into the seed ISO.
-    - name: Render cloud-init user-data
-      ansible.builtin.template:
-        src: ../templates/vm-cloud-init.yaml.j2
-        dest: "{{ irl_vms_root }}/seeds/{{ item.key }}-user-data"
-        owner: root
-        group: root
-        mode: "0600"
-      loop: "{{ irl_vms | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
-      when: item.key in irl_vm_authkeys
-      no_log: true
+    # A minted authkey is single-use and expires in an hour, so any seed ISO
+    # left over from an earlier attempt carries a dead key. Rebuild
+    # unconditionally whenever a key was minted -- no `creates:` guard.
+    # The rendered user-data holds the authkey in plaintext, so the render ->
+    # pack -> shred sequence is a block/always: the cleanup runs even when
+    # cloud-localds fails.
+    - name: Build NoCloud seeds carrying the freshly minted authkey
+      block:
+        - name: Remove any stale seed ISO
+          ansible.builtin.file:
+            path: "{{ irl_vms_root }}/seeds/{{ item.key }}-seed.iso"
+            state: absent
+          loop: "{{ irl_vms | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.key in irl_vm_authkeys
 
-    - name: Build NoCloud seed ISOs
-      ansible.builtin.command:
-        cmd: >-
-          cloud-localds
-          {{ irl_vms_root }}/seeds/{{ item.key }}-seed.iso
-          {{ irl_vms_root }}/seeds/{{ item.key }}-user-data
-        creates: "{{ irl_vms_root }}/seeds/{{ item.key }}-seed.iso"
-      loop: "{{ irl_vms | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
-      when: item.key in irl_vm_authkeys
+        - name: Render cloud-init user-data
+          ansible.builtin.template:
+            src: ../templates/vm-cloud-init.yaml.j2
+            dest: "{{ irl_vms_root }}/seeds/{{ item.key }}-user-data"
+            owner: root
+            group: root
+            mode: "0600"
+          loop: "{{ irl_vms | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.key in irl_vm_authkeys
+          no_log: true
 
-    - name: Remove rendered user-data (secret lives only inside the seed ISO)
-      ansible.builtin.file:
-        path: "{{ irl_vms_root }}/seeds/{{ item.key }}-user-data"
-        state: absent
-      loop: "{{ irl_vms | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
-      when: item.key in irl_vm_authkeys
+        - name: Build NoCloud seed ISOs
+          ansible.builtin.command:
+            argv:
+              - cloud-localds
+              - "{{ irl_vms_root }}/seeds/{{ item.key }}-seed.iso"
+              - "{{ irl_vms_root }}/seeds/{{ item.key }}-user-data"
+          loop: "{{ irl_vms | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.key in irl_vm_authkeys
+          changed_when: true
+      always:
+        - name: Remove rendered user-data (secret lives only inside the seed ISO)
+          ansible.builtin.file:
+            path: "{{ irl_vms_root }}/seeds/{{ item.key }}-user-data"
+            state: absent
+          loop: "{{ irl_vms | dict2items }}"
+          loop_control:
+            label: "{{ item.key }}"
+          when: item.key in irl_vm_authkeys
 
     # ── Define + run domains ────────────────────────────────────────
     - name: Define new VM domains
@@ -149,7 +399,7 @@
       loop: "{{ irl_vms | dict2items }}"
       loop_control:
         label: "{{ item.key }}"
-      when: item.key not in irl_existing_domains.list_vms
+      when: item.key in irl_vm_new_vms
 
     - name: Ensure VMs are running
       community.libvirt.virt:
