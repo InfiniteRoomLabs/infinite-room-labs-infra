@@ -2,7 +2,7 @@
 
 # Infinite Room Labs Infrastructure
 
-Multi-tool IaC monorepo for the IRL homelab: a k3s cluster on an HP Z600 plus one cloud agent node, managed end to end with Terraform, Ansible, and Helm.
+Multi-tool IaC monorepo for the IRL homelab: a single-node k3s cluster on an HP Z600, managed end to end with Terraform, Ansible, and Helm.
 
 [![hygiene](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/hygiene.yml/badge.svg)](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/hygiene.yml)
 [![kubeconform](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/kubeconform.yml/badge.svg)](https://github.com/InfiniteRoomLabs/infinite-room-labs-infra/actions/workflows/kubeconform.yml)
@@ -33,7 +33,6 @@ Multi-tool IaC monorepo for the IRL homelab: a k3s cluster on an HP Z600 plus on
 |---|---|
 | Server (on-prem) | HP Z600 workstation - dual Xeon (24 threads), 40GB RAM (4GB OS reserve, ZFS ARC capped at 8GB), k3s server + all stateful workloads |
 | Storage | ZFS RAIDZ1 pool `main` at /media/root/storage1 - 13 quota'd datasets (garage-data 500G @ 1M recordsize, vms 300G @ 64K recordsize matching qcow2 clusters, paperless-media 500G, gitea-lfs 100G, ...), lz4 compression, sanoid snapshot automation |
-| Cloud agent node | DigitalOcean droplet s-4vcpu-8gb (NYC3, ~$48/mo) - k3s agent joined to the on-prem server over Tailscale, provisioned by Terraform |
 | Virtualization | KVM/libvirt on the Z600 - declarative VM inventory with a hard 12GB summed-RAM budget; ubuntu-vm-01 (4 vCPU / 8GB / 40GB) cloned from versioned Packer gold masters stored on `main/vms` |
 | Network | Tailscale mesh (homelab node 100.86.213.22) for kubectl/SSH/DNS; LAN 192.168.2.2 exposes game-server NodePorts to devices without Tailscale (the Steam Deck); CoreDNS on hostNetwork port 53 |
 
@@ -41,7 +40,7 @@ Multi-tool IaC monorepo for the IRL homelab: a k3s cluster on an HP Z600 plus on
 
 | Tool | Why |
 |---|---|
-| k3s | Single-server cluster on the Z600 with a DigitalOcean agent joined over Tailscale; every IRL service lives in the `irl` namespace, replacing the old per-service Docker Compose stacks |
+| k3s | Single-node cluster on the Z600 (the cloud agent node was retired; KVM/libvirt VM agents are the next nodes to join); every IRL service lives in the `irl` namespace, replacing the old per-service Docker Compose stacks |
 | Terraform + Terragrunt | One leaf per resource group under `environments/{env}/{provider}/{rg}`; TFC workspace names derived from the path (e.g. `homelab-tailscale-acl`), so state layout mirrors the directory tree exactly |
 | Terraform Cloud | Remote state for every non-bootstrap leaf; the chicken-and-egg bootstrap leaves (TFC workspace + scoped Cloudflare token minting) necessarily keep local state |
 | Ansible | Flat playbooks (no roles) imported by a phase-tagged site.yml; the only sanctioned path for Helm deploys - charts are never installed by hand |
@@ -98,8 +97,6 @@ flowchart LR
         zfs[(ZFS RAIDZ1 pool main - sanoid snapshots)]
     end
 
-    doagent[DO droplet NYC3 - k3s agent]
-
     pub --> zones --> access --> tunnel --> jobops
     tunnel --> gunio
     laptop -.->|Tailscale| splitdns --> coredns
@@ -108,7 +105,6 @@ flowchart LR
     traefik --> websvcs
     traefik --> intsvcs
     deck -->|LAN NodePorts| games
-    doagent -.->|joins cluster over Tailscale| z600
     websvcs --> cnpg
     websvcs --> valkey
     cnpg --> zfs
@@ -211,7 +207,7 @@ All Terraform and Terragrunt configuration lives under `terraform/`. Uses Terraf
 
 - **Domain onboarding** (Porkbun to Cloudflare): Creates Cloudflare zones and updates Porkbun nameservers to match
 - **DNS records**: Manages Cloudflare DNS records for homelab and production services
-- **Compute**: DigitalOcean droplets (k3s agent nodes)
+- **Compute**: DigitalOcean droplets (module available; no droplet is currently declared)
 - **Networking**: Tailscale ACLs and split DNS configuration
 - **Container registry**: Docker Hub repository management
 - **Email**: SendGrid sender authentication and configuration
@@ -229,7 +225,7 @@ terraform/
     porkbun-nameservers/                    # Updates Porkbun NS to match Cloudflare
     tfc-workspace/                          # Creates a single TFC workspace
     dockerhub-repo/                         # Manages Docker Hub repositories
-    do-droplet/                             # Creates DigitalOcean droplets
+    do-droplet/                             # Creates DigitalOcean droplets (no leaf uses it today)
     sendgrid-config/                        # SendGrid sender authentication
     tailscale-acl/                          # Tailscale ACL policies
   environments/
@@ -250,7 +246,6 @@ terraform/
     homelab/
       env.hcl                               # Homelab config (Tailscale IP, etc.)
       cloudflare/dns-records/               # DNS records for homelab services
-      digitalocean/k3s-agent/               # DO droplet for k3s agent node
       tailscale/acl/                        # Tailscale ACL policies
       tailscale/split-dns/                  # Tailscale split DNS for *.lab domains
 scripts/
@@ -338,7 +333,6 @@ Workspace names are derived from the directory path relative to `root.hcl`: `env
 | `prod-porkbun-nameservers`       | `terraform/environments/prod/porkbun/nameservers/`       |
 | `prod-sendgrid-config`           | `terraform/environments/prod/sendgrid/config/`           |
 | `homelab-cloudflare-dns-records` | `terraform/environments/homelab/cloudflare/dns-records/` |
-| `homelab-digitalocean-k3s-agent` | `terraform/environments/homelab/digitalocean/k3s-agent/` |
 | `homelab-tailscale-acl`          | `terraform/environments/homelab/tailscale/acl/`          |
 
 ### Credential management

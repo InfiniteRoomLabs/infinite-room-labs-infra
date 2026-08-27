@@ -1,68 +1,30 @@
-"""Cross-node networking tests: flannel overlay via Tailscale."""
+"""Overlay networking tests: flannel binds to the tailnet.
+
+The cluster is single-node: the cloud agent node was retired and the
+KVM/libvirt VM nodes have not joined yet
+(docs/plans/2026-08-27-k3s-to-vms-migration-design.md). Cross-node cases --
+pod-to-pod across the overlay, DNS from a remote node, flannel on the far
+side -- belong here again once a second node exists; until then there is no
+second side to assert against.
+"""
 
 import subprocess
-import json
+
 import pytest
-from conftest import NAMESPACE, HOMELAB_TAILSCALE_IP, DO_TAILSCALE_IP
+
+from conftest import HOMELAB_TAILSCALE_IP
 
 
 @pytest.mark.networking
 @pytest.mark.integration
-class TestCrossNodeNetworking:
-    def test_do_pod_can_resolve_dns(self):
-        """A pod on the DO node can resolve services via CoreDNS on homelab."""
-        result = subprocess.run(
-            ["kubectl", "run", "test-dns-net", "--restart=Never",
-             "--image=busybox", "-n", NAMESPACE,
-             "--overrides", json.dumps({
-                 "spec": {
-                     "nodeSelector": {"irl.dev/provider": "digitalocean"},
-                     "tolerations": [{"key": "irl.dev/cloud", "operator": "Equal",
-                                      "value": "digitalocean", "effect": "NoSchedule"}],
-                 }
-             }),
-             "--", "sh", "-c", "nslookup postgresql-rw 2>&1; echo EXIT=$?"],
-            capture_output=True, text=True, timeout=30,
-        )
-        # Wait for pod to complete
-        subprocess.run(
-            ["kubectl", "wait", "--for=condition=Ready", "pod/test-dns-net",
-             "-n", NAMESPACE, "--timeout=30s"],
-            capture_output=True, timeout=35,
-        )
-        import time; time.sleep(10)
-        logs = subprocess.run(
-            ["kubectl", "logs", "test-dns-net", "-n", NAMESPACE],
-            capture_output=True, text=True, timeout=10,
-        )
-        # Cleanup
-        subprocess.run(
-            ["kubectl", "delete", "pod", "test-dns-net", "-n", NAMESPACE,
-             "--ignore-not-found"],
-            capture_output=True, timeout=10,
-        )
-        assert "EXIT=0" in logs.stdout or "10.43" in logs.stdout, (
-            f"DNS resolution failed from DO node: {logs.stdout}"
-        )
-
+class TestOverlayNetworking:
     def test_flannel_homelab_uses_tailscale(self):
-        """Flannel on homelab binds to tailscale0 interface."""
+        """Flannel on homelab binds to the tailscale0 interface."""
         result = subprocess.run(
             ["ssh", "homelab-ts", "ip", "-d", "link", "show", "flannel.1"],
             capture_output=True, text=True, timeout=10,
         )
         assert f"local {HOMELAB_TAILSCALE_IP}" in result.stdout, (
-            f"Flannel not using Tailscale IP. Output: {result.stdout}"
-        )
-        assert "dev tailscale0" in result.stdout
-
-    def test_flannel_do_uses_tailscale(self):
-        """Flannel on DO binds to tailscale0 interface."""
-        result = subprocess.run(
-            ["ssh", "do-k3s", "ip", "-d", "link", "show", "flannel.1"],
-            capture_output=True, text=True, timeout=10,
-        )
-        assert f"local {DO_TAILSCALE_IP}" in result.stdout, (
             f"Flannel not using Tailscale IP. Output: {result.stdout}"
         )
         assert "dev tailscale0" in result.stdout

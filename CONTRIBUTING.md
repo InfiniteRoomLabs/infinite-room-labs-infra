@@ -4,14 +4,16 @@ This document covers everything you need to know to work on the Infinite Room La
 
 ## Architecture Overview
 
-2-node k3s cluster connected over Tailscale:
+Single-node k3s cluster:
 
 | Node | Location | Role | Spec |
 |------|----------|------|------|
-| `home` | On-prem (HP Z600) | k3s server, stateful workloads | Dual Xeon, 40GB RAM, ZFS RAIDZ1 |
-| `do-k3s-agent-01` | DigitalOcean NYC3 | k3s agent | 4 vCPU, 8GB RAM, $48/mo |
+| `home` | On-prem (HP Z600) | k3s server, all workloads | Dual Xeon, 40GB RAM, ZFS RAIDZ1 |
 
-All services live in the `irl` namespace. Flannel VXLAN over Tailscale for cross-node networking.
+All services live in the `irl` namespace. The cloud agent node was retired; the
+next nodes to join are KVM/libvirt VMs on the same host -- see
+`docs/plans/2026-08-27-k3s-to-vms-migration-design.md`. Flannel VXLAN is bound
+to the tailnet so cross-node traffic rides Tailscale when a second node exists.
 
 ## Repo Structure
 
@@ -119,7 +121,7 @@ Secrets are injected by fnox per-command (no `.envrc`). Wrap terragrunt with
 `scripts/with-secrets.sh`:
 
 ```bash
-cd terraform/environments/homelab/digitalocean/k3s-agent
+cd terraform/environments/homelab/tailscale/acl
 ../../../../../scripts/with-secrets.sh terragrunt init
 ../../../../../scripts/with-secrets.sh terragrunt plan
 ../../../../../scripts/with-secrets.sh terragrunt apply
@@ -168,7 +170,7 @@ All nodes use the `irl.dev/*` label taxonomy:
 
 | Label | Purpose | Values |
 |-------|---------|--------|
-| `irl.dev/provider` | Who runs the infra | homelab, digitalocean |
+| `irl.dev/provider` | Who runs the infra | homelab (cloud providers when a cloud node exists) |
 | `irl.dev/tier` | Architecture role | data, compute |
 | `irl.dev/storage` | Backing storage | zfs, nvme |
 | `irl.dev/network` | Cluster connectivity | lan, tailscale |
@@ -177,7 +179,11 @@ All nodes use the `irl.dev/*` label taxonomy:
 | `irl.dev/gpu` | GPU availability | none |
 | `irl.dev/memory-class` | Memory tier | high (24G+), standard (8-24G) |
 
-Use `nodeSelector` in Helm values to target the right node. Cloud nodes have a `irl.dev/cloud=<provider>:NoSchedule` taint -- workloads must explicitly tolerate it.
+The taxonomy is the schema, not the census: the cluster is single-node today,
+so only the `home` node carries labels. Use `nodeSelector` in Helm values to
+target the right node. A cloud node, if one is ever added back, carries an
+`irl.dev/cloud=<provider>:NoSchedule` taint -- workloads must explicitly
+tolerate it.
 
 ## Networking
 

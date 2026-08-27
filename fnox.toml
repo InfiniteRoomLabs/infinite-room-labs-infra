@@ -39,6 +39,8 @@ TF_TOKEN_app_terraform_io = { provider = "bitwarden", value = "terraform-cloud-o
 DOCKER_PASSWORD = { provider = "bitwarden", value = "docker-hub-pat/notes", description = "Docker Hub PAT" }
 
 # ── DigitalOcean ─────────────────────────────────────────────
+# Retained capability for terraform/modules/do-droplet. No droplet is
+# declared today -- the k3s agent node was retired.
 DIGITALOCEAN_TOKEN = { provider = "bitwarden", value = "digitalocean-api-token/notes" }
 
 # ── k3s ──────────────────────────────────────────────────────

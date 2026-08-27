@@ -1,4 +1,11 @@
-"""Node label taxonomy and scheduling compliance tests."""
+"""Node label taxonomy and scheduling compliance tests.
+
+Single-node topology: the cloud agent node was retired, so only the homelab
+node's labels are asserted here. The agent-side taxonomy (provider, tier,
+cost, persistence, and the scheduling taint that goes with it) returns when
+the KVM/libvirt VM nodes join -- see
+docs/plans/2026-08-27-k3s-to-vms-migration-design.md.
+"""
 
 import pytest
 from conftest import NAMESPACE
@@ -17,20 +24,6 @@ HOMELAB_EXPECTED_LABELS = {
     "irl.dev/memory-class": "high",
 }
 
-DO_EXPECTED_LABELS = {
-    "topology.kubernetes.io/region": "us-east",
-    "topology.kubernetes.io/zone": "do-nyc3",
-    "irl.dev/provider": "digitalocean",
-    "irl.dev/tier": "compute",
-    "irl.dev/instance-type": "s-4vcpu-8gb",
-    "irl.dev/storage": "nvme",
-    "irl.dev/network": "tailscale",
-    "irl.dev/cost": "paid",
-    "irl.dev/persistence": "ephemeral",
-    "irl.dev/gpu": "none",
-    "irl.dev/memory-class": "standard",
-}
-
 HOMELAB_SERVICES = ["postgresql", "valkey", "vault", "garage", "openviking", "ollama"]
 
 
@@ -41,25 +34,6 @@ class TestHomelabLabels:
         node = k8s.read_node("home")
         actual = node.metadata.labels.get(key)
         assert actual == value, f"home: {key}={actual}, expected {value}"
-
-
-@pytest.mark.compliance
-class TestDOLabels:
-    @pytest.mark.parametrize("key,value", list(DO_EXPECTED_LABELS.items()))
-    def test_label(self, k8s, key, value):
-        node = k8s.read_node("do-k3s-agent-01")
-        actual = node.metadata.labels.get(key)
-        assert actual == value, f"do-k3s-agent-01: {key}={actual}, expected {value}"
-
-    def test_taint(self, k8s):
-        node = k8s.read_node("do-k3s-agent-01")
-        taints = node.spec.taints or []
-        cloud_taint = next(
-            (t for t in taints if t.key == "irl.dev/cloud"), None
-        )
-        assert cloud_taint is not None, "Missing taint irl.dev/cloud"
-        assert cloud_taint.value == "digitalocean"
-        assert cloud_taint.effect == "NoSchedule"
 
 
 @pytest.mark.compliance

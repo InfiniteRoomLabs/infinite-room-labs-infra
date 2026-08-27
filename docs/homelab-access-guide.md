@@ -6,7 +6,6 @@ Last updated: 2026-03-23
 
 - **Tailscale** installed and connected to the IRL tailnet
 - Homelab server (HP Z600) reachable at `100.86.213.22` (Tailscale IP)
-- DigitalOcean agent node reachable at its Tailscale IP (s-4vcpu-8gb, NYC3)
 - **kubectl** installed (`/usr/local/bin/kubectl`)
 - **KUBECONFIG** set to `~/.kube/homelab.yaml` (done automatically in fish + bashrc)
 
@@ -16,8 +15,10 @@ DNS resolution is handled automatically via Tailscale Split DNS. CoreDNS runs on
 
 | Node | Location | Tailscale IP | Spec | Role |
 |------|----------|--------------|------|------|
-| HP Z600 (homelab) | On-prem | 100.86.213.22 | Dual Xeon, 48GB RAM, ZFS | k3s server, stateful workloads |
-| DigitalOcean (do-agent) | NYC3 | Via Tailscale | 4 vCPU, 8GB RAM ($48/mo) | k3s agent |
+| HP Z600 (homelab) | On-prem | 100.86.213.22 | Dual Xeon, 48GB RAM, ZFS | k3s server, all workloads |
+
+The cluster is single-node. The cloud agent node was retired; KVM/libvirt VMs
+on the same host are the next nodes to join.
 
 ## Service Access Table
 
