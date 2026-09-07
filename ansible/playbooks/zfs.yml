@@ -106,6 +106,26 @@
         recurse: true
       tags: [palworld]
 
+    # WotLK: the mysql:8.4 image drops to uid 999; the acore containers run
+    # as 1000. Same hostPath-PV chown story as satisfactory.
+    - name: Chown wotlk-db dataset to UID 999 (mysql)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/wotlk-db"
+        state: directory
+        owner: "999"
+        group: "999"
+        recurse: true
+      tags: [wotlk]
+
+    - name: Chown wotlk-data dataset to UID 1000 (acore)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/wotlk-data"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        recurse: true
+      tags: [wotlk]
+
     # ── ZFS scrub schedule ─────────────────────────────────────────
     - name: Schedule weekly ZFS scrub (Sunday 3am)
       ansible.builtin.cron:

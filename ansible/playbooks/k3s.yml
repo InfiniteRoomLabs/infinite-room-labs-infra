@@ -540,6 +540,17 @@
           app: palworld
           capacity: "30Gi"
           hostPath: "{{ irl_zfs_mount }}/palworld-data"
+        # ── WotLK ──
+        # MySQL datadir (chowned 999) and extracted client data (chowned 1000);
+        # both in zfs.yml.
+        - name: pv-wotlk-db
+          app: wotlk
+          capacity: "20Gi"
+          hostPath: "{{ irl_zfs_mount }}/wotlk-db"
+        - name: pv-wotlk-data
+          app: wotlk
+          capacity: "30Gi"
+          hostPath: "{{ irl_zfs_mount }}/wotlk-data"
 
     - name: Create zfs-local StorageClass
       kubernetes.core.k8s:

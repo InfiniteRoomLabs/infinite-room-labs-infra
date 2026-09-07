@@ -1,0 +1,33 @@
+# ansible/helm/wotlk/values.yaml
+# Environment overrides for the irl-wotlk chart (chart defaults live in
+# helm-charts/charts/irl-wotlk/values.yaml -- read the header there first).
+#
+# Required: without this the fullname helper renders "wotlk-irl-wotlk".
+fullnameOverride: wotlk
+
+image:
+  # Output of scripts/wotlk-build-images.sh (node-local, no registry).
+  tag: "pb-413bea6-b949b50"
+
+realm:
+  name: "Infinite Room"
+  address: "100.86.213.22"       # homelab Tailscale IP; what clients are told to connect to
+  localAddress: "100.86.213.22"
+
+worldserver:
+  bots:
+    min: 1600
+    max: 2000
+  resources:
+    requests:
+      memory: "10Gi"
+      cpu: "4"
+    limits:
+      memory: "16Gi"
+
+mysql:
+  existingSecret: wotlk-secrets
+  existingClaim: wotlk-db-pvc
+
+clientData:
+  existingClaim: wotlk-data-pvc
