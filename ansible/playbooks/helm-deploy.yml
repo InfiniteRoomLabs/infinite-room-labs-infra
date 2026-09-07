@@ -54,6 +54,7 @@
         - karakeep
         - satisfactory
         - palworld
+        - wotlk
       tags: [always]
 
     # ── Add Helm repositories ─────────────────────────────────────
@@ -1195,6 +1196,60 @@
           - "{{ helm_values_path }}/satisfactory/values.yaml"
         wait: false
       tags: [phase5, satisfactory]
+
+    # ── WotLK / AzerothCore + Playerbots (dedicated game server) ──
+    # IRL chart (irl-wotlk). Requires pv-wotlk-db + pv-wotlk-data (k3s.yml),
+    # the chowned wotlk-db (999) / wotlk-data (1000) datasets (zfs.yml), the
+    # wotlk-secrets Secret (bw-sync: item wotlk-mysql-root-password -> key
+    # MYSQL_ROOT_PASSWORD) and images imported into k3s containerd by
+    # scripts/wotlk-build-images.sh. Tailnet-only on purpose: NO nftables
+    # entries and NO LAN NetworkPolicy (ADR 0005 minus the two LAN layers).
+    - name: "Phase 5: Create WotLK PVCs"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ item.name }}"
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            volumeName: "{{ item.pv }}"
+            resources:
+              requests:
+                storage: "{{ item.size }}"
+      loop:
+        - { name: wotlk-db-pvc, pv: pv-wotlk-db, size: "20Gi" }
+        - { name: wotlk-data-pvc, pv: pv-wotlk-data, size: "30Gi" }
+      tags: [phase5, wotlk]
+
+    - name: "Phase 5: Upload WotLK values"
+      ansible.builtin.copy:
+        src: ../helm/wotlk/values.yaml
+        dest: "{{ helm_values_path }}/wotlk/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase5, wotlk]
+
+    # wait: false on purpose -- first boot pulls ~15Gi of client data and
+    # imports the world DB inside initContainers, behind a 60-minute
+    # startupProbe. Watch it instead:
+    #   kubectl -n irl logs -f deploy/wotlk-worldserver -c client-data
+    - name: "Phase 5: Deploy WotLK (irl-wotlk chart)"
+      kubernetes.core.helm:
+        name: wotlk
+        chart_ref: irl/irl-wotlk
+        chart_version: "0.1.0"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/wotlk/values.yaml"
+        wait: false
+      tags: [phase5, wotlk]
 
     # ── Palworld (dedicated game server) ──────────────────────────
     # IRL chart (irl-palworld). Requires pv-palworld-data (k3s.yml), the
