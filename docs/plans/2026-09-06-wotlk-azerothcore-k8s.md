@@ -33,6 +33,17 @@ Skipped on purpose: Wrath Unbound (no longer in dads-mmo-lab), MetalLB/LoadBalan
 - `scripts/wotlk-build-images.sh`, `scripts/wotlk-console.sh`, `docker/ac-wotlk-worldserver/Dockerfile`, `scripts/bw-sync-config.yaml`
 - `ansible/docs/runbooks/wotlk-down.md`
 
+## Client (laptop)
+
+ChromieCraft's 3.3.5a client bundle, run through Steam as a non-Steam game with GE-Proton (installed via ProtonUp-Qt), set in the shortcut's Properties > Compatibility. `Data/enUS/realmlist.wtf` and `WTF/Config.wtf` point at `wow.lab.infiniteroomlabs.cloud:30724`; `Config.wtf` also sets windowed/maximized mode and skips the intro movie. Verified in-world 2026-09-07.
+
+Lessons from the first launch, so nobody repeats them:
+
+- **Never put a wine/Proton prefix inside the game directory.** The client walks its own folder tree at startup; a prefix's `drive_c/users/<you>` symlinks lead back into `$HOME`, so the walk crawled the whole home directory (every `node_modules`) and the window sat grey and "not responding" for minutes. Symptom in a stack sample: main thread stuck in `NtQueryDirectoryFile` / `NtOpenFile`. Prefixes live in `~/Games/.wine-prefixes/`.
+- `SET gxApi "OpenGL"` is not supported by this build ("Failed to find a suitable display device"). D3D9 via DXVK is fine.
+- System wine on this laptop cannot get `wine32:i386` because the Sury PHP repo's newer `libgd3:amd64` blocks Ubuntu's `libgd3:i386`. GE-Proton bundles its own 32-bit wine, which is why Steam is the runner here.
+- Steam Overlay off and `PROTON_USE_WINED3D=1` were tried during diagnosis; neither was the cause and neither is required.
+
 ## Open questions
 
 - Whether the k3s image GC ever evicts the imported images under disk pressure in practice; the tarball fallback covers a restart but not a GC pass followed by a pod reschedule without restart. If it bites, the fix is the Gitea OCI registry (`docs/plans/2026-07-21-gitea-registry-forgejo-migration.md`).
