@@ -1242,7 +1242,7 @@
       kubernetes.core.helm:
         name: wotlk
         chart_ref: irl/irl-wotlk
-        chart_version: "0.1.0"
+        chart_version: "0.1.1"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
