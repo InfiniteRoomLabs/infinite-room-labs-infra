@@ -25,14 +25,16 @@ The node/address list is derived from `ansible/inventory/`:
 | Deny-set member        | Inventory source                                        |
 |------------------------|---------------------------------------------------------|
 | Node addresses (/32)   | each host's `ansible_host` (`hosts.ini`)                |
-| Kubernetes API endpoint| `irl_k3s_server_url` (host + port)                      |
+| Kubernetes API endpoint| `irl_k3s_server_url` (host + port, `group_vars/homelab`) |
 | LAN CIDR               | `irl_nfs_allowed_subnets[].cidr` (RFC1918 entry)        |
 | Tailnet CIDR           | `irl_nfs_allowed_subnets[].cidr` (`100.64.0.0/10` entry)|
 | Control-plane ports    | `6443` from the API URL + kubelet `10250`               |
 
 Primary source is `ansible-inventory --list` (fully resolves group/host vars); if that is unavailable or fails (e.g. no vault password to decrypt `group_vars/all/vault.yml`), it falls back to `grep` over `hosts.ini` + `yq` over `group_vars/**/*.yml`, skipping Ansible-Vault-encrypted files.
 
-**WAN / external node addresses are not declared in the inventory.** The homelab's public IP and the DigitalOcean droplet's public IP live in Terraform / cloud state, not Ansible. Supply them via `--extra-deny` (comma-separated). When omitted, the snippet emits a clearly-marked `TODO` block instead.
+**WAN / external node addresses are not declared in the inventory.** The homelab's public IP lives in cloud/router state, not Ansible; the same applies to any future node with a public address. Supply them via `--extra-deny` (comma-separated). When omitted, the snippet emits a clearly-marked `TODO` block instead.
+
+The cluster is single-node, so the generated set currently fences one node address and one API endpoint. It grows automatically as nodes are added to the inventory -- nothing here needs editing when the KVM/libvirt VM agents join.
 
 ## Usage
 

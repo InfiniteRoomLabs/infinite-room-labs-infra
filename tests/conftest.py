@@ -10,7 +10,6 @@ from kubernetes import client, config
 
 # Constants
 HOMELAB_TAILSCALE_IP = "100.86.213.22"
-DO_TAILSCALE_IP = "100.102.210.70"
 COREDNS_IP = HOMELAB_TAILSCALE_IP
 NAMESPACE = "irl"
 

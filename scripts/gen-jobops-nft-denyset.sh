@@ -27,8 +27,10 @@ set -euo pipefail
 # to the calling chain and follow the existing accept path).
 #
 # The node/address list is GENERATED from the Ansible inventory, never hardcoded:
-# it reads ansible_host (node addresses), irl_k3s_server_url (API endpoint), and
-# irl_nfs_allowed_subnets[].cidr (LAN + tailnet CIDRs). WAN/external node
+# it reads ansible_host (node addresses), irl_k3s_server_url (API endpoint, in
+# group_vars/homelab), and irl_nfs_allowed_subnets[].cidr (LAN + tailnet CIDRs).
+# The cluster is single-node today, so the set is one node and one API endpoint;
+# it grows on its own as nodes are added to the inventory. WAN/external node
 # addresses are NOT declared in the inventory -- supply them via --extra-deny.
 #
 # The emitted snippet is NOT self-applied. Wire it into

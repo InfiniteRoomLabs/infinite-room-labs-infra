@@ -1,4 +1,7 @@
-"""Cluster-level smoke tests: nodes, namespace, pod health."""
+"""Cluster-level smoke tests: nodes, namespace, pod health.
+
+Single-node topology -- see
+docs/plans/2026-08-27-k3s-to-vms-migration-design.md."""
 
 import pytest
 from conftest import NAMESPACE
@@ -13,12 +16,12 @@ class TestCluster:
         ready = next(c for c in homelab.status.conditions if c.type == "Ready")
         assert ready.status == "True", f"Homelab node not Ready: {ready.message}"
 
-    def test_do_node_ready(self, k8s):
-        nodes = k8s.list_node().items
-        do_node = next((n for n in nodes if n.metadata.name == "do-k3s-agent-01"), None)
-        assert do_node is not None, "DO node 'do-k3s-agent-01' not found"
-        ready = next(c for c in do_node.status.conditions if c.type == "Ready")
-        assert ready.status == "True", f"DO node not Ready: {ready.message}"
+    def test_no_unexpected_nodes(self, k8s):
+        """The cluster is single-node. A second node showing up means either a
+        VM agent joined (update this test and the label taxonomy) or something
+        joined that should not have."""
+        names = sorted(n.metadata.name for n in k8s.list_node().items)
+        assert names == ["home"], f"expected a single node 'home', found {names}"
 
     def test_namespace_active(self, k8s):
         ns = k8s.read_namespace(NAMESPACE)

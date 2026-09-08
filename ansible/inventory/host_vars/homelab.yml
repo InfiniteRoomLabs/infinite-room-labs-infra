@@ -48,6 +48,19 @@ irl_ollama_models:
 # and k3s workloads untouched. vms.yml asserts against this.
 irl_vm_ram_budget_gb: 12
 
+# Administrative cap on the SUM of DECLARED qcow2 virtual sizes in irl_vms.
+# This is NOT a measure of free space on main/vms and must not be read as one:
+#   - qcow2 disks are sparse, so declared virtual size is an upper bound that
+#     allocation only approaches over the VM's life
+#   - orphan disks, retained gold master image versions, and seed ISOs consume
+#     the same dataset but are invisible to this number
+#   - ZFS snapshots pin freed blocks and are likewise invisible
+# The main/vms quota is 300G and images plus seeds need headroom inside it, so
+# this cap sits below the quota on purpose. vms.yml asserts against it, and
+# separately emits an advisory (non-gating) warning when real pool free space
+# is under the virtual size of the VMs a run would create.
+irl_vm_virtual_disk_budget_gb: 250
+
 # Declarative VM inventory. Adding an entry provisions it on the next
 # vms.yml run; removing one does NOT delete the VM (manual teardown).
 # Optional per-VM key `image:` pins a specific gold master version

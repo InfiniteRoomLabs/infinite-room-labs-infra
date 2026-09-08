@@ -18,7 +18,6 @@ Run `terragrunt plan` for a leaf module under `terraform/environments/`.
 | global | dockerhub | repos | `global/dockerhub/repos/` |
 | global | tfc | workspaces | `global/tfc/workspaces/` |
 | homelab | cloudflare | dns-records | `homelab/cloudflare/dns-records/` |
-| homelab | digitalocean | k3s-agent | `homelab/digitalocean/k3s-agent/` |
 | homelab | tailscale | acl | `homelab/tailscale/acl/` |
 | homelab | tailscale | split-dns | `homelab/tailscale/split-dns/` |
 | prod | cloudflare | dns-records | `prod/cloudflare/dns-records/` |

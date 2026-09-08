@@ -21,6 +21,8 @@ usage      = "3.3.0"
 # Non-secret environment only. Anything sensitive lives in fnox, not here.
 [env]
 HOMELAB_TAILSCALE_IP = "100.86.213.22"
+# SSH key fingerprint the do-droplet module injects. Retained capability:
+# no droplet is declared today (the k3s agent node was retired).
 DO_SSH_FINGERPRINT   = "72:f4:34:64:4f:2b:39:5a:56:d4:e5:0a:65:91:d3:31"
 IRL_SSH_PUBKEY       = "{{ exec(command='cat ~/.ssh/id_ed25519.pub') }}"
 TAILSCALE_TAILNET    = "wes.gilleland@gmail.com"

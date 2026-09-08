@@ -19,7 +19,7 @@ task validate
 - `task` CLI (`~/.local/bin/task`)
 - `uv` for Python test runner
 - `kubectl` configured for homelab cluster
-- SSH access to `homelab-ts` and `do-k3s` (via `~/.ssh/config`)
+- SSH access to `homelab-ts` (via `~/.ssh/config`)
 - Goss installed on remote nodes (`task goss:install`)
 
 ## Test Layers
@@ -31,12 +31,12 @@ Runs on each node via SSH. Validates OS-level config.
 | Node | What's Checked |
 |------|----------------|
 | homelab | SSH hardening, kernel params, k3s server, ZFS pool, Caddy, flannel interface |
-| do-k3s-agent-01 | SSH hardening, kernel params, k3s agent, Tailscale, flannel interface |
+
+The cluster is single-node, so this is the only Goss target today.
 
 ```bash
 task goss:homelab       # Just homelab
-task goss:digitalocean  # Just DO node
-task goss               # Both
+task goss               # All nodes (currently just homelab)
 ```
 
 ### Layer 2: Service Tests (pytest)
@@ -50,14 +50,14 @@ Runs from the laptop. 93 tests across 7 modules.
 | `test_caddy.py` | `acceptance` | HTTPS endpoints via Caddy reverse proxy |
 | `test_k8s_resources.py` | `acceptance`, `compliance` | Helm releases, PVs, secrets, NetworkPolicies |
 | `test_services.py` | `acceptance` | Per-service deep checks (PG databases, Vault, Ollama) |
-| `test_networking.py` | `networking`, `integration` | Cross-node pod connectivity via flannel |
+| `test_networking.py` | `networking`, `integration` | Flannel overlay bound to the tailnet (cross-node cases return when a second node joins) |
 | `test_node_labels.py` | `compliance` | IRL label taxonomy, scheduling compliance |
 
 ```bash
 uv run pytest -v -m smoke          # Just smoke
 uv run pytest -v -m acceptance     # Acceptance tests
 uv run pytest -v -m compliance     # Security/label compliance
-uv run pytest -v -m networking     # Cross-node (slow)
+uv run pytest -v -m networking     # Overlay networking (slow)
 uv run pytest -v                   # Everything
 ```
 
