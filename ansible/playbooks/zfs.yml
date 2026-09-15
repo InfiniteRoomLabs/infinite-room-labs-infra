@@ -1,8 +1,12 @@
 ---
 # playbooks/zfs.yml
 # ==================
-# Creates ZFS datasets for service data, configures atime=off,
-# schedules scrubs, and sets up sanoid for automated snapshots.
+# Creates ZFS datasets for service data, configures atime=off and
+# dedup=off, schedules scrubs, and sets up sanoid for automated snapshots.
+#
+# Pool `main` had its feature flags upgraded on 2026-09-14 (raidz_expansion
+# and friends). It now requires OpenZFS >= 2.3 to import; see
+# docs/runbooks/drive-failure.md.
 #
 # IMPORTANT: This playbook does NOT touch existing data or datasets.
 # It only creates new datasets and configures pool-level properties.
@@ -33,12 +37,17 @@
       changed_when: true
 
     # ── Pool-level optimizations ───────────────────────────────────
-    - name: Disable atime on ZFS pool (reduces unnecessary writes)
+    # dedup=off is asserted, not assumed: the pool ran with dedup=on
+    # (inherited by every dataset) until 2026-09-14, at a 1.02x ratio for
+    # an 85M-entry, 55G table that could not fit the 8G ARC. Children
+    # inherit, so setting it on the root dataset covers new datasets too.
+    - name: Set pool-level dataset properties (atime off, dedup off)
       community.general.zfs:
         name: "{{ irl_zfs_pool }}"
         state: present
         extra_zfs_properties:
           atime: "off"
+          dedup: "off"
 
     # ── Create service datasets ────────────────────────────────────
     - name: Create ZFS datasets for services
