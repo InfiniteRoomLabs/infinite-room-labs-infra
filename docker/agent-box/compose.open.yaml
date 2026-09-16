@@ -1,0 +1,25 @@
+# docker/agent-box/compose.open.yaml
+# Opt-in overlay: run the box with NO egress firewall and no NET_* caps.
+# For debugging network problems only; the default stack is default-deny.
+#
+#   docker compose -f compose.yaml -f compose.open.yaml run --rm box
+#   ./agent-box.sh compose --open run --rm box
+#   COMPOSE_FILE=compose.yaml:compose.open.yaml   (in .env, to make it sticky)
+#
+# `!reset` clears the inherited list instead of appending to it. `extends`
+# is resolved per file before overlays merge, so every service that extends
+# `box` in the base has to be listed here too; the anchor keeps that to one
+# definition.
+
+x-open: &open
+  cap_add: !reset []
+  environment:
+    AGENT_BOX_FIREWALL: "0"
+
+services:
+  box:
+    <<: *open
+  claude:
+    <<: *open
+  doctor:
+    <<: *open

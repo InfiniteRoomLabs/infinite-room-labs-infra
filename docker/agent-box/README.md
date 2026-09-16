@@ -25,6 +25,10 @@ cd docker/agent-box
 ./agent-box.sh claude                   # or go straight to Claude Code
 ```
 
+With [Task](https://taskfile.dev) installed the same commands are `task build`,
+`task shell`, `task doctor`, `task run -- terraform version` (see `Taskfile.yml`).
+Plain `docker compose run --rm box` works as well; see "Compose stack" below.
+
 `doctor` is the acceptance test. On a fresh volume it WARNs on every
 one-time login (Claude, gh, tea, bw, fnox config) and tells you the command
 for each. FAIL means the image or the run flags are wrong.
@@ -51,18 +55,41 @@ Three invariants keep this maintainable:
    touching the host: delete the ServiceAccount, remove the key from
    `authorized_keys`, or `docker volume rm irl-agent-box-home` to wipe all of it.
 3. **The workspace is the only shared surface.** Whatever Claude edits under
-   `/work` is on your disk immediately, exactly as with a plain checkout.
+   `/work` is on your disk immediately, exactly as with a plain checkout. The
+   two mounts are declared once, in `compose.yaml`.
+
+## Compose stack
+
+How the box runs is declared in compose files, not assembled in bash:
+
+| File | Role |
+|------|------|
+| `compose.yaml` | Base. One `x-box-common` anchor (image, mounts, caps, env, working dir) shared by three services: `box` (bash or any command), `claude`, `doctor`. `claude` and `doctor` `extends: box` and change only `command`. |
+| `compose.override.yaml` | Git-ignored, yours. Auto-merged by compose when you run it directly; the wrapper adds it explicitly. Put private knobs here (workspace path, Gitea host, timezone). |
+| `compose.open.yaml` | Opt-in overlay: `cap_add: !reset []` and firewall off. `./agent-box.sh compose --open run --rm box`. |
+| `compose.ci.yaml` | Opt-in overlay: no workspace bind, no TTY, throwaway home volume. For a future CI lane. |
+| `.env.example` | The interpolation variables, documented. Copy to `.env` only if you bypass the wrapper. |
+| `Taskfile.yml` | Short names (`task doctor`) that call the wrapper. Optional. |
+
+What compose can do for you here, and what it can't: later files merge over
+earlier ones (scalars replace, lists append, `!reset` clears a list); services
+inherit with `extends`; anchors share structure; `${VAR:-default}` is the only
+conditional. There are no loops or if-statements, so a variant is a file or a
+profile, never a flag. Set `COMPOSE_FILE=compose.yaml:compose.open.yaml` in
+`.env` to make an overlay sticky for a checkout.
+
+Always `run --rm`, never `up`: the box is a throwaway container over a
+persistent volume.
 
 ## Files
 
 | Path | Runs on | Purpose |
 |------|---------|---------|
-| `agent-box.sh` | host | The entry point. Subcommands: `build`, `shell`, `claude`, `run`, `doctor`, `identity`, `kubeconfig`, `config`, `help`. |
+| `agent-box.sh` | host | The entry point. `build`, `shell`, `claude`, `run`, `doctor`, `identity`, `kubeconfig`, `compose`, `config`, `help`. Derives the repo-sourced values, then hands off to `docker compose`. |
 | `lib/log.sh` | host | `log_info`/`log_warn`/`log_error`/`die`, stderr only, colors when a TTY. |
-| `lib/paths.sh` | host | Git Bash (MSYS) path conversion for `-v`, `MSYS_NO_PATHCONV`, repo root lookup. |
-| `lib/config.sh` | host | Knobs with env > `~/.config/agent-box/env` > default precedence. |
-| `lib/docker.sh` | host | Daemon check, image/volume helpers, `winpty` shim for interactive runs. |
-| `lib/mounts.sh` | host | Builds the `docker run` argument list. The two mounts live here and nowhere else. |
+| `lib/paths.sh` | host | Git Bash (MSYS) path conversion, repo root lookup, `abs_path`. |
+| `lib/config.sh` | host | Knobs with env > `~/.config/agent-box/env` > default precedence, plus the derived `AGENT_BOX_REPO_DIR`. Exported names are the ones `compose.yaml` interpolates. |
+| `lib/docker.sh` | host | Daemon check, image helper, `dockr` (path-conversion-safe docker), `winpty` shim. |
 | `image/Dockerfile` | build | `debian:trixie-slim`, user `agent` (uid 1000), every pin as an `ARG` or from the repo's `mise.toml`. |
 | `image/entrypoint.sh` | container | Firewall, home skeleton, SSH identity + agent, then `exec`. |
 | `image/init-firewall.sh` | container (sudo) | Default-deny egress from `allowlist.txt`. The only sudo the user has. |
@@ -74,7 +101,9 @@ Three invariants keep this maintainable:
 
 Precedence is environment variable, then `~/.config/agent-box/env` (a plain
 `KEY=value` bash file), then the default. `./agent-box.sh config` prints the
-effective values.
+effective values followed by the rendered compose configuration. The same
+names are what `compose.yaml` interpolates, so a knob set for the wrapper is
+the knob compose sees. (Bypassing the wrapper, compose reads `.env` instead.)
 
 | Knob | Default | Meaning |
 |------|---------|---------|
@@ -129,7 +158,8 @@ Because names resolve once at start, a CDN that rotates addresses can fail
 mid-session; restarting the box re-resolves. Ports on an allowed destination
 are not restricted.
 
-`AGENT_BOX_FIREWALL=0 ./agent-box.sh shell` runs open, for debugging only.
+`./agent-box.sh compose --open run --rm box` runs open, for debugging only
+(the `compose.open.yaml` overlay drops the caps and sets `AGENT_BOX_FIREWALL=0`).
 
 ## Maintaining
 
@@ -140,8 +170,11 @@ are not restricted.
 - **Add a tool**: mise-installable, add it to `mise.toml`; Debian package,
   add it to the `apt-get install` list; otherwise a pinned download like
   `tea`. Keep it out of `/home/agent`.
-- **Lint** (shellcheck is in the image, so the host needs nothing):
+- **Lint** (shellcheck is in the image, so the host needs nothing): `task lint`, or
   `./agent-box.sh run bash -c 'cd docker/agent-box && shellcheck -x -P SCRIPTDIR agent-box.sh lib/*.sh image/*.sh'`
+- **Add a variant** (another entry command, a different mount set): a new
+  service that `extends: box` in `compose.yaml`, or a new overlay file for
+  anything that changes caps or mounts. Then a one-line task in `Taskfile.yml`.
 - **Wipe and start over**: `docker volume rm irl-agent-box-home` (all logins
   and the SSH key go with it; revoke the k8s ServiceAccount too).
 
@@ -150,7 +183,7 @@ are not restricted.
 | Symptom | Cause / fix |
 |---------|-------------|
 | `docker daemon is not reachable` | Start Docker Desktop. |
-| `firewall setup failed` at start | Image run without `--cap-add NET_ADMIN --cap-add NET_RAW`; use the wrapper, or `AGENT_BOX_FIREWALL=0`. |
+| `firewall setup failed` at start | Image run without `NET_ADMIN`/`NET_RAW` (compose.yaml adds them); use the wrapper or compose, or the `--open` overlay. |
 | `self-test failed: api.anthropic.com is NOT reachable` | DNS inside the container is broken, or the host has no network. Check `docker run --rm debian:trixie-slim getent hosts api.anthropic.com`. |
 | A tool download fails inside the box | Its host is not in `allowlist.txt`. Add it, rebuild. |
 | `mise ERROR failed to parse template ... id_ed25519.pub` | The repo's `mise.toml` reads the box's public key; the entrypoint creates it on first start. If you see this, the container was started bypassing the entrypoint. |

@@ -6,13 +6,18 @@
 #   ~/.config/agent-box/env (a sourced bash file of KEY=value lines)
 #   built-in default        (lowest)
 #
-# Every knob the wrapper understands is declared once in AGENT_BOX_KNOBS as
-#   "NAME|default|description"
-# so the precedence loop and `agent-box.sh config` stay in sync. Defaults
-# are evaluated with `eval`, so they may reference other variables or run
-# a command substitution. They must not contain a literal pipe character.
+# Every knob is declared once in AGENT_BOX_KNOBS as "NAME|default|description"
+# so the precedence loop and `agent-box.sh config` stay in sync. Defaults are
+# evaluated with `eval`, so they may reference other variables or run a
+# command substitution; they must not contain a literal pipe character.
 #
-# Requires AGENT_BOX_REPO (the repo root) to be set before load_config.
+# The knobs are exported, and compose.yaml interpolates the same names, so
+# this file is the single place precedence is decided for both the wrapper
+# and compose. (Direct `docker compose` use reads .env instead; see
+# .env.example.)
+#
+# Requires AGENT_BOX_REPO (the repo root) to be set before load_config, and
+# lib/paths.sh to be sourced (abs_path, host_to_docker_path).
 # shellcheck shell=bash
 
 AGENT_BOX_KNOBS=(
@@ -40,7 +45,8 @@ _knob_fields() {
   _k_desc="${rest#*|}"
 }
 
-# load_config: apply precedence for every knob. Safe to call once.
+# load_config: apply precedence for every knob, then compute the derived
+# values compose needs. Safe to call once.
 load_config() {
   local entry preset=() saved=() n cfg
 
@@ -74,6 +80,28 @@ load_config() {
       eval "export $_k_name=\"$_k_default\""
     fi
   done
+
+  # 4. Derived: where the infra repo lands inside the box. /work/<relative
+  #    path> when the repo is under the workspace, else just /work.
+  local repo_abs ws_abs
+  repo_abs="$(abs_path "$AGENT_BOX_REPO")"
+  ws_abs="$(abs_path "$AGENT_BOX_WORKSPACE")"
+  if [[ -n "$repo_abs" && -n "$ws_abs" && "$repo_abs" == "$ws_abs"/* ]]; then
+    export AGENT_BOX_REPO_DIR="/work/${repo_abs#"$ws_abs"/}"
+  else
+    export AGENT_BOX_REPO_DIR="/work"
+  fi
+  # Keep the shell-form path for host-side checks; compose gets the
+  # docker-form one (Windows style under Git Bash) via export_derived_for_compose.
+  export AGENT_BOX_WORKSPACE_HOST="$AGENT_BOX_WORKSPACE"
+}
+
+# export_derived_for_compose: last step before any `docker compose` call.
+# Compose interpolates the knob names directly; the only translation is the
+# workspace path, which Docker Desktop on Windows wants in Windows form.
+export_derived_for_compose() {
+  AGENT_BOX_WORKSPACE="$(host_to_docker_path "$AGENT_BOX_WORKSPACE_HOST")"
+  export AGENT_BOX_WORKSPACE
 }
 
 # print_config: every knob, its effective value, and its description.
@@ -84,4 +112,5 @@ print_config() {
     _knob_fields "$entry"
     printf '%-24s %-36s %s\n' "$_k_name" "${!_k_name}" "$_k_desc"
   done
+  printf '%-24s %-36s %s\n' "AGENT_BOX_REPO_DIR" "$AGENT_BOX_REPO_DIR" "(derived) working dir inside the box"
 }
