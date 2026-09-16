@@ -32,7 +32,12 @@ ver() {
 section "Identity and layout"
 if [[ "$(id -u)" == "0" ]]; then fail "running as root (Claude Code refuses --dangerously-skip-permissions as root)"; else pass "non-root user $(id -un) (uid $(id -u))"; fi
 if [[ -d /work && -w /work ]]; then pass "/work is mounted and writable"; else fail "/work missing or read-only (host wrapper mounts ~/Projects here)"; fi
-if [[ -d "$REPO" ]]; then pass "infra repo present at $REPO"; else warn "infra repo not at $REPO (set AGENT_BOX_REPO_DIR or clone it under /work)"; fi
+if [[ -d "$REPO" ]]; then
+  pass "infra repo present at $REPO"
+  if git -C "$REPO" rev-parse --show-toplevel >/dev/null 2>&1; then pass "git works on the bind-mounted repo (safe.directory set)"; else fail "git refuses $REPO (dubious ownership?); the image should set safe.directory '*'"; fi
+else
+  warn "infra repo not at $REPO (set AGENT_BOX_REPO_DIR or clone it under /work)"
+fi
 if [[ "${CLAUDE_CONFIG_DIR:-}" == "$HOME/.claude" && -w "$HOME/.claude" ]]; then pass "CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR (on the home volume)"; else fail "CLAUDE_CONFIG_DIR not set to a writable $HOME/.claude"; fi
 if mountpoint -q "$HOME" 2>/dev/null || grep -qs " $HOME " /proc/mounts; then pass "$HOME is a mounted volume (state persists)"; else warn "$HOME is not a mount; logins will vanish when the container exits"; fi
 
@@ -53,7 +58,7 @@ if [[ "${DISABLE_AUTOUPDATER:-}" == "1" ]]; then pass "Claude Code autoupdate di
 section "Logins (one-time, persisted in the home volume)"
 if [[ -s "$HOME/.claude/.claude.json" ]] && grep -q '"oauthAccount"' "$HOME/.claude/.claude.json" 2>/dev/null; then pass "Claude Code signed in"; else warn "Claude Code not signed in: run 'claude' once and follow the prompt"; fi
 if gh auth status >/dev/null 2>&1; then pass "gh authenticated"; else warn "gh not authenticated: run 'gh auth login'"; fi
-if tea whoami >/dev/null 2>&1; then pass "tea login works"; else warn "tea has no working login: run 'tea login add'"; fi
+if (cd / && tea whoami >/dev/null 2>&1); then pass "tea login works"; else warn "tea has no working login: run 'tea login add'"; fi
 case "$(bw status 2>/dev/null | jq -r .status 2>/dev/null)" in
   unlocked) pass "Bitwarden CLI unlocked" ;;
   locked)   warn "Bitwarden CLI logged in but locked: run 'bw unlock' and export BW_SESSION to ~/.bw_session (mode 600)" ;;
