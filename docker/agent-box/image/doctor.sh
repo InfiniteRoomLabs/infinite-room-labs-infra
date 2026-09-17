@@ -55,6 +55,18 @@ fi
 if ansible-galaxy collection list 2>/dev/null | grep -qE '^kubernetes\.core'; then pass "ansible collections present ($ANSIBLE_COLLECTIONS_PATH)"; else fail "ansible collections missing (kubernetes.core not found)"; fi
 if [[ "${DISABLE_AUTOUPDATER:-}" == "1" ]]; then pass "Claude Code autoupdate disabled (image pin is authoritative)"; else warn "DISABLE_AUTOUPDATER is not 1; the CLI may drift from the image pin"; fi
 
+section "Volume-scoped extras (agent-box-extras)"
+if command -v ccsm-detect-secrets >/dev/null 2>&1 && command -v ccsm-check-output >/dev/null 2>&1; then
+  pass "ccsm hooks present (the infra repo's PreToolUse/PostToolUse call them)"
+else
+  warn "ccsm not installed: run 'agent-box-extras' (needs the box's key on GitHub)"
+fi
+if [[ -d "$REPO" ]] && (cd "$REPO" && claude mcp get fnox 2>/dev/null | grep -qE "Scope: *Local"); then
+  pass "fnox MCP overridden at local scope for the infra repo"
+else
+  warn "fnox MCP not overridden: .mcp.json points at a laptop path; run 'agent-box-extras'"
+fi
+
 section "Logins (one-time, persisted in the home volume)"
 if [[ -s "$HOME/.claude/.claude.json" ]] && grep -q '"oauthAccount"' "$HOME/.claude/.claude.json" 2>/dev/null; then pass "Claude Code signed in"; else warn "Claude Code not signed in: run 'claude' once and follow the prompt"; fi
 if gh auth status >/dev/null 2>&1; then pass "gh authenticated"; else warn "gh not authenticated: run 'gh auth login'"; fi

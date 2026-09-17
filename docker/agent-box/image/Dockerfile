@@ -135,8 +135,9 @@ COPY starship.toml /etc/agent-box/starship.toml
 # ── Runtime wiring ─────────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/agent-box-entrypoint
 COPY doctor.sh /usr/local/bin/agent-box-doctor
+COPY extras.sh /usr/local/bin/agent-box-extras
 COPY bashrc.sh /etc/agent-box/bashrc.sh
-RUN chmod 0755 /usr/local/bin/agent-box-entrypoint /usr/local/bin/agent-box-doctor \
+RUN chmod 0755 /usr/local/bin/agent-box-entrypoint /usr/local/bin/agent-box-doctor /usr/local/bin/agent-box-extras \
     && echo 'source /etc/agent-box/bashrc.sh' >> /etc/bash.bashrc \
     # Bind-mounted repos under /work are owned by whatever uid the host
     # maps (Docker Desktop: not 1000), and git refuses "dubious ownership"

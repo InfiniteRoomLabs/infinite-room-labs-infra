@@ -64,8 +64,21 @@ Host ${AGENT_BOX_GIT_HOST}
   StrictHostKeyChecking accept-new
 EOF
   fi
+  # GitHub over SSH with the box's key (private org repos, e.g. ccsm).
+  cat <<'EOF'
+Host github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new
+EOF
 } >"$HOME/.ssh/config"
 chmod 600 "$HOME/.ssh/config"
+
+# Volume-scoped tools (agent-box-extras installs into ~/.local) must be on
+# PATH for everything, including Claude Code's hooks, not only interactive
+# shells. So export it here, before the exec.
+export PATH="$HOME/.local/bin:$PATH"
 eval "$(ssh-agent -s)" >/dev/null
 ssh-add -q "$HOME/.ssh/id_ed25519" 2>/dev/null || log "could not load ~/.ssh/id_ed25519 into ssh-agent"
 
