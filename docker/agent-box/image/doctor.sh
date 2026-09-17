@@ -42,7 +42,7 @@ if [[ "${CLAUDE_CONFIG_DIR:-}" == "$HOME/.claude" && -w "$HOME/.claude" ]]; then
 if mountpoint -q "$HOME" 2>/dev/null || grep -qs " $HOME " /proc/mounts; then pass "$HOME is a mounted volume (state persists)"; else warn "$HOME is not a mount; logins will vanish when the container exits"; fi
 
 section "Toolchain"
-for tool in claude mise node uv terraform terragrunt helm kubectl task fnox packer ansible-playbook gh tea bw jq git ssh shellcheck; do
+for tool in claude mise node uv terraform terragrunt helm kubectl task fnox packer ansible-playbook gh tea bw jq git ssh shellcheck starship; do
   if have "$tool"; then pass "$tool  $(ver "$tool" | cut -c1-60)"; else fail "$tool missing from PATH"; fi
 done
 if [[ -d "$REPO" ]]; then

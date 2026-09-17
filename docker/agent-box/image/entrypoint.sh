@@ -28,6 +28,10 @@ fi
 # 2. Home skeleton. Idempotent; the volume persists across containers.
 mkdir -p "$HOME/.ssh" "$HOME/.kube" "$HOME/.config" "$HOME/.claude"
 chmod 700 "$HOME/.ssh"
+# Seed the starship config once; afterwards the volume copy is yours to edit.
+if [[ ! -f "$HOME/.config/starship.toml" && -f /etc/agent-box/starship.toml ]]; then
+  cp /etc/agent-box/starship.toml "$HOME/.config/starship.toml"
+fi
 
 # 3. SSH identity. The box always has its own key (never a copy of a host
 #    key). Created once, on first start; `agent-box.sh identity` prints it

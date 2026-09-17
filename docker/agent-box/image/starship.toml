@@ -1,0 +1,15 @@
+# docker/agent-box/image/starship.toml
+# Default prompt config for the agent box. Seeded to ~/.config/starship.toml
+# on first start (only if absent), so edit the copy in the home volume to
+# taste; this file is the image's baseline.
+#
+# Stock starship, with two changes so a shell in the box is unmistakable:
+# always show user@host (starship hides them outside SSH by default).
+
+[username]
+show_always = true
+format = "[$user]($style)@"
+
+[hostname]
+ssh_only = false
+format = "[$hostname]($style) "

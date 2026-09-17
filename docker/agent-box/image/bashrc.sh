@@ -8,8 +8,14 @@ if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate bash)"
 fi
 
-# Prompt: make it obvious this is the box, and which repo we are in.
-PS1='\[\e[1;35m\][agent-box]\[\e[0m\] \[\e[1;34m\]\w\[\e[0m\]\$ '
+# Prompt: starship (config seeded to ~/.config/starship.toml by the
+# entrypoint; shows user@host so a box shell is unmistakable). Falls back
+# to a plain marker prompt if starship is somehow missing.
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init bash)"
+else
+  PS1='\[\e[1;35m\][agent-box]\[\e[0m\] \[\e[1;34m\]\w\[\e[0m\]\$ '
+fi
 
 # History across containers lives in the home volume.
 export HISTFILE="$HOME/.bash_history" HISTSIZE=50000 HISTFILESIZE=50000

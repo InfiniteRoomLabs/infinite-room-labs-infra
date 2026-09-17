@@ -95,7 +95,8 @@ persistent volume.
 | `image/init-firewall.sh` | container (sudo) | Default-deny egress from `allowlist.txt`. The only sudo the user has. |
 | `image/allowlist.txt` | container | Hostnames, CIDRs, `@github`. One line per destination. |
 | `image/doctor.sh` | container | PASS/WARN/FAIL report of tools, logins, reach, firewall. |
-| `image/bashrc.sh` | container | Prompt, mise activation, history on the volume, `infra` alias. |
+| `image/bashrc.sh` | container | starship prompt, mise activation, history on the volume, `infra` alias, `bw-unlock`/`bw-lock`. |
+| `image/starship.toml` | container | Baseline prompt config (stock starship plus always-on `user@host`). Seeded to `~/.config/starship.toml` on first start; edit the volume copy. |
 
 ## Configuration
 
