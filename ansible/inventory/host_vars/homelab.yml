@@ -1,11 +1,15 @@
 ---
 # Host-specific variables for the homelab server (HP Z600)
 # ========================================================
-# Resource-scaled parameters based on 40GB RAM, 24 CPU threads.
+# Resource-scaled parameters based on 48GB RAM, 24 CPU threads.
 
 # ── Resource budgets ─────────────────────────────────────────────────
-# Total RAM: 40GB. Reserve 4GB for OS + overhead.
-irl_total_ram_gb: 40
+# Total RAM: 48GB (6x 8GB DDR3 ECC RDIMM). The 40GB figure that used to
+# live here reflected one DIMM (CPU0 DIMM2) intermittently failing POST
+# training; all six train reliably since the 2026-09 reboots. If `free -h`
+# ever shows ~39Gi again, that slot is back to being flaky -- see the
+# zraid incident notes. Reserve 4GB for OS + overhead.
+irl_total_ram_gb: 48
 irl_reserved_ram_gb: 4
 irl_zfs_arc_max_gb: 8
 
