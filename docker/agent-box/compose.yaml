@@ -37,7 +37,7 @@ x-box-common: &box-common
     - NET_ADMIN
     - NET_RAW
   environment:
-    AGENT_BOX_FIREWALL: ${AGENT_BOX_FIREWALL:-1}
+    AGENT_BOX_FIREWALL: ${AGENT_BOX_FIREWALL:-1}   # 1 = denylist applied, 0 = no firewall at all
     TZ: ${AGENT_BOX_TZ:-America/New_York}
     AGENT_BOX_REPO_DIR: ${AGENT_BOX_REPO_DIR:-/work}
     AGENT_BOX_SSH_USER: ${AGENT_BOX_SSH_USER:-}

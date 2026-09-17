@@ -1,6 +1,7 @@
 # docker/agent-box/compose.open.yaml
-# Opt-in overlay: run the box with NO egress firewall and no NET_* caps.
-# For debugging network problems only; the default stack is default-deny.
+# Opt-in overlay: run the box with NO firewall at all and no NET_* caps
+# (the default stack applies the denylist, which already allows everything
+# not listed). Useful when a run must not need CAP_NET_ADMIN.
 #
 #   docker compose -f compose.yaml -f compose.open.yaml run --rm box
 #   ./agent-box.sh compose --open run --rm box

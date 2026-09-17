@@ -3,12 +3,14 @@
 A Linux container that runs Claude Code and everything the IaC in this repo
 needs (mise-pinned terraform/terragrunt/packer/helm/kubectl/task/fnox,
 Ansible with the repo's collections, Bitwarden CLI, gh, tea) as a non-root
-user, with its own identity and a default-deny egress firewall. The host
+user, with its own identity and an egress denylist firewall. The host
 only needs Docker and bash.
 
 It follows Anthropic's dev-container guidance (non-root user, pinned CLI with
 autoupdate off, `CLAUDE_CONFIG_DIR` on a named volume, no host secrets
-mounted, optional iptables egress allowlist). Sources: the
+mounted) with one deliberate departure: egress is default-allow with a
+denylist, not an allowlist, because the box is driven interactively and an
+agent that cannot read docs or registries is not much of an agent. Sources: the
 [dev container guide](https://code.claude.com/docs/en/devcontainer),
 [sandbox environments](https://code.claude.com/docs/en/sandbox-environments),
 and the reference `.devcontainer/` in `anthropics/claude-code`.
@@ -98,8 +100,8 @@ persistent volume.
 | `lib/docker.sh` | host | Daemon check, image helper, `dockr` (path-conversion-safe docker), `winpty` shim. |
 | `image/Dockerfile` | build | `debian:trixie-slim`, user `agent` (uid 1000), every pin as an `ARG` or from the repo's `mise.toml`. |
 | `image/entrypoint.sh` | container | Firewall, home skeleton, SSH identity + agent, then `exec`. |
-| `image/init-firewall.sh` | container (sudo) | Default-deny egress from `allowlist.txt`. The only sudo the user has. |
-| `image/allowlist.txt` | container | Hostnames, CIDRs, `@github`. One line per destination. |
+| `image/init-firewall.sh` | container (sudo) | Egress denylist from `denylist.txt` (default allow). The only sudo the user has. |
+| `image/denylist.txt` | container | Hostnames, IPs, CIDRs to block. One line per destination. Ships with cloud metadata endpoints and the `example.com` canary. |
 | `image/doctor.sh` | container | PASS/WARN/FAIL report of tools, logins, reach, firewall, extras. |
 | `image/extras.sh` | container | `agent-box-extras`: volume-scoped installs the image can't bake in. ccsm (private repo, over the box's SSH key) for the infra repo's Claude Code hooks, and a local-scope `fnox` MCP override (the committed `.mcp.json` points at a laptop path). Idempotent; rerun after a volume wipe. |
 | `image/bashrc.sh` | container | starship prompt, mise activation, history on the volume, `infra` alias, `bw-unlock`/`bw-lock`. |
@@ -154,17 +156,23 @@ anything else belongs in your private `~/.config/agent-box/env`.
 
 ## Network policy
 
-`init-firewall.sh` runs at every start (needs `NET_ADMIN`/`NET_RAW`, which
-the wrapper adds). It resolves each hostname in `allowlist.txt` once, adds
-CIDRs as-is, expands `@github` from GitHub's published ranges, then sets
-`OUTPUT DROP` with the allow set as the only exception. It self-tests that
-`api.anthropic.com` answers and `example.com` does not, and refuses to start
-the box otherwise.
+Default allow, denylist. `init-firewall.sh` runs at every start (needs
+`NET_ADMIN`/`NET_RAW`, which the wrapper adds). It resolves each hostname in
+`denylist.txt` once, adds IPs and CIDRs as-is, and inserts one `REJECT` rule
+for that set at the top of `OUTPUT`; everything else is allowed, so the agent
+can read docs, pull from registries, and call APIs without a list to maintain.
+It self-tests that `api.anthropic.com` answers and the `example.com` canary
+does not, and refuses to start the box otherwise.
 
-To allow a new destination, add a line to `allowlist.txt` and rebuild.
-Because names resolve once at start, a CDN that rotates addresses can fail
-mid-session; restarting the box re-resolves. Ports on an allowed destination
-are not restricted.
+The shipped list blocks cloud/instance metadata endpoints (the classic
+credential-theft target) and keeps `example.com` as the canary. To block a
+new destination, add a line and rebuild. Names resolve once at start, so a
+blocked service that rotates addresses can slip through until a restart.
+
+This is a deliberate departure from Anthropic's reference container, whose
+allowlist exists for unattended `--dangerously-skip-permissions` runs. If
+you ever run the box that way, the allowlist version is in git history
+(before 2026-09-17) and drops back in as a replacement `init-firewall.sh`.
 
 `./agent-box.sh compose --open run --rm box` runs open, for debugging only
 (the `compose.open.yaml` overlay drops the caps and sets `AGENT_BOX_FIREWALL=0`).
@@ -193,7 +201,7 @@ are not restricted.
 | `docker daemon is not reachable` | Start Docker Desktop. |
 | `firewall setup failed` at start | Image run without `NET_ADMIN`/`NET_RAW` (compose.yaml adds them); use the wrapper or compose, or the `--open` overlay. |
 | `self-test failed: api.anthropic.com is NOT reachable` | DNS inside the container is broken, or the host has no network. Check `docker run --rm debian:trixie-slim getent hosts api.anthropic.com`. |
-| A tool download fails inside the box | Its host is not in `allowlist.txt`. Add it, rebuild. |
+| A download or API call fails inside the box | Check `denylist.txt` first (default is allow, so it's usually DNS or the host network, not the firewall); `doctor` probes a docs site to tell the two apart. |
 | `mise ERROR failed to parse template ... id_ed25519.pub` | The repo's `mise.toml` reads the box's public key; the entrypoint creates it on first start. If you see this, the container was started bypassing the entrypoint. |
 | Git Bash: `-it` hangs or no prompt | The wrapper adds `winpty` automatically when it sees a mintty TTY; otherwise run from Windows Terminal. |
 | `ssh homelab-ts` fails from inside | Run `identity --authorize-homelab` from the host, and confirm the host's Tailscale is up (the box rides the host's tunnel). |

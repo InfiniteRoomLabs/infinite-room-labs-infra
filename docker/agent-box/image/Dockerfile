@@ -3,8 +3,8 @@
 # The "agent box": a Linux container that runs Claude Code plus the full
 # homelab toolchain (mise-pinned terraform/helm/kubectl/fnox, Ansible, bw,
 # gh, tea) as a non-root user, following Anthropic's dev-container guidance
-# (non-root, pinned CLI, autoupdate off, CLAUDE_CONFIG_DIR on a volume,
-# optional default-deny egress firewall).
+# (non-root, pinned CLI, autoupdate off, CLAUDE_CONFIG_DIR on a volume) plus
+# an egress DENYLIST firewall (default allow; only listed destinations blocked).
 #
 # Build via the host wrapper (it wires the extra build context):
 #   docker/agent-box/agent-box.sh build
@@ -60,7 +60,7 @@ RUN groupadd --gid ${USER_UID} ${USERNAME} \
 
 # ── Firewall script: the only thing the user may sudo ──────────────────
 COPY init-firewall.sh /usr/local/bin/init-firewall.sh
-COPY allowlist.txt /etc/agent-box/allowlist.txt
+COPY denylist.txt /etc/agent-box/denylist.txt
 RUN chmod 0755 /usr/local/bin/init-firewall.sh \
     && echo "${USERNAME} ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/${USERNAME}-firewall \
     && chmod 0440 /etc/sudoers.d/${USERNAME}-firewall

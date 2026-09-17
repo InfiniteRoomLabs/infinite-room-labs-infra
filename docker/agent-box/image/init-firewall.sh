@@ -1,82 +1,44 @@
 #!/usr/bin/env bash
 # docker/agent-box/image/init-firewall.sh
-# Default-deny egress firewall for the agent box, adapted from Anthropic's
-# reference dev container (anthropics/claude-code/.devcontainer/init-firewall.sh).
+# Egress DENYLIST firewall for the agent box.
 #
 # Policy after this runs:
-#   OUTPUT: DROP everything except DNS, loopback, and destinations in the
-#           `agent-box-allow` ipset (built from /etc/agent-box/allowlist.txt).
-#   INPUT:  DROP everything except loopback and replies to our own traffic.
-#   FORWARD: DROP.
+#   OUTPUT: ACCEPT everything except destinations in the `agent-box-deny`
+#           ipset (built from /etc/agent-box/denylist.txt), which are REJECTed.
+#   INPUT / FORWARD: untouched (Docker's defaults; nothing listens anyway).
 #
-# Allowlist format (one entry per line, `#` comments):
-#   example.com        resolve A records now and allow those IPs
-#   10.0.0.0/8         allow a CIDR as-is
-#   @github            expand to GitHub's published web/api/git ranges
+# Denylist format (one entry per line, `#` comments):
+#   example.com        resolve A records now and block those IPs
+#   10.0.0.0/8         block a CIDR as-is
+#   1.2.3.4            block an address
 #
-# Limits worth knowing: names are resolved ONCE at container start, so a CDN
-# that rotates addresses mid-session can start failing (restart the box).
-# Nothing here restricts ports on an allowed destination.
+# Limits worth knowing: names are resolved ONCE at container start, so a
+# blocked service that rotates addresses can slip through later (restart the
+# box to re-resolve). IPv6 entries are accepted in the file but only IPv4 is
+# enforced (the container has no IPv6 route by default).
 #
 # Needs CAP_NET_ADMIN + CAP_NET_RAW and runs via the single sudoers rule the
-# image grants the `agent` user.
+# image grants the `agent` user. Nothing is flushed: the script only adds
+# its own set and one OUTPUT rule, so Docker's DNS NAT rules are untouched.
 set -euo pipefail
 IFS=$'\n\t'
 
-ALLOWLIST="${AGENT_BOX_ALLOWLIST:-/etc/agent-box/allowlist.txt}"
-SET_NAME="agent-box-allow"
+DENYLIST="${AGENT_BOX_DENYLIST:-/etc/agent-box/denylist.txt}"
+SET_NAME="agent-box-deny"
+CANARY="${AGENT_BOX_FIREWALL_CANARY:-example.com}"
 
 log() { printf 'init-firewall: %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
-is_ipv4()  { [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; }
-is_cidr()  { [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$ ]]; }
+is_ipv4() { [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; }
+is_cidr() { [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$ ]]; }
+is_ipv6() { [[ "$1" == *:* ]]; }
 
-[[ -r "$ALLOWLIST" ]] || die "allowlist not readable: $ALLOWLIST"
+[[ -r "$DENYLIST" ]] || die "denylist not readable: $DENYLIST"
 
-# 1. Remember Docker's embedded-DNS NAT rules before flushing; we put them back.
-docker_dns_rules="$(iptables-save -t nat 2>/dev/null | grep '127\.0\.0\.11' || true)"
-
-iptables -F; iptables -X
-iptables -t nat -F; iptables -t nat -X
-iptables -t mangle -F; iptables -t mangle -X
+# 1. Fresh set (idempotent on re-runs inside the same container).
 ipset destroy "$SET_NAME" 2>/dev/null || true
-
-# These rules only exist on user-defined networks (compose), not the default
-# bridge, so this path is exercised by `docker compose run`, not `docker run`.
-if [[ -n "$docker_dns_rules" ]]; then
-  iptables -t nat -N DOCKER_OUTPUT 2>/dev/null || true
-  iptables -t nat -N DOCKER_POSTROUTING 2>/dev/null || true
-  while IFS= read -r rule; do
-    [[ -n "$rule" ]] || continue
-    # Split on spaces explicitly: the script-wide IFS excludes space.
-    IFS=' ' read -r -a parts <<<"$rule"
-    iptables -t nat "${parts[@]}"
-  done <<<"$docker_dns_rules"
-fi
-
-# 2. Always-allowed plumbing: DNS, loopback, replies.
-iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
-iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
-iptables -A INPUT  -p udp --sport 53 -j ACCEPT
-iptables -A INPUT  -i lo -j ACCEPT
-iptables -A OUTPUT -o lo -j ACCEPT
-iptables -A INPUT  -m state --state ESTABLISHED,RELATED -j ACCEPT
-iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-# 3. Build the allow set.
 ipset create "$SET_NAME" hash:net
-
-add_github_ranges() {
-  local meta cidr
-  meta="$(curl -fsS --max-time 20 https://api.github.com/meta)" || die "could not fetch GitHub IP ranges"
-  echo "$meta" | jq -e '.web and .api and .git' >/dev/null || die "GitHub meta response missing fields"
-  while read -r cidr; do
-    is_cidr "$cidr" || die "unexpected CIDR from GitHub meta: $cidr"
-    ipset add -exist "$SET_NAME" "$cidr"
-  done < <(echo "$meta" | jq -r '(.web + .api + .git)[]' | aggregate -q)
-  log "added GitHub ranges"
-}
 
 add_domain() {
   local domain="$1" ip found=0
@@ -86,51 +48,46 @@ add_domain() {
     ipset add -exist "$SET_NAME" "$ip"
     found=1
   done < <(dig +short +time=5 +tries=2 A "$domain" | grep -E '^[0-9.]+$' || true)
-  if [[ "$found" == 0 ]]; then
-    log "WARN: $domain resolved to nothing; not allowed"
-  fi
+  [[ "$found" == 1 ]] || log "WARN: $domain resolved to nothing; not blocked"
 }
 
 while IFS= read -r line; do
   line="${line%%#*}"; line="${line//[[:space:]]/}"
   [[ -n "$line" ]] || continue
-  case "$line" in
-    @github)      add_github_ranges ;;
-    @*)           die "unknown macro in allowlist: $line" ;;
-    */*)          is_cidr "$line" || die "bad CIDR: $line"; ipset add -exist "$SET_NAME" "$line" ;;
-    *)            if is_ipv4 "$line"; then ipset add -exist "$SET_NAME" "$line"; else add_domain "$line"; fi ;;
-  esac
-done <"$ALLOWLIST"
+  if is_ipv6 "$line"; then
+    continue                       # accepted in the file, not enforced (no v6 route)
+  elif is_cidr "$line"; then
+    ipset add -exist "$SET_NAME" "$line"
+  elif is_ipv4 "$line"; then
+    ipset add -exist "$SET_NAME" "$line"
+  else
+    add_domain "$line"
+  fi
+done <"$DENYLIST"
 
-# 4. The host side of Docker's bridge (default route) stays reachable so
-#    Docker DNS and host-published ports keep working.
-host_ip="$(ip route | awk '/default/ {print $3; exit}')"
-[[ -n "$host_ip" ]] || die "could not detect the container's default gateway"
-host_net="${host_ip%.*}.0/24"
-iptables -A INPUT  -s "$host_net" -j ACCEPT
-iptables -A OUTPUT -d "$host_net" -j ACCEPT
+# 2. One rule, at the top of OUTPUT: reject anything headed for the set.
+iptables -D OUTPUT -m set --match-set "$SET_NAME" dst -j REJECT --reject-with icmp-admin-prohibited 2>/dev/null || true
+iptables -I OUTPUT 1 -m set --match-set "$SET_NAME" dst -j REJECT --reject-with icmp-admin-prohibited
+iptables -P OUTPUT ACCEPT
 
-# 5. Default deny, then the allow set.
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT DROP
-iptables -A OUTPUT -m set --match-set "$SET_NAME" dst -j ACCEPT
-iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
+entries="$(ipset list "$SET_NAME" | grep -c '^[0-9]' || true)"
 
-# 6. Self-test: an allowed host answers, an unlisted one does not.
-if curl -fsS --max-time 8 -o /dev/null -w '%{http_code}' https://api.anthropic.com/ >/dev/null 2>&1 \
-   || curl -sS --max-time 8 -o /dev/null https://api.anthropic.com/ 2>/dev/null; then
-  log "verified: api.anthropic.com reachable"
+# 3. Self-test: the world is reachable, the canary is not.
+if curl -sS --max-time 8 -o /dev/null https://api.anthropic.com/ 2>/dev/null; then
+  log "verified: api.anthropic.com reachable (default allow)"
 else
-  die "self-test failed: api.anthropic.com is NOT reachable through the allow set"
+  die "self-test failed: api.anthropic.com unreachable; the container has no egress at all"
 fi
-if curl -sS --max-time 5 -o /dev/null https://example.com/ 2>/dev/null; then
-  die "self-test failed: example.com is reachable; the firewall is not enforcing"
+if grep -qE "^${CANARY//./\\.}\s*($|#)" "$DENYLIST"; then
+  if curl -sS --max-time 5 -o /dev/null "https://$CANARY/" 2>/dev/null; then
+    die "self-test failed: denylisted canary $CANARY is reachable; the firewall is not enforcing"
+  fi
+  log "verified: denylisted canary $CANARY is blocked ($entries entries denied)"
+else
+  log "note: canary $CANARY is not in the denylist; enforcement not self-tested ($entries entries denied)"
 fi
-log "verified: unlisted hosts are blocked ($(ipset list "$SET_NAME" | grep -c '^[0-9]') entries allowed)"
 
-# 7. Leave a world-readable marker so unprivileged checks (doctor) can tell
-#    the policy is up without needing iptables access.
+# 4. World-readable marker so unprivileged checks (doctor) can see the state.
 mkdir -p /run/agent-box
-printf 'active %s entries=%s\n' "$(date -u +%FT%TZ)" "$(ipset list "$SET_NAME" | grep -c '^[0-9]')" >/run/agent-box/firewall
+printf 'active mode=denylist %s entries=%s\n' "$(date -u +%FT%TZ)" "$entries" >/run/agent-box/firewall
 chmod 0644 /run/agent-box/firewall

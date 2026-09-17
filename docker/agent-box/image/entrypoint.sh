@@ -13,16 +13,17 @@ set -euo pipefail
 
 log() { printf 'agent-box: %s\n' "$*" >&2; }
 
-# 1. Firewall. Default-deny is the whole point of running unattended, so a
-#    misconfigured run (no NET_ADMIN cap) fails loudly instead of running open.
+# 1. Firewall (denylist: default allow, listed destinations blocked). A
+#    misconfigured run (no NET_ADMIN cap) fails loudly rather than silently
+#    skipping the blocks.
 if [[ "${AGENT_BOX_FIREWALL:-1}" == "1" ]]; then
   if ! sudo -n /usr/local/bin/init-firewall.sh; then
     log "firewall setup failed. Either run the box with --cap-add NET_ADMIN --cap-add NET_RAW"
-    log "(the host wrapper does this) or start it with AGENT_BOX_FIREWALL=0 to run open."
+    log "(the host wrapper does this) or start it with AGENT_BOX_FIREWALL=0 to skip the denylist."
     exit 1
   fi
 else
-  log "firewall disabled (AGENT_BOX_FIREWALL=0); egress is unrestricted"
+  log "firewall disabled (AGENT_BOX_FIREWALL=0); denylist not applied"
 fi
 
 # 2. Home skeleton. Idempotent; the volume persists across containers.

@@ -12,7 +12,7 @@ homelab from any host that has Docker and bash, including the Windows desktop
 where none of the laptop's toolchain (mise, fnox, Bitwarden CLI, the bash
 wrapper scripts, Ansible) runs natively. Claude Code runs inside the container
 as a non-root user with the full pinned toolchain; the container carries its
-own identity and a default-deny egress firewall.
+own identity and an egress denylist firewall (default allow; see the Egress decision).
 
 Scope is deliberately the core: build, run, identity, kubeconfig, doctor.
 Expansion ideas are parked until it has been used for real.
@@ -28,7 +28,7 @@ Expansion ideas are parked until it has been used for real.
 | User | `agent`, uid 1000, non-root | Claude Code refuses `--dangerously-skip-permissions` as root; uid 1000 matches the homelab's `anonuid` convention so NFS-side files look the same. |
 | State | One named volume at `/home/agent`, `CLAUDE_CONFIG_DIR` inside it | Anthropic's note: `.claude.json` (the OAuth account) lives outside `~/.claude` unless `CLAUDE_CONFIG_DIR` points at the volume. Invariant: the image installs nothing under `/home/agent`. |
 | Credentials | Box-owned, never mounted from the host | Anthropic's explicit warning against mounting `~/.ssh`/cloud creds. SSH key generated on first start; kubeconfig from a dedicated ServiceAccount; gh/tea/bw/Claude logins done inside. Each revocable independently. |
-| Egress | iptables default-deny from `allowlist.txt`, on by default, `AGENT_BOX_FIREWALL=0` to disable | Adapted from the reference `init-firewall.sh`. It is what makes unattended runs defensible. Self-tests on start (Anthropic host reachable, `example.com` not). |
+| Egress | iptables DENYLIST from `denylist.txt` (default allow), on by default, `AGENT_BOX_FIREWALL=0` to disable. Changed from an allowlist on 2026-09-17: the allowlist blocked the agent from reading docs and registries during ordinary work; the box is interactive, not an unattended `--dangerously-skip-permissions` runner, which is the case Anthropic's allowlist targets. The denylist keeps the mechanism (and the caps) so specific destinations can still be cut off. | Same iptables/ipset plumbing as the reference `init-firewall.sh`, inverted: one REJECT rule for the set, `OUTPUT ACCEPT` otherwise. Ships with cloud metadata endpoints and an `example.com` canary; self-tests on start (Anthropic host reachable, canary not). |
 | Claude Code install | npm, pinned, `DISABLE_AUTOUPDATER=1` | Reproducible image; the pin is the version. |
 | Bash sandbox inside | Packages present (`bubblewrap`, `socat`), not enabled | Anthropic documents layering it inside a container; left to the operator via `/sandbox`. |
 | Host wrapper deps | bash + docker only | Must work on a fresh Windows host before mise/usage/fnox exist there, so no `usage` spec (unlike `run-ansible.sh`). |
@@ -44,8 +44,8 @@ docker/agent-box/
   image/
     Dockerfile          pins as ARGs; COPY --from=repo mise.toml + ansible/requirements.yml
     entrypoint.sh       firewall -> home skeleton -> ssh identity -> exec
-    init-firewall.sh    default-deny egress (sudo, the only sudoers entry)
-    allowlist.txt       destinations: hostnames, CIDRs, @github
+    init-firewall.sh    egress denylist, default allow (sudo, the only sudoers entry)
+    denylist.txt        blocked destinations: hostnames, IPs, CIDRs
     doctor.sh           PASS/WARN/FAIL acceptance report
     bashrc.sh           prompt, mise activate, history on the volume
   README.md             operator docs: quick start, boundary, config, maintaining, troubleshooting

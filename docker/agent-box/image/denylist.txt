@@ -1,0 +1,20 @@
+# docker/agent-box/image/denylist.txt
+# Egress DENYLIST for the agent box (read by init-firewall.sh at start).
+# Default policy is ALLOW: the agent can reach docs, registries, APIs and
+# anything else it needs. Only destinations listed here are blocked.
+# One entry per line: a hostname (resolved once at start), an IP, or a CIDR.
+# Comments start with #. Add a line, rebuild, done.
+#
+# This is deliberately the permissive posture. Anthropic's reference
+# container uses an allowlist because it is meant for unattended
+# --dangerously-skip-permissions runs; this box is driven interactively.
+# If you ever want that back, git history has the allowlist version.
+
+# ── Instance / cloud metadata endpoints (classic credential-theft target) ──
+169.254.169.254
+169.254.170.2
+fd00:ec2::254
+
+# ── Canary: kept blocked so doctor and the start-up self-test can prove
+#    the mechanism is enforcing. Nothing legitimate needs it. ──
+example.com

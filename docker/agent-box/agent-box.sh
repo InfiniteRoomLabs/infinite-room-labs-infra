@@ -2,7 +2,7 @@
 # docker/agent-box/agent-box.sh
 # Host-side wrapper for the agent box: a Linux container running Claude Code
 # plus the whole homelab toolchain as a non-root user, with its own identity
-# and a default-deny egress firewall. See README.md next to this file.
+# and an egress denylist firewall. See README.md next to this file.
 #
 # HOW the box runs (mounts, caps, env) is defined in compose.yaml and its
 # overlays. This script adds what compose cannot: deriving values from the
