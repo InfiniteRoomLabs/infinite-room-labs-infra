@@ -24,6 +24,7 @@ Multi-tool IaC monorepo for the IRL homelab: a k3s cluster on an HP Z600 plus on
 | Respond to an outage | [Service-down runbook](ansible/docs/runbooks/service-down.md) |
 | Deploy a new service | [Deployment SOP](ansible/docs/sops/deploy-new-service.md) |
 | Add a DNS record | [DNS record SOP](ansible/docs/sops/add-dns-record.md) |
+| Onboard a client for DMARC reports | [DMARC client reporting](docs/dmarc-client-reporting.md) |
 | Work on Terraform | [Terraform](#terraform) |
 | Work on Ansible | [Ansible](#ansible) and [ansible/CLAUDE.md](ansible/CLAUDE.md) |
 
