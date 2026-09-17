@@ -1,7 +1,8 @@
 """Docs must be honest: clean encoding, no references to retired systems.
 
-Replaces the soft pre-commit encoding gate (which silently no-ops when
-spec-kitty is absent) with a hard, dependency-free check that also runs in CI.
+Replaced the soft pre-commit encoding gate it inherited (which silently
+no-op'd when its tooling was absent) with a hard, dependency-free check that
+also runs in CI.
 """
 
 import re
@@ -28,20 +29,18 @@ def tracked_markdown():
     return out.stdout.splitlines()
 
 # Vendor, generated, or frozen trees exempt from the authored-docs rules.
-EXEMPT_PREFIXES = (".kittify/", ".claude/commands/", "kitty-specs/")
+EXEMPT_PREFIXES = ("docs/plans/archive/",)
 
 # Windows-1252 imports the repo bans: curly quotes, en/em dash, arrows.
 BANNED = re.compile("[‘’“”–—→←]")
 
 # Phrases naming retired systems that may not appear in LIVE docs.
 # Historical trees legitimately describe the past and are exempt.
-DEAD_REFS = ("caddy_proxy",)
+DEAD_REFS = ("caddy_proxy", "spec-kitty", "kitty-specs/", ".kittify/")
 HISTORICAL_PREFIXES = (
     "docs/plans/",
     "docs/decisions/",  # ADRs document retirements; naming the retired system is their job
     "docs/superpowers/",
-    "kitty-specs/",
-    ".kittify/",
     ".claude/",
     "CHANGELOG.md",
 )

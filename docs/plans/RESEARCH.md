@@ -19,9 +19,9 @@
 | Scope | Location | Managed by |
 |-------|----------|------------|
 | **Project-wide** (this file) | `docs/plans/RESEARCH.md` | Any agent, any session |
-| **Feature-scoped** | `kitty-specs/{feature}/research.md` | Spec Kitty `/research` command |
+| **Feature-scoped** | `docs/plans/YYYY-MM-DD-{slug}.md` | Any agent, any session |
 
-Use this file for cross-cutting infrastructure questions (provider free tiers, tool comparisons, architectural trade-offs). Use `kitty-specs/` research for questions specific to a single feature's implementation.
+Use this file for cross-cutting infrastructure questions (provider free tiers, tool comparisons, architectural trade-offs). Research specific to a single feature's implementation goes in a dated doc in `docs/plans/`, next to that feature's design and plan.
 
 ### How to claim a topic
 
@@ -132,13 +132,7 @@ After agents return, update each topic's `Findings` and `Decision` fields in thi
 
 ### For deeper feature-scoped research
 
-Use the Spec Kitty research workflow:
-
-```
-/spec-kitty.research
-```
-
-This scaffolds a full research artifact under `kitty-specs/` with evidence logs and source registers. Use this when a topic graduates from "project-wide question" to "we're actually building this feature now."
+When a topic graduates from "project-wide question" to "we're actually building this feature now," move it out of this backlog: write the full research write-up (findings, evidence, sources) as a dated doc in `docs/plans/`, alongside that feature's design and plan, and leave this file's topic pointing at it.
 
 ---
 

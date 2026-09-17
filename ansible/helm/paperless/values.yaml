@@ -99,6 +99,8 @@ backup:
   schedule: "0 3 * * *"
   timeZone: "America/New_York"
   s3:
-    endpoint: "https://s3.internal.lab.infiniteroomlabs.cloud"
+    # In-cluster Garage S3 API (plain HTTP). The public https endpoint is a
+    # self-signed cert that aws-cli rejects (SSL: CERTIFICATE_VERIFY_FAILED).
+    endpoint: "http://garage:3900"
     bucket: "paperless-backups"
   retentionDays: 30

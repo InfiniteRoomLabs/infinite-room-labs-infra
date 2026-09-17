@@ -1,4 +1,4 @@
-# Added by Spec Kitty CLI (auto-managed)
+# AI agent working dirs (not tracked)
 .codex/
 .opencode/
 .windsurf/
@@ -10,7 +10,6 @@
 .roo/
 .amazonq/
 .github/copilot/
-.kittify/.dashboard
 
 # Terraform
 .terraform/
@@ -33,6 +32,7 @@ providers.tf
 
 # Environment variables (legacy -- superseded by fnox; kept ignored for safety)
 .env
+docker/agent-box/compose.override.yaml
 .env.*
 !.env.example
 

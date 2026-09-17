@@ -25,16 +25,21 @@
       changed_when: false
       failed_when: false
 
-    - name: Add Tailscale GPG key
-      ansible.builtin.apt_key:
-        url: "https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg"
-        keyring: /usr/share/keyrings/tailscale-archive-keyring.gpg
-        state: present
+    # The keyring is a plain file download, not apt_key (deprecated, and it
+    # used to hardcode bookworm). The release name follows the host so the
+    # same play is correct across Debian upgrades (bookworm -> trixie, ...).
+    - name: Add Tailscale signing key (keyring file, not apt_key)
+      ansible.builtin.get_url:
+        url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.noarmor.gpg"
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        owner: root
+        group: root
+        mode: "0644"
       when: tailscale_check.rc != 0
 
     - name: Add Tailscale APT repository
       ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian bookworm main"
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian {{ ansible_distribution_release }} main"
         filename: tailscale
         state: present
       when: tailscale_check.rc != 0

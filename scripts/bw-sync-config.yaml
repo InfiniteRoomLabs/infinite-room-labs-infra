@@ -277,6 +277,14 @@ secrets:
     k8s_secret: "palworld-secrets"
     k8s_key: "ADMIN_PASSWORD"
 
+  # ── WotLK / AzerothCore (bundled MySQL root) ─────────────────
+  # Consumed as MYSQL_ROOT_PASSWORD by the irl-wotlk chart (mysql + every
+  # AC_*_DATABASE_INFO string). Service secret, 365-day rotation.
+  - bw_item: "wotlk-mysql-root-password"
+    ansible_var: "vault_wotlk_mysql_root_password"
+    k8s_secret: "wotlk-secrets"
+    k8s_key: "MYSQL_ROOT_PASSWORD"
+
   # -- External Secrets Operator (separate namespace: "external-secrets") --
   # THE one Bitwarden-delivered bootstrap secret of the Vault + ESO pattern:
   # the AppRole credential ESO uses to log in to Vault. Everything
