@@ -24,7 +24,7 @@ AGENT_BOX_KNOBS=(
   "AGENT_BOX_IMAGE|irl-agent-box:local|image tag to build and run"
   "AGENT_BOX_VOLUME|irl-agent-box-home|named volume mounted at /home/agent"
   "AGENT_BOX_WORKSPACE|\$HOME/Projects|host directory mounted at /work"
-  "AGENT_BOX_FIREWALL|1|1 = default-deny egress from allowlist.txt, 0 = open"
+  "AGENT_BOX_FIREWALL|1|1 = apply the egress denylist from image/denylist.txt, 0 = no firewall"
   "AGENT_BOX_TZ|\${TZ:-America/New_York}|timezone inside the box"
   "AGENT_BOX_KUBE_CONTEXT|homelab|host kubectl context used by 'kubeconfig'"
   # SSH target for the box's ~/.ssh/config. Defaults are read from files the

@@ -98,15 +98,16 @@ else
   warn "no kubeconfig yet: run 'agent-box.sh kubeconfig'"
 fi
 
-section "Network policy"
+section "Network policy (denylist: default allow)"
 if [[ "${AGENT_BOX_FIREWALL:-1}" == "1" ]]; then
   # iptables needs root; the firewall script leaves a readable marker instead.
-  if grep -qs '^active' /run/agent-box/firewall; then pass "egress firewall active ($(cut -d' ' -f3 /run/agent-box/firewall))"; else fail "AGENT_BOX_FIREWALL=1 but init-firewall.sh left no /run/agent-box/firewall marker"; fi
-  if curl -sS --max-time 6 -o /dev/null https://example.com/ 2>/dev/null; then fail "example.com reachable; allowlist is not enforced"; else pass "unlisted host blocked (example.com)"; fi
+  if grep -qs '^active' /run/agent-box/firewall; then pass "egress denylist active ($(awk '{print $2, $4}' /run/agent-box/firewall))"; else fail "AGENT_BOX_FIREWALL=1 but init-firewall.sh left no /run/agent-box/firewall marker"; fi
+  if curl -sS --max-time 6 -o /dev/null https://example.com/ 2>/dev/null; then fail "denylisted canary example.com reachable; denylist not enforced"; else pass "denylisted canary blocked (example.com)"; fi
 else
   warn "firewall disabled for this run (AGENT_BOX_FIREWALL=0)"
 fi
 if curl -sS --max-time 8 -o /dev/null https://api.anthropic.com/ 2>/dev/null; then pass "api.anthropic.com reachable"; else fail "api.anthropic.com unreachable"; fi
+if curl -sS --max-time 8 -o /dev/null https://developer.wordpress.org/ 2>/dev/null; then pass "arbitrary docs site reachable (developer.wordpress.org), default allow works"; else warn "developer.wordpress.org unreachable; general egress may be broken (DNS? host network?)"; fi
 
 printf '\n%d fail, %d warn\n' "$fails" "$warns"
 [[ "$fails" == 0 ]]
