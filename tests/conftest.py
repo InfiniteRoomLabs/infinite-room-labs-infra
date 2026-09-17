@@ -88,6 +88,8 @@ HEALTH_OVERRIDES = {
     "firefly": {"health_status": [200, 302]},
     "ghostfolio": {"health_status": [200, 302]},
     "firefly-importer": {"health_status": [200, 302]},
+    # `/` is a 302 to wp-admin/install.php until setup runs, 200 after.
+    "wordpress": {"health_status": [200, 302]},
 }
 
 

@@ -132,6 +132,27 @@ irl_zfs_datasets:
       atime: "off"
       compression: "lz4"
 
+  # ── WordPress journal (personal blog) ────────────────────────
+  # /var/www/html: WordPress core + wp-content (themes, plugins, uploads) +
+  # wp-config.php, which carries the auth salts generated on first boot --
+  # irreplaceable, not just a cache of the image. Runs as www-data (uid 33),
+  # chowned in zfs.yml.
+  - name: "{{ irl_zfs_pool }}/wordpress-content"
+    mountpoint: "{{ irl_zfs_mount }}/wordpress-content"
+    quota: "20G"
+    properties:
+      atime: "off"
+      compression: "lz4"
+  # MariaDB datadir (posts live here). 16K recordsize matches InnoDB pages,
+  # same as wotlk-db. mariadb image drops to uid 999, chowned in zfs.yml.
+  - name: "{{ irl_zfs_pool }}/wordpress-db"
+    mountpoint: "{{ irl_zfs_mount }}/wordpress-db"
+    quota: "10G"
+    properties:
+      atime: "off"
+      compression: "lz4"
+      recordsize: "16K"
+
 # ── NFS (hand-managed on homelab, not via ansible) ──────────────────
 # The homelab already exports /media/root/storage1/nfs-share via NFSv4.2
 # (set up manually, not via ansible). Laptop mounts at /mnt/homelab-nfs.
@@ -242,6 +263,11 @@ irl_services:
     cluster_svc: "karakeep"
     cluster_port: 3000
     health_path: "/api/health"
+  wordpress:
+    subdomain: "journal"
+    internal: false
+    cluster_svc: "wordpress"
+    cluster_port: 80
   satisfactory:
     subdomain: "satisfactory"
     internal: true

@@ -34,6 +34,17 @@
     k3s_namespace: irl
 
   tasks:
+    # ── kubernetes.core dependency ───────────────────────────────
+    # The kubernetes.core modules in this play run ON the homelab and need
+    # the python kubernetes client there. It disappeared in the Debian 13
+    # upgrade (2026-09-14) -- every k8s task failed with "Failed to import
+    # the required Python library (kubernetes)" until this was codified.
+    - name: Install the python kubernetes client (kubernetes.core dependency)
+      ansible.builtin.apt:
+        name: python3-kubernetes
+        state: present
+      tags: [always]
+
     # ── Gather IPs ───────────────────────────────────────────────
     - name: Get Tailscale IP address
       ansible.builtin.command: tailscale ip -4
@@ -551,6 +562,18 @@
           app: wotlk
           capacity: "30Gi"
           hostPath: "{{ irl_zfs_mount }}/wotlk-data"
+        # ── WordPress ──
+        # /var/www/html (chowned 33) and the MariaDB datadir (chowned 999);
+        # both in zfs.yml.
+        - name: pv-wordpress-content
+          app: wordpress
+          capacity: "20Gi"
+          hostPath: "{{ irl_zfs_mount }}/wordpress-content"
+        - name: pv-wordpress-db
+          app: wordpress
+          capacity: "10Gi"
+          hostPath: "{{ irl_zfs_mount }}/wordpress-db"
+      tags: [pvs]
 
     - name: Create zfs-local StorageClass
       kubernetes.core.k8s:

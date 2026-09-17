@@ -173,6 +173,13 @@ config:
             #     password: "{{HOMEPAGE_VAR_PAPERLESS_KEY}}"   # or key: ... for token
             # Token goes in the homepage-api-keys secret as paperless-token.
 
+        - WordPress:
+            icon: wordpress
+            href: "https://journal.lab.infiniteroomlabs.cloud"
+            description: "Journal (single-site blog)"
+            namespace: irl
+            app: irl-wordpress
+
     - Monitoring:
         - Grafana:
             icon: grafana

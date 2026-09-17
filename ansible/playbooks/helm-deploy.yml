@@ -28,6 +28,17 @@
     helm_values_path: "/home/{{ irl_admin_user }}/helm-values"
 
   tasks:
+    # ── kubernetes.core dependency ───────────────────────────────
+    # The kubernetes.core modules in this play run ON the homelab and need
+    # the python kubernetes client there. It disappeared in the Debian 13
+    # upgrade (2026-09-14) -- every k8s task failed with "Failed to import
+    # the required Python library (kubernetes)" until this was codified.
+    - name: Install the python kubernetes client (kubernetes.core dependency)
+      ansible.builtin.apt:
+        name: python3-kubernetes
+        state: present
+      tags: [always]
+
     # ── Upload values override files to server ───────────────────
     - name: Create values override directories
       ansible.builtin.file:
@@ -52,6 +63,7 @@
         - ghostfolio
         - firefly-importer
         - karakeep
+        - wordpress
         - satisfactory
         - palworld
         - wotlk
@@ -1076,6 +1088,59 @@
         wait: true
         timeout: "10m0s"
       tags: [phase3, karakeep]
+
+    # ── WordPress (single-site journal + bundled MariaDB) ─────────
+    # IRL chart (irl-wordpress). Requires pv-wordpress-content +
+    # pv-wordpress-db (k3s.yml), the chowned wordpress-content (33) /
+    # wordpress-db (999) datasets (zfs.yml) and the wordpress-secrets Secret
+    # (bw-sync: wordpress-db-root-password -> MARIADB_ROOT_PASSWORD,
+    # wordpress-db-password -> MARIADB_PASSWORD). The chart owns its own
+    # IngressRoute, so nothing is added to irl_traefik_standalone_services.
+    # PVCs bind by explicit volumeName: both PVs carry app=wordpress, so a
+    # selector alone could hand the 10Gi claim the 20Gi PV (karakeep lesson).
+    - name: "Phase 3: Create WordPress PVCs"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ item.name }}"
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            volumeName: "{{ item.pv }}"
+            resources:
+              requests:
+                storage: "{{ item.size }}"
+      loop:
+        - { name: wordpress-content, pv: pv-wordpress-content, size: "20Gi" }
+        - { name: wordpress-db, pv: pv-wordpress-db, size: "10Gi" }
+      tags: [phase3, wordpress]
+
+    - name: "Phase 3: Upload WordPress values"
+      ansible.builtin.copy:
+        src: ../helm/wordpress/values.yaml
+        dest: "{{ helm_values_path }}/wordpress/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, wordpress]
+
+    - name: "Phase 3: Deploy WordPress (irl-wordpress chart)"
+      kubernetes.core.helm:
+        name: wordpress
+        chart_ref: irl/irl-wordpress
+        chart_version: "0.1.0"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/wordpress/values.yaml"
+        wait: true
+        timeout: "10m0s"
+      tags: [phase3, wordpress]
 
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,

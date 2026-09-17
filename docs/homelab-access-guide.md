@@ -35,6 +35,7 @@ All services are accessed via Caddy reverse proxy with internal TLS (Tailscale-o
 | **Prometheus** (metrics) | https://metrics.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
 | **Alertmanager** (alerts) | https://alerts.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
 | **Karakeep** (bookmarks) | https://bookmarks.lab.infiniteroomlabs.cloud | Homelab | Single admin `wes@infiniteroomlabs.com`, password in BW `IRL/Services/Karakeep` (signups disabled) |
+| **WordPress** (journal) | https://journal.lab.infiniteroomlabs.cloud | Homelab | Admin account created at `/wp-admin/install.php` on first visit; store it in BW `IRL/Services/WordPress` |
 | **CoreDNS** (Split DNS) | N/A (hostNetwork port 53) | Homelab | No UI -- DNS resolver only |
 | **Ollama** (LLM inference) | ClusterIP only | Homelab | See kubectl access below |
 | **Satisfactory** (game server) | Game client only -- see below | Homelab | Admin password set in-game at claim time |

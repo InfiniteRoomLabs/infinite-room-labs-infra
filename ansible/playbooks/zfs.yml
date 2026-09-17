@@ -50,6 +50,8 @@
           dedup: "off"
 
     # ── Create service datasets ────────────────────────────────────
+    # Tagged so a single service's dataset can be created without a full
+    # pool pass (the play-level scrub task is a heavy side effect).
     - name: Create ZFS datasets for services
       community.general.zfs:
         name: "{{ item.name }}"
@@ -60,6 +62,7 @@
             | combine(item.properties | default({}))
           }}
       loop: "{{ irl_zfs_datasets }}"
+      tags: [datasets]
 
     # ── Per-dataset ownership for containerized services ──────────
     # Paperless-ngx runs as UID/GID 1000 inside its pod. ZFS datasets are
@@ -135,6 +138,27 @@
         recurse: true
       tags: [wotlk]
 
+    # WordPress: apache serves as www-data (uid 33) and must be able to write
+    # uploads/plugins into /var/www/html; mariadb drops to 999. hostPath PVs
+    # ignore fsGroup, so ownership is set here.
+    - name: Chown wordpress-content dataset to UID 33 (www-data)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/wordpress-content"
+        state: directory
+        owner: "33"
+        group: "33"
+        recurse: true
+      tags: [wordpress]
+
+    - name: Chown wordpress-db dataset to UID 999 (mysql)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/wordpress-db"
+        state: directory
+        owner: "999"
+        group: "999"
+        recurse: true
+      tags: [wordpress]
+
     # ── ZFS scrub schedule ─────────────────────────────────────────
     - name: Schedule weekly ZFS scrub (Sunday 3am)
       ansible.builtin.cron:
@@ -146,11 +170,14 @@
         user: root
 
     # ── Sanoid snapshot automation ─────────────────────────────────
+    # Tagged `sanoid` so a new dataset's retention policy can be rolled out
+    # without a full pool pass (see the `datasets` tag above).
     - name: Install sanoid for ZFS snapshot automation
       ansible.builtin.apt:
         name: sanoid
         state: present
         update_cache: true
+      tags: [sanoid]
 
     - name: Ensure sanoid config directory exists
       ansible.builtin.file:
@@ -159,6 +186,7 @@
         owner: root
         group: root
         mode: "0755"
+      tags: [sanoid]
 
     - name: Deploy sanoid configuration
       ansible.builtin.copy:
@@ -168,12 +196,14 @@
         group: root
         mode: "0644"
         backup: true
+      tags: [sanoid]
 
     - name: Enable sanoid timer
       ansible.builtin.systemd:
         name: sanoid.timer
         state: started
         enabled: true
+      tags: [sanoid]
 
     # ── Trigger immediate scrub if overdue ─────────────────────────
     - name: Check last scrub date
