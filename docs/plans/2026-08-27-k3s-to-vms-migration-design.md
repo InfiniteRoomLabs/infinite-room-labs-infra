@@ -88,7 +88,7 @@ provision the VM for the next one.
 
 | Quantity | Value | Source |
 |---|---|---|
-| Total host RAM | 40GB | `irl_total_ram_gb` |
+| Total host RAM | 48GB (was 40GB until the 2026-09 reboots; see `host_vars/homelab.yml`) | `irl_total_ram_gb` |
 | OS reserve | 4GB | `irl_reserved_ram_gb` |
 | ZFS ARC cap | 8GB | `irl_zfs_arc_max_gb` |
 | Declared VM RAM budget | 12GB | `irl_vm_ram_budget_gb` |
@@ -135,8 +135,8 @@ filesystem, i.e. NOT on the ZFS pool; **dynamic** = provisioned by
 
 Snapshot policy is read from `sanoid.conf`. `[main]` is `recursive = no`, so a
 dataset with no explicit child section is **NOT covered** by any snapshot
-policy -- written below as `none`. `garage-data` and both paperless datasets
-are the notable examples.
+policy -- written below as `none`. `garage-data`, both paperless datasets, and
+both `wotlk-*` datasets are the notable examples.
 
 | Service | PV / PVC | StorageClass | Declared binding | Backing path | Class | Snapshots | Criticality | Restore procedure / evidence | Live binding verified | Wave | Storage decision |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -160,6 +160,8 @@ are the notable examples.
 | karakeep (meili) | `pv-karakeep-meilisearch` / `karakeep-meilisearch` | `zfs-local` | explicit `volumeName` | `main/karakeep-meilisearch` | dataset | `large_assets` | low (rebuildable index) | reindex | | | |
 | satisfactory | `pv-satisfactory-config` / `satisfactory-data-pvc` | `zfs-local` | explicit `volumeName` | `main/satisfactory-config` | dataset | `service_data` | high (saves irreplaceable) | backup-and-restore.md -- tested? | | | |
 | palworld | `pv-palworld-data` / `palworld-data-pvc` | `zfs-local` | explicit `volumeName` | `main/palworld-data` | dataset | `service_data` | high (saves irreplaceable) | backup-and-restore.md -- tested? | | | |
+| wotlk (db) | `pv-wotlk-db` / `wotlk-db-pvc` | `zfs-local` | explicit `volumeName` | `main/wotlk-db` | dataset (16K recordsize, 20G quota) | **none** | high (characters DB irreplaceable; world DB re-importable) | `ansible/docs/runbooks/wotlk-down.md` -- tested? | | | |
+| wotlk (client data) | `pv-wotlk-data` / `wotlk-data-pvc` | `zfs-local` | explicit `volumeName` | `main/wotlk-data` | dataset (30G quota) | **none** | low (redownloadable, ~15G) | re-pull from `wowgaming/client-data` | | | |
 | nextcloud (app) | chart PVC | `local-path` | dynamic | `/var/lib/rancher/k3s/storage` | dynamic | none | medium | -- | | | |
 | nextcloud (data) | chart `nextcloudData` PVC | `zfs-local` | dynamic against `zfs-local` -- no matching PV declared | unknown | unknown | none | high | -- | | | |
 | vaultwarden | `vaultwarden-data` | `local-path` | dynamic | `/var/lib/rancher/k3s/storage` | dynamic | none | critical (password vault) | backup-and-restore.md -- tested? | | | |
@@ -283,8 +285,8 @@ sense) or it follows the guest that holds the disk. That relabeling, and the
 `nodeSelector`s in the chart values that depend on it, follows this decision.
 
 Also unresolved by this document: the snapshot-coverage gaps the inventory
-above surfaces (`garage-data` and both paperless datasets have no sanoid
-section). Whether to fix those before or during the migration is a call for the
+above surfaces (`garage-data`, both paperless datasets, and both `wotlk-*`
+datasets have no sanoid section). Whether to fix those before or during the migration is a call for the
 first wave's checklist -- but fixing them is cheaper than discovering the gap
 during a restore.
 
