@@ -24,6 +24,9 @@ shopt -s histappend
 # Where the repo's own tooling expects to be run from.
 alias infra='cd /work/infinite-room-labs-infra'
 alias doctor='agent-box-doctor'
+alias extras='agent-box-extras'
+# Volume-scoped tools from agent-box-extras (also exported by the entrypoint).
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 
 # ── Bitwarden session, the repo's way ──────────────────────────────────
 # The repo's scripts (scripts/includes/bw-session.sh, vault-pass.sh, fnox)
