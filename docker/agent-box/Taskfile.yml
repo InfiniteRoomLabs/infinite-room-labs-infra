@@ -1,0 +1,56 @@
+# docker/agent-box/Taskfile.yml
+# Short names for the everyday commands. Optional sugar: every task calls
+# ./agent-box.sh, which is the complete interface and needs only bash +
+# docker. Install `task` (go-task) to use these; it is already pinned in
+# the repo's mise.toml for the laptop.
+#
+#   task            # lists tasks
+#   task doctor
+#   task run -- terraform version
+
+version: "3"
+
+tasks:
+  default:
+    silent: true
+    cmds: [task --list]
+
+  build:
+    desc: Build the image (pins come from image/Dockerfile ARGs + mise.toml)
+    cmds: [./agent-box.sh build]
+
+  shell:
+    desc: Interactive bash in the box
+    interactive: true
+    cmds: [./agent-box.sh shell]
+
+  claude:
+    desc: Claude Code in the box (args after --)
+    interactive: true
+    cmds: ["./agent-box.sh claude {{.CLI_ARGS}}"]
+
+  run:
+    desc: One command in the box (args after --)
+    interactive: true
+    cmds: ["./agent-box.sh run {{.CLI_ARGS}}"]
+
+  doctor:
+    desc: Tools, logins, reach, firewall report (the acceptance test)
+    cmds: [./agent-box.sh doctor]
+
+  identity:
+    desc: Print the box's SSH public key (flags after --, e.g. -- --authorize-homelab)
+    cmds: ["./agent-box.sh identity {{.CLI_ARGS}}"]
+
+  kubeconfig:
+    desc: Mint a box-only kubeconfig from a dedicated k3s ServiceAccount
+    cmds: [./agent-box.sh kubeconfig]
+
+  config:
+    desc: Show the rendered compose configuration (after derivation and overrides)
+    cmds: [./agent-box.sh compose config]
+
+  lint:
+    desc: shellcheck every script, inside the box
+    cmds:
+      - ./agent-box.sh compose --open run --rm box bash -c 'cd docker/agent-box && shellcheck -x -P SCRIPTDIR agent-box.sh lib/*.sh image/*.sh && echo shellcheck clean'

@@ -32,6 +32,7 @@ providers.tf
 
 # Environment variables (legacy -- superseded by fnox; kept ignored for safety)
 .env
+docker/agent-box/compose.override.yaml
 .env.*
 !.env.example
 

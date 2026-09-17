@@ -4,6 +4,11 @@
 # plus the whole homelab toolchain as a non-root user, with its own identity
 # and a default-deny egress firewall. See README.md next to this file.
 #
+# HOW the box runs (mounts, caps, env) is defined in compose.yaml and its
+# overlays. This script adds what compose cannot: deriving values from the
+# repo (SSH target, working dir), the two workflows that need HOST
+# credentials once (identity, kubeconfig), and Git Bash path/TTY quirks.
+#
 # Usage:
 #   agent-box.sh build [--no-cache]        build the image (pins: image/Dockerfile ARGs + mise.toml)
 #   agent-box.sh shell                     interactive bash in the box
@@ -11,16 +16,18 @@
 #   agent-box.sh run <cmd> [args...]       run one command in the box
 #   agent-box.sh doctor                    check tools, logins, reach, firewall
 #   agent-box.sh identity [--authorize-homelab] [--github]
-#                                          create the box's SSH key; optionally install it
+#                                          print the box's SSH key; optionally install it
 #   agent-box.sh kubeconfig                mint a box-only kubeconfig from a k3s ServiceAccount
-#   agent-box.sh config                    show effective configuration and sources
+#   agent-box.sh compose [--open] [--ci] <compose args...>
+#                                          docker compose with derived env + overlays applied
+#   agent-box.sh config                    show effective knobs, then the rendered compose config
 #   agent-box.sh help
 #
 # Configuration (env > ~/.config/agent-box/env > default): see lib/config.sh.
 # Runs from bash on Linux/macOS and from Git Bash on Windows; needs only
 # docker (plus kubectl on the host for `kubeconfig`, ssh/gh for `identity`
-# installs). Deliberately does not depend on mise/usage so it works on a
-# fresh host before any of that exists.
+# installs). Deliberately does not depend on mise/usage/task so it works on
+# a fresh host before any of that exists.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,62 +39,76 @@ source "$SCRIPT_DIR/lib/paths.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 # shellcheck source=lib/docker.sh
 source "$SCRIPT_DIR/lib/docker.sh"
-# shellcheck source=lib/mounts.sh
-source "$SCRIPT_DIR/lib/mounts.sh"
 
 AGENT_BOX_REPO="$(repo_root_from "$SCRIPT_DIR")" || die "not inside a git checkout"
 load_config
 
 usage() { sed -n '/^# Usage:/,/^# Configuration/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; }
 
-# run_in_box [interactive=1] -- <cmd...> : the one place `docker run` is built.
-run_in_box() {
-  local interactive="$1"; shift
-  local args=() tty
-  box_run_args args "$interactive"
-  tty="$(docker_tty_prefix)"
-  export MSYS_NO_PATHCONV=1   # process is replaced by exec below; see lib/docker.sh
-  # shellcheck disable=SC2086  # $tty is empty or the single word "winpty"
-  exec $tty docker run "${args[@]}" "$AGENT_BOX_IMAGE" "$@"
+# compose_files [--open] [--ci] -> prints the -f arguments for the stack:
+# base, then compose.override.yaml if present (compose only auto-loads it
+# when no -f is given, so we add it explicitly), then requested overlays.
+compose_files() {
+  local -a files=("$SCRIPT_DIR/compose.yaml")
+  [[ -f "$SCRIPT_DIR/compose.override.yaml" ]] && files+=("$SCRIPT_DIR/compose.override.yaml")
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --open) files+=("$SCRIPT_DIR/compose.open.yaml") ;;
+      --ci)   files+=("$SCRIPT_DIR/compose.ci.yaml") ;;
+    esac
+  done
+  local f
+  for f in "${files[@]}"; do printf -- '-f\n%s\n' "$(host_to_docker_path "$f")"; done
 }
 
-# Same as run_in_box but captures output for the caller instead of exec-ing.
-run_in_box_capture() {
-  local args=()
-  box_run_args args 0
-  dockr run "${args[@]}" "$AGENT_BOX_IMAGE" "$@"
+# compose [--open] [--ci] <args...> -> `docker compose` with the stack and
+# derived environment applied. Everything else in this script goes through it.
+compose() {
+  local -a overlays=() fargs=()
+  while [[ "${1:-}" == --open || "${1:-}" == --ci ]]; do overlays+=("$1"); shift; done
+  mapfile -t fargs < <(compose_files "${overlays[@]}")
+  export_derived_for_compose
+  dockr compose --project-directory "$(host_to_docker_path "$SCRIPT_DIR")" "${fargs[@]}" "$@"
+}
+
+# Same, but exec'd with the TTY shim so interactive sessions get a real terminal.
+compose_exec() {
+  local -a overlays=() fargs=()
+  while [[ "${1:-}" == --open || "${1:-}" == --ci ]]; do overlays+=("$1"); shift; done
+  mapfile -t fargs < <(compose_files "${overlays[@]}")
+  export_derived_for_compose
+  local tty
+  tty="$(docker_tty_prefix)"
+  export MSYS_NO_PATHCONV=1   # process is replaced by exec; see lib/docker.sh
+  # shellcheck disable=SC2086  # $tty is empty or the single word "winpty"
+  exec $tty docker compose --project-directory "$(host_to_docker_path "$SCRIPT_DIR")" "${fargs[@]}" "$@"
 }
 
 cmd_build() {
-  local extra=()
-  [[ "${1:-}" == "--no-cache" ]] && extra+=(--no-cache)
   docker_require
-  log_info "building $AGENT_BOX_IMAGE (context: image/, repo context: $AGENT_BOX_REPO)"
-  dockr build "${extra[@]}" \
-    -f "$(host_to_docker_path "$SCRIPT_DIR/image/Dockerfile")" \
-    --build-context "repo=$(host_to_docker_path "$AGENT_BOX_REPO")" \
-    -t "$AGENT_BOX_IMAGE" \
-    "$(host_to_docker_path "$SCRIPT_DIR/image")"
-  log_info "built $AGENT_BOX_IMAGE"
+  log_info "building ${AGENT_BOX_IMAGE} (repo context: $AGENT_BOX_REPO)"
+  compose build "$@" box
+  log_info "built ${AGENT_BOX_IMAGE}"
 }
 
 require_image() {
   docker_require
   image_exists "$AGENT_BOX_IMAGE" || die "image $AGENT_BOX_IMAGE not built yet: run '$(basename "$0") build'"
-  volume_ensure "$AGENT_BOX_VOLUME"
-  [[ -d "$AGENT_BOX_WORKSPACE" ]] || die "workspace $AGENT_BOX_WORKSPACE does not exist"
+  volume_ensure "$AGENT_BOX_VOLUME"   # compose.yaml declares it external
+  [[ -d "$AGENT_BOX_WORKSPACE_HOST" ]] || die "workspace $AGENT_BOX_WORKSPACE_HOST does not exist"
 }
 
-cmd_shell()  { require_image; run_in_box 1 bash; }
-cmd_claude() { require_image; run_in_box 1 claude "$@"; }
-cmd_run()    { [[ $# -gt 0 ]] || die "run: missing command"; require_image; run_in_box 1 "$@"; }
-cmd_doctor() { require_image; run_in_box 1 agent-box-doctor; }
+cmd_shell()  { require_image; compose_exec run --rm box; }
+cmd_claude() { require_image; compose_exec run --rm claude "$@"; }
+cmd_run()    { [[ $# -gt 0 ]] || die "run: missing command"; require_image; compose_exec run --rm box "$@"; }
+cmd_doctor() { require_image; compose_exec run --rm doctor; }
 
 # identity: print the box's own ed25519 key (the entrypoint creates it on
 # first start, inside the volume; never a copy of a host key). Optional
 # installs use HOST credentials once, so the box itself never needs them.
 cmd_identity() {
-  local authorize_homelab=0 github=0 pub
+  local authorize_homelab=0 github=0 pub a
   for a in "$@"; do
     case "$a" in
       --authorize-homelab) authorize_homelab=1 ;;
@@ -96,7 +117,7 @@ cmd_identity() {
     esac
   done
   require_image
-  pub="$(run_in_box_capture cat /home/agent/.ssh/id_ed25519.pub)"
+  pub="$(compose run --rm -T box cat /home/agent/.ssh/id_ed25519.pub | tr -d '\r')"
   [[ "$pub" == ssh-ed25519* ]] || die "identity: no public key produced (entrypoint failed?)"
   printf '%s\n' "$pub"
   log_info "that is the box's public key (kept in volume $AGENT_BOX_VOLUME)"
@@ -119,15 +140,15 @@ cmd_identity() {
       die "github: gh ssh-key add failed"
     fi
   fi
-  log_info "Gitea: paste the key at https://git.lab.infiniteroomlabs.cloud/user/settings/keys (no CLI path for that yet)"
+  log_info "Gitea: add the key in its web UI under user settings > SSH keys (no CLI path for that yet)"
 }
 
 # kubeconfig: a ServiceAccount + long-lived token that only the box holds.
 # Revoke with: kubectl -n kube-system delete sa agent-box (and the binding).
 cmd_kubeconfig() {
   require_image
-  command -v kubectl >/dev/null 2>&1 || die "kubeconfig needs kubectl on the host (context 'homelab')"
-  local ctx="${AGENT_BOX_KUBE_CONTEXT:-homelab}" sa=agent-box ns=kube-system
+  command -v kubectl >/dev/null 2>&1 || die "kubeconfig needs kubectl on the host (context '$AGENT_BOX_KUBE_CONTEXT')"
+  local ctx="$AGENT_BOX_KUBE_CONTEXT" sa=agent-box ns=kube-system
   local server ca token cfg
   log_info "minting ServiceAccount $ns/$sa with cluster-admin via host context $ctx"
   kubectl --context "$ctx" -n "$ns" get sa "$sa" >/dev/null 2>&1 \
@@ -173,14 +194,19 @@ contexts:
 current-context: homelab
 EOF
 )"
-  local args=()
-  box_run_args args 0
-  printf '%s\n' "$cfg" | dockr run -i "${args[@]}" -e AGENT_BOX_FIREWALL=0 "$AGENT_BOX_IMAGE" \
+  printf '%s\n' "$cfg" | compose --open run --rm -T box \
     bash -c 'mkdir -p ~/.kube && cat > ~/.kube/config && chmod 600 ~/.kube/config && echo written'
   log_info "kubeconfig stored in volume $AGENT_BOX_VOLUME; revoke with: kubectl -n $ns delete sa $sa; kubectl delete clusterrolebinding $sa-admin"
 }
 
-cmd_config() { print_config; }
+cmd_compose() { docker_require; compose_exec "$@"; }
+
+cmd_config() {
+  print_config
+  printf '\n# rendered compose config (base + override if present):\n'
+  docker_require
+  compose config
+}
 
 main() {
   local cmd="${1:-help}"; shift || true
@@ -192,6 +218,7 @@ main() {
     doctor)     cmd_doctor ;;
     identity)   cmd_identity "$@" ;;
     kubeconfig) cmd_kubeconfig ;;
+    compose)    cmd_compose "$@" ;;
     config)     cmd_config ;;
     help|-h|--help) usage ;;
     *) log_error "unknown command: $cmd"; usage; exit 64 ;;

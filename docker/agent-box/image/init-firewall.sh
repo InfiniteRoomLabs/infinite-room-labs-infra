@@ -42,12 +42,16 @@ iptables -t nat -F; iptables -t nat -X
 iptables -t mangle -F; iptables -t mangle -X
 ipset destroy "$SET_NAME" 2>/dev/null || true
 
+# These rules only exist on user-defined networks (compose), not the default
+# bridge, so this path is exercised by `docker compose run`, not `docker run`.
 if [[ -n "$docker_dns_rules" ]]; then
   iptables -t nat -N DOCKER_OUTPUT 2>/dev/null || true
   iptables -t nat -N DOCKER_POSTROUTING 2>/dev/null || true
   while IFS= read -r rule; do
-    # shellcheck disable=SC2086  # the saved rule is meant to be word-split
-    iptables -t nat $rule
+    [[ -n "$rule" ]] || continue
+    # Split on spaces explicitly: the script-wide IFS excludes space.
+    IFS=' ' read -r -a parts <<<"$rule"
+    iptables -t nat "${parts[@]}"
   done <<<"$docker_dns_rules"
 fi
 

@@ -72,6 +72,30 @@ host bash ── agent-box.sh ── docker run --rm --init
 `identity` and `kubeconfig` are the only subcommands that use host
 credentials, each exactly once, to install something the box then owns.
 
+## Addendum 2026-09-15: compose owns the run definition
+
+Second pass, same day, after using the first build. `lib/mounts.sh` (the
+bash-assembled `docker run` argument list) is replaced by `compose.yaml`:
+one `x-box-common` anchor, services `box` / `claude` / `doctor` (the latter
+two `extends: box`), the two mounts, caps and env declared once. Overlays
+`compose.open.yaml` (firewall off, `cap_add: !reset []`) and
+`compose.ci.yaml` (no workspace bind, no TTY, throwaway home) replace the
+`AGENT_BOX_FIREWALL=0` flag path with named stacks; a git-ignored
+`compose.override.yaml` is the private-knobs mechanism compose users
+already expect. `agent-box.sh` keeps only what compose cannot do: derive
+`AGENT_BOX_SSH_USER`/`_HOST`/`_REPO_DIR` from the repo, the `identity` and
+`kubeconfig` workflows, Git Bash path/TTY handling, and a `compose`
+passthrough that applies all of that. `Taskfile.yml` adds short names on
+hosts that have `task`.
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Where run config lives | `compose.yaml` + overlays | Declarative, diffable, `compose config` renders the truth; one file to read instead of a bash array. |
+| Variants | Overlay files and `extends`, not flags | Compose has stacking, extends, anchors, `${VAR:-default}`; no conditionals. A variant is a file. |
+| Private knobs | `compose.override.yaml` (git-ignored) and/or `~/.config/agent-box/env` | Override file is the compose-native way; the env file keeps working for the wrapper. Same names either way. |
+| Wrapper kept | Yes, thinner | Derivation from repo files, host-credential workflows, and Windows quirks have no compose equivalent. |
+| Task | Optional sugar over the wrapper | The wrapper stays the complete, dependency-free interface; `task` is not on a fresh Windows host. |
+
 ## Acceptance
 
 `agent-box.sh doctor` exits 0 with no FAIL lines. WARN lines name the

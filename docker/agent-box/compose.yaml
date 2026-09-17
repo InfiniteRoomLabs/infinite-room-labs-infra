@@ -1,0 +1,78 @@
+# docker/agent-box/compose.yaml
+# =============================
+# The agent box's run and build definition. Everything about HOW the box
+# runs (mounts, capabilities, env, working dir) lives here and nowhere else.
+#
+# Use `run`, never `up`: the box is a throwaway container over a persistent
+# volume, not a long-lived service.
+#
+#   docker compose run --rm box            # bash inside
+#   docker compose run --rm claude         # Claude Code inside
+#   docker compose run --rm doctor         # acceptance report
+#   docker compose build                   # rebuild the image
+#
+# Prefer the host wrapper (`./agent-box.sh compose ...`, or the Taskfile),
+# which derives AGENT_BOX_SSH_USER / AGENT_BOX_SSH_HOST / AGENT_BOX_REPO_DIR
+# from the repo before invoking compose. Direct `docker compose` works too;
+# those values then come from .env or the shell (see .env.example).
+#
+# Stacking (later files merge over earlier ones):
+#   compose.yaml            this file, the base
+#   compose.override.yaml   auto-merged if present; git-ignored; your private knobs
+#   compose.open.yaml       opt-in: firewall off, no NET_* caps (-f, or COMPOSE_FILE)
+#   compose.ci.yaml         opt-in: no workspace bind, no TTY, for a future CI lane
+
+name: agent-box
+
+# Shared shape for every service. YAML anchors are the "template" here:
+# compose has no loops or conditionals, only stacking, extends, and anchors.
+x-box-common: &box-common
+  image: ${AGENT_BOX_IMAGE:-irl-agent-box:local}
+  init: true
+  hostname: agent-box
+  stdin_open: true
+  tty: true
+  working_dir: ${AGENT_BOX_REPO_DIR:-/work}
+  cap_add:            # only what init-firewall.sh needs; compose.open.yaml resets this
+    - NET_ADMIN
+    - NET_RAW
+  environment:
+    AGENT_BOX_FIREWALL: ${AGENT_BOX_FIREWALL:-1}
+    TZ: ${AGENT_BOX_TZ:-America/New_York}
+    AGENT_BOX_REPO_DIR: ${AGENT_BOX_REPO_DIR:-/work}
+    AGENT_BOX_SSH_USER: ${AGENT_BOX_SSH_USER:-}
+    AGENT_BOX_SSH_HOST: ${AGENT_BOX_SSH_HOST:-}
+    AGENT_BOX_GIT_HOST: ${AGENT_BOX_GIT_HOST:-}
+    AGENT_BOX_GIT_SSH_PORT: ${AGENT_BOX_GIT_SSH_PORT:-30022}
+  volumes:
+    - home:/home/agent                                   # state: logins, keys, caches
+    - ${AGENT_BOX_WORKSPACE:-~/Projects}:/work           # your repos, read-write
+
+services:
+  # The box itself. `run --rm box` drops into bash; `run --rm box <cmd>` runs one command.
+  box:
+    <<: *box-common
+    build:
+      context: ./image
+      dockerfile: Dockerfile
+      # The Dockerfile reads mise.toml and ansible/requirements.yml from the
+      # repo root without copying the whole repo into the build context.
+      additional_contexts:
+        repo: ../..
+
+  # Variants extend `box` and change one thing. Add more the same way.
+  claude:
+    extends: box
+    command: ["claude"]
+
+  doctor:
+    extends: box
+    command: ["agent-box-doctor"]
+
+volumes:
+  # External on purpose: the volume outlives any compose project and may
+  # have been created by the wrapper or by hand. The wrapper creates it if
+  # missing; for direct compose use: `docker volume create irl-agent-box-home`.
+  home:
+    name: ${AGENT_BOX_VOLUME:-irl-agent-box-home}
+    external: true

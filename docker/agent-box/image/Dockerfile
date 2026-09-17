@@ -30,6 +30,7 @@ ARG UV_VERSION=0.12.15
 ARG CLAUDE_CODE_VERSION=2.1.273
 ARG BW_CLI_VERSION=2026.8.0
 ARG TEA_VERSION=0.16.0
+ARG STARSHIP_VERSION=1.26.0
 ARG ANSIBLE_CORE_VERSION=2.18.18
 ARG TZ=America/New_York
 
@@ -124,12 +125,23 @@ USER root
 RUN curl -fsSL "https://gitea.com/gitea/tea/releases/download/v${TEA_VERSION}/tea-${TEA_VERSION}-linux-amd64" \
       -o /usr/local/bin/tea && chmod 0755 /usr/local/bin/tea && tea --version
 
+# ── starship prompt: single static binary, image-owned default config ──
+# The default config is seeded into the home volume on first start
+# (entrypoint) so it can be edited there; the image copy stays pristine.
+RUN curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-x86_64-unknown-linux-gnu.tar.gz" \
+      | tar -xz -C /usr/local/bin starship && chmod 0755 /usr/local/bin/starship && starship --version | head -1
+COPY starship.toml /etc/agent-box/starship.toml
+
 # ── Runtime wiring ─────────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/agent-box-entrypoint
 COPY doctor.sh /usr/local/bin/agent-box-doctor
 COPY bashrc.sh /etc/agent-box/bashrc.sh
 RUN chmod 0755 /usr/local/bin/agent-box-entrypoint /usr/local/bin/agent-box-doctor \
-    && echo 'source /etc/agent-box/bashrc.sh' >> /etc/bash.bashrc
+    && echo 'source /etc/agent-box/bashrc.sh' >> /etc/bash.bashrc \
+    # Bind-mounted repos under /work are owned by whatever uid the host
+    # maps (Docker Desktop: not 1000), and git refuses "dubious ownership"
+    # unless told otherwise. System-level so it is image-owned, not volume state.
+    && git config --system --add safe.directory '*'
 
 ENV AGENT_BOX=1 \
     CLAUDE_CONFIG_DIR=/home/agent/.claude \
