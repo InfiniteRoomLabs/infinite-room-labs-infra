@@ -4,8 +4,11 @@
 # Configures the Docker daemon for production use and sets up
 # shared networks and a prune cron job.
 #
-# NOTE: Docker is already installed (v29.3.0). This playbook
-# configures it properly -- it does not reinstall.
+# NOTE: Docker Engine was installed by hand before this playbook existed.
+# The playbook does not reinstall it, but it does own the Docker APT
+# source (keyring file + repo line keyed to the host's Debian release) so
+# that upgrades keep flowing after a dist-upgrade. The compose plugin
+# install below is what first needs that source to be right.
 #
 # Run standalone:
 #   ./run-ansible.sh playbook playbooks/docker.yml
@@ -16,6 +19,40 @@
   tags: [phase2, docker]
 
   tasks:
+    # ── Docker APT source ──────────────────────────────────────────
+    # Keyring as a plain file under /etc/apt/keyrings (no apt_key, no
+    # legacy trusted.gpg). The repo line follows the host's release name,
+    # so a Debian upgrade only needs the box upgraded, not this play edited.
+    - name: Ensure /etc/apt/keyrings exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Add Docker signing key (keyring file)
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    # The original hand install put the Docker line in sources.list itself.
+    # Drop it there so the managed sources.list.d entry is the only one.
+    - name: Remove legacy Docker line from /etc/apt/sources.list
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '^deb .*download\.docker\.com/linux/debian'
+        state: absent
+
+    - name: Add Docker APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        filename: docker
+        state: present
+
     # ── Ensure Docker Compose plugin is installed ──────────────────
     - name: Install Docker Compose plugin
       ansible.builtin.apt:

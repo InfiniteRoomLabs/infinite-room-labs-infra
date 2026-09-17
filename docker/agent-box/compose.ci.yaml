@@ -1,0 +1,29 @@
+# docker/agent-box/compose.ci.yaml
+# Opt-in overlay for non-interactive use (a future CI lane, or scripted
+# runs): no TTY, no workspace bind (the job checks the repo out inside),
+# firewall left on. The `home` volume is replaced by a throwaway one so a
+# CI run never touches a developer's logins.
+#
+#   docker compose -f compose.yaml -f compose.ci.yaml run --rm box agent-box-doctor
+#
+# Every service that extends `box` in the base is listed (extends resolves
+# per file, before overlays merge); the anchor keeps it to one definition.
+
+# `!override` replaces the inherited list with this one (`!reset` only clears).
+x-ci: &ci
+  stdin_open: false
+  tty: false
+  working_dir: /work
+  volumes: !override
+    - ci-home:/home/agent
+
+services:
+  box:
+    <<: *ci
+  claude:
+    <<: *ci
+  doctor:
+    <<: *ci
+
+volumes:
+  ci-home: {}

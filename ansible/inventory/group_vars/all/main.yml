@@ -113,6 +113,25 @@ irl_zfs_datasets:
       atime: "off"
       compression: "lz4"
 
+  # ── WotLK / AzerothCore (game server) ────────────────────────
+  # MySQL datadir (auth/characters/world/playerbots DBs; the world DB is
+  # re-importable, characters is not). mysql image runs as 999, chowned in zfs.yml.
+  - name: "{{ irl_zfs_pool }}/wotlk-db"
+    mountpoint: "{{ irl_zfs_mount }}/wotlk-db"
+    quota: "20G"
+    properties:
+      atime: "off"
+      compression: "lz4"
+      recordsize: "16K"
+  # Extracted client data (maps/vmaps/mmaps/dbc, ~15G, redownloadable from
+  # wowgaming/client-data). Runs as 1000:1000, chowned in zfs.yml.
+  - name: "{{ irl_zfs_pool }}/wotlk-data"
+    mountpoint: "{{ irl_zfs_mount }}/wotlk-data"
+    quota: "30G"
+    properties:
+      atime: "off"
+      compression: "lz4"
+
 # ── NFS (hand-managed on homelab, not via ansible) ──────────────────
 # The homelab already exports /media/root/storage1/nfs-share via NFSv4.2
 # (set up manually, not via ansible). Laptop mounts at /mnt/homelab-nfs.
@@ -231,6 +250,10 @@ irl_services:
     subdomain: "palworld"
     internal: true
     cluster_only: true  # Game traffic, not HTTP -- NodePort 30211/udp, no Traefik route
+  wotlk:
+    subdomain: "wow"
+    internal: true
+    cluster_only: true  # WoW 3.3.5a client traffic -- NodePort 30724 (auth) / 30085 (world), tailnet-only, no Traefik route
   # qbittorrent:                 # PAUSED -- DNS resolution blocker, see
   #   subdomain: "torrents"      # ~/projects/infinite-room-labs/qbittorrent-operator/deploy/irl/README.md
   #   internal: false            # Alpine/musl + k8s ndots:5 breaks tracker hostname resolution.
