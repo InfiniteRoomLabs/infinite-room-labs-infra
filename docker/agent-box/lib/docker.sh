@@ -29,10 +29,14 @@ volume_ensure() {
 }
 
 # Git Bash's mintty is not a Windows console, so `docker run -it` needs the
-# winpty shim to get a real TTY. Only relevant for interactive use; the
-# Claude Code Bash tool and CI never have a TTY and skip this.
+# winpty shim to get a TTY at all. But winpty garbles escape sequences
+# (bracketed paste, Ctrl-C) that TUI apps like Claude Code rely on, so use it
+# ONLY under mintty. Under Windows Terminal / conhost (WT_SESSION set, or
+# TERM_PROGRAM not mintty) bash already has a real ConPTY and winpty must be
+# skipped. Non-TTY callers (the Claude Code Bash tool, CI) never get it.
 docker_tty_prefix() {
-  if is_msys && [[ -t 0 && -t 1 ]] && command -v winpty >/dev/null 2>&1; then
+  if is_msys && [[ -t 0 && -t 1 ]] && [[ -z "${WT_SESSION:-}" && "${TERM_PROGRAM:-}" == "mintty" ]] \
+     && command -v winpty >/dev/null 2>&1; then
     printf 'winpty'
   fi
 }
