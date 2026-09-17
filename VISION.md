@@ -4,7 +4,7 @@ An earlier version of this document sketched a much bigger destination. This ver
 
 ## What this repo is
 
-The working infrastructure of Infinite Room Labs: a k3s cluster spanning an on-prem HP Z600 and a cloud agent node, managed end to end with Terraform, Terragrunt, Ansible, and Helm, and operated day to day by AI agents working under enforced policy. It's a production homelab, a proving ground, and the place where infrastructure ideas find out whether they survive contact with reality.
+The working infrastructure of Infinite Room Labs: a single-node k3s cluster on an on-prem HP Z600, managed end to end with Terraform, Terragrunt, Ansible, and Helm, and operated day to day by AI agents working under enforced policy. It's a production homelab, a proving ground, and the place where infrastructure ideas find out whether they survive contact with reality.
 
 ## Operating thesis: agents under policy
 

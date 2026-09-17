@@ -3,6 +3,17 @@
 # =================================
 # Applied to all hosts in the [homelab] group.
 
+# k3s API endpoint, as reachable over the tailnet. Re-homed here when the
+# cloud agent node was retired (it used to live in the DigitalOcean group
+# vars, which was the cluster's only producer of this value).
+#
+# Keep this a LITERAL address, not a Jinja expression over ansible_host:
+# scripts/gen-jobops-nft-denyset.sh derives the API endpoint from it via
+# `ansible-inventory --list` (which does not template) and a yq fallback over
+# group_vars (which cannot template at all). A templated value would reach
+# both paths unrendered.
+irl_k3s_server_url: "https://100.86.213.22:6443"
+
 # Firewall (nftables)
 irl_firewall_allowed_tcp_ports:
   - 22     # SSH

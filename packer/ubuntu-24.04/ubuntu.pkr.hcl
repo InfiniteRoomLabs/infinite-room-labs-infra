@@ -31,6 +31,26 @@ variable "headless" {
   default = true
 }
 
+# The upstream base image is PINNED to a dated serial, not noble/current.
+# `current` is a moving target: two builds of the same image_version would
+# silently differ, and the checksum could not be verified ahead of time.
+#
+# To bump: pick a serial from https://cloud-images.ubuntu.com/releases/noble/,
+# take its ubuntu-24.04-server-cloudimg-amd64.img line from that directory's
+# SHA256SUMS, update BOTH vars together, and bump image_version. Changing one
+# without the other fails the build at download time, which is the point.
+variable "base_image_url" {
+  type        = string
+  default     = "https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img"
+  description = "Pinned upstream Ubuntu cloud image (dated serial, never `current`)"
+}
+
+variable "base_image_checksum" {
+  type        = string
+  default     = "sha256:6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733"
+  description = "sha256 of base_image_url, from that serial directory's SHA256SUMS"
+}
+
 locals {
   # A throwaway build-only account. It is force-deleted in shutdown_command
   # before the artifact is finalized; it never exists in shipped images.
@@ -50,8 +70,8 @@ locals {
 }
 
 source "qemu" "ubuntu" {
-  iso_url      = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
-  iso_checksum = "file:https://cloud-images.ubuntu.com/noble/current/SHA256SUMS"
+  iso_url      = var.base_image_url
+  iso_checksum = var.base_image_checksum
   disk_image   = true
 
   vm_name          = "ubuntu-24.04-golden-v${var.image_version}.qcow2"

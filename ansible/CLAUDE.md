@@ -34,7 +34,6 @@ inventory/
   group_vars/all/main.yml               # Global vars (domains, compose paths, services)
   group_vars/all/vault.yml              # Ansible Vault encrypted secrets -- DO NOT EDIT
   group_vars/homelab/main.yml           # Homelab group vars (firewall ports)
-  group_vars/digitalocean/main.yml      # DO k3s agent vars (tailscale hostname, firewall)
   host_vars/homelab.yml                 # Resource-scaled params (RAM budgets, PG tuning)
 playbooks/                              # One playbook per concern, flat structure
 templates/                              # Jinja2 templates for configs and compose files
@@ -62,6 +61,5 @@ docs/runbooks/                          # Incident runbooks
 ## SSH Access
 
 - **Homelab**: `100.86.213.22` via Tailscale (`homelab-ts` in SSH config)
-- **DO k3s agent**: `100.102.210.70` via Tailscale (`do-k3s` in SSH config)
-- **Jump box**: if homelab is unreachable directly, use `ssh -A -J do-k3s homelab-ts` (requires `AllowTcpForwarding yes` on the DO box)
+- **Jump box**: none. The cloud agent node that used to serve as one was retired, so an unreachable homelab means physical or LAN access.
 - **ansible.cfg** disables host key checking and enables SSH pipelining with ControlMaster

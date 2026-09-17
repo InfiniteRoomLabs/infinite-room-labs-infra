@@ -2,7 +2,6 @@ version: '3'
 
 vars:
   HOMELAB_HOST: homelab-ts
-  DO_HOST: do-k3s
   RESULTS_DIR: results
 
 tasks:
@@ -11,13 +10,11 @@ tasks:
     desc: Install Goss on remote nodes
     cmds:
       - ssh {{.HOMELAB_HOST}} 'curl -fsSL https://goss.rocks/install | sh' || true
-      - ssh {{.DO_HOST}} 'curl -fsSL https://goss.rocks/install | sh' || true
 
   goss:upload:
     desc: Upload Goss test files to nodes
     cmds:
       - scp goss/homelab.yml {{.HOMELAB_HOST}}:/tmp/goss-homelab.yml
-      - scp goss/digitalocean.yml {{.DO_HOST}}:/tmp/goss-do.yml
 
   # ── Phase 1: Node validation (Goss via SSH) ────────────────────
   goss:homelab:
@@ -31,20 +28,9 @@ tasks:
       - sh: ssh {{.HOMELAB_HOST}} 'which goss' 2>/dev/null
         msg: "Goss not installed on homelab. Run: task goss:install"
 
-  goss:digitalocean:
-    desc: Validate DO droplet (SSH, kernel, k3s agent)
-    deps: [goss:upload]
-    cmds:
-      - mkdir -p {{.RESULTS_DIR}}
-      - ssh {{.DO_HOST}} 'goss -g /tmp/goss-do.yml validate -f json' > {{.RESULTS_DIR}}/goss-do.json || true
-      - echo "DO Goss complete"
-    preconditions:
-      - sh: ssh {{.DO_HOST}} 'which goss' 2>/dev/null
-        msg: "Goss not installed on DO node. Run: task goss:install"
-
   goss:
     desc: Run all Goss tests
-    deps: [goss:homelab, goss:digitalocean]
+    deps: [goss:homelab]
 
   # ── Phase 2: Cluster + service tests (pytest) ──────────────────
   pytest:

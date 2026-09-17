@@ -36,7 +36,19 @@ BANNED = re.compile("[‘’“”–—→←]")
 
 # Phrases naming retired systems that may not appear in LIVE docs.
 # Historical trees legitimately describe the past and are exempt.
-DEAD_REFS = ("caddy_proxy", "spec-kitty", "kitty-specs/", ".kittify/")
+# Only NODE-SPECIFIC retired identifiers belong here. DigitalOcean as a
+# generic capability is retained on purpose (the do-droplet module, the
+# provider entry in terraform/root.hcl and the lockfiles it generates,
+# fnox's DIGITALOCEAN_TOKEN, mise's DO_SSH_FINGERPRINT), so a bare
+# "digitalocean" would be wrong here -- what was retired is the agent node.
+DEAD_REFS = (
+    "caddy_proxy",
+    "spec-kitty",
+    "kitty-specs/",
+    ".kittify/",
+    "do-k3s-agent",
+    "environments/homelab/digitalocean",
+)
 HISTORICAL_PREFIXES = (
     "docs/plans/",
     "docs/decisions/",  # ADRs document retirements; naming the retired system is their job
