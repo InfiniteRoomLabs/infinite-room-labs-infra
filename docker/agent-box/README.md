@@ -33,6 +33,12 @@ Plain `docker compose run --rm box` works as well; see "Compose stack" below.
 one-time login (Claude, gh, tea, bw, fnox config) and tells you the command
 for each. FAIL means the image or the run flags are wrong.
 
+After signing in to Claude Code and adding the box's key to GitHub, run
+`agent-box-extras` once inside the box. It installs ccsm (the infra repo's
+PreToolUse/PostToolUse hooks call `ccsm-detect-secrets` and
+`ccsm-check-output`; without it every Bash tool call logs a hook error) and
+points the repo's `fnox` MCP server at the box's own fnox.
+
 ## Boundary
 
 ```
@@ -94,7 +100,8 @@ persistent volume.
 | `image/entrypoint.sh` | container | Firewall, home skeleton, SSH identity + agent, then `exec`. |
 | `image/init-firewall.sh` | container (sudo) | Default-deny egress from `allowlist.txt`. The only sudo the user has. |
 | `image/allowlist.txt` | container | Hostnames, CIDRs, `@github`. One line per destination. |
-| `image/doctor.sh` | container | PASS/WARN/FAIL report of tools, logins, reach, firewall. |
+| `image/doctor.sh` | container | PASS/WARN/FAIL report of tools, logins, reach, firewall, extras. |
+| `image/extras.sh` | container | `agent-box-extras`: volume-scoped installs the image can't bake in. ccsm (private repo, over the box's SSH key) for the infra repo's Claude Code hooks, and a local-scope `fnox` MCP override (the committed `.mcp.json` points at a laptop path). Idempotent; rerun after a volume wipe. |
 | `image/bashrc.sh` | container | starship prompt, mise activation, history on the volume, `infra` alias, `bw-unlock`/`bw-lock`. |
 | `image/starship.toml` | container | Baseline prompt config (stock starship plus always-on `user@host`). Seeded to `~/.config/starship.toml` on first start; edit the volume copy. |
 
