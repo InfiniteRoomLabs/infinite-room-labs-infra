@@ -64,9 +64,97 @@ The pod needs egress to the internet for wordpress.org. That is the namespace-wi
 kubectl get networkpolicy -n irl allow-egress-internet
 ```
 
+### Nightly backup job failing
+```bash
+kubectl get jobs -n irl | grep wordpress-backup
+kubectl logs -n irl job/wordpress-backup-<id> -c db-dump   # dump stage
+kubectl logs -n irl job/wordpress-backup-<id> -c uploader   # S3 stage
+```
+The pod is deleted once the backoff limit is hit (restartPolicy OnFailure), so
+grab logs while it runs, or re-create the job by hand and watch it. Common
+causes: the `wordpress-backup-s3` Secret missing (bw-sync not run), the Garage
+key losing its bucket grant, or the bucket hitting its 50GiB quota.
+
 ### Disk full
 `main/wordpress-content` has a 20G quota (uploads) and `main/wordpress-db` 10G. Raise the quota in `irl_zfs_datasets` (`group_vars/all/main.yml`) and re-run `ansible-playbook playbooks/zfs.yml --tags datasets`.
 
+## Backups and Restore
+
+Two independent layers:
+
+- **sanoid ZFS snapshots** of `main/wordpress-content` and `main/wordpress-db`
+  (hourly 24 / daily 30 / weekly 4 / monthly 6). Fast, local, and useless if
+  the pool dies. DB snapshots are crash-consistent, not quiesced -- InnoDB
+  replays its redo log on restore.
+- **Nightly CronJob `wordpress-backup`** into the Garage bucket
+  `wordpress-backups` (IAM key `wordpress-backup`, read+write, 50GiB quota).
+  `db/wordpress-db-<stamp>.sql.gz` is a point-in-time `mariadb-dump` pruned
+  after 30 days; `wp-content/` is an incremental `aws s3 sync` mirror with no
+  `--delete`, so it is never pruned and keeps files the live site dropped.
+
+Check the last run:
+
+```bash
+kubectl get cronjob -n irl wordpress-backup
+kubectl get jobs -n irl | grep wordpress-backup
+kubectl logs -n irl job/wordpress-backup-<id> -c uploader
+```
+
+Run one on demand:
+
+```bash
+kubectl create job -n irl --from=cronjob/wordpress-backup wordpress-backup-manual
+```
+
+### List what is in the bucket
+
+Everything below runs aws-cli in-cluster, because the Garage S3 API is
+ClusterIP-only and the credentials live in a Secret:
+
+```bash
+kubectl run -n irl aws-shell --rm -it --restart=Never \
+  --image=amazon/aws-cli:2.36.38 \
+  --overrides='{"spec":{"containers":[{"name":"aws-shell","image":"amazon/aws-cli:2.36.38","stdin":true,"tty":true,"command":["/bin/sh"],"envFrom":[{"secretRef":{"name":"wordpress-backup-s3"}}],"env":[{"name":"AWS_REQUEST_CHECKSUM_CALCULATION","value":"when_required"},{"name":"AWS_RESPONSE_CHECKSUM_VALIDATION","value":"when_required"}]}]}}'
+
+# inside:
+aws --endpoint-url=http://garage:3900 s3 ls s3://wordpress-backups/db/
+aws --endpoint-url=http://garage:3900 s3 ls --recursive --human-readable --summarize s3://wordpress-backups/wp-content/ | tail -3
+```
+
+### Restore the database
+
+```bash
+# 1. In the aws-shell pod above, pull the dump onto the shared bucket path you
+#    can reach from the mariadb pod -- simplest is to stream it straight in:
+kubectl exec -n irl -i sts/wordpress-mariadb -- bash -c \
+  'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" wordpress' < ./wordpress-db-<stamp>.sql
+```
+
+If the dump is still gzipped, `gunzip -c dump.sql.gz | kubectl exec -i ...`.
+Take a snapshot first (`zfs snapshot main/wordpress-db@pre-restore-$(date +%F)`);
+the import overwrites tables in place and there is no undo.
+
+### Restore wp-content
+
+```bash
+# From the aws-shell pod, with the content claim mounted (easiest: scale the
+# app to 0, then run a one-off pod that mounts wordpress-content):
+aws --endpoint-url=http://garage:3900 s3 sync \
+  s3://wordpress-backups/wp-content/ /var/www/html/wp-content/
+chown -R 33:33 /var/www/html/wp-content
+```
+
+Because the mirror has no `--delete`, a sync back can restore files the live
+site removed -- that is the point, but it also means the restored tree is a
+union, not a snapshot. For an exact point in time, use the ZFS snapshot.
+
+### Full rebuild from scratch
+
+`wp-config.php` is NOT in the S3 backup (only `wp-content/` and the database).
+That is deliberate: the image regenerates it on first boot and the only thing
+lost is the salt set, which just logs everyone out. Rebuild order: run the
+deploy, let the pod create a fresh install, then restore the database, then
+sync `wp-content` back.
 ## Recovery
 
 ```bash

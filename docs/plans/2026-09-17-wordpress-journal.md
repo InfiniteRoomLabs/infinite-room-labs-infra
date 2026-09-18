@@ -37,5 +37,36 @@ Skipped on purpose: multisite, Redis/Valkey object cache (a single-author journa
 
 ## Follow-ups
 
-- **Off-site backup**: sanoid snapshots protect against deletion and bad edits, not against losing the pool. The paperless chart's nightly CronJob (export -> Garage S3 bucket -> prune older than N days) is the pattern to copy; for WordPress it would be `mariadb-dump` plus a tar of `wp-content`. Needs a `wordpress-backups` bucket and S3 credentials in Bitwarden.
-- **Drift found while wiring this up**: the live cluster has `allow-egress-internet` and `allow-ingress-tailscale` NetworkPolicies in the `irl` namespace that exist in no playbook -- `k3s.yml` only codifies `default-deny-all`, `allow-intra-namespace`, `allow-dns-egress` and the per-service ones. WordPress depends on the first of those for plugin/theme installs from wp-admin. A rebuild from the repo alone would come up without them.
+All of the gaps this work opened were closed in the same branch:
+
+- **Off-site backup** -- done in chart 0.2.1: a nightly CronJob writes
+  `db/wordpress-db-<stamp>.sql.gz` (point-in-time `mariadb-dump`, pruned after
+  30 days) and mirrors `wp-content/` with `aws s3 sync` (no `--delete`, never
+  pruned) into the Garage bucket `wordpress-backups` (IAM key
+  `wordpress-backup`, read+write, 50GiB quota). 0.2.0 tried to stream
+  `tar | aws s3 cp -` and every run died on `tar: command not found` -- the
+  `amazon/aws-cli` image has no tar, and the failure still left a 0-byte object
+  that looked like a backup. Restore procedure is in the runbook.
+- **NetworkPolicy drift** -- `allow-egress-internet` and
+  `allow-ingress-tailscale` are now defined in `k3s.yml` (tag `netpol`).
+  Applying them reported `ok`/`changed=0`, which is the proof that the
+  codified YAML matches what was running.
+- **`python3-kubernetes` drift** -- the homelab lost it in the Debian 13
+  upgrade, so every `kubernetes.core` task failed. Both `k3s.yml` and
+  `helm-deploy.yml` now install it (tag `always`).
+- **Unpinned charts** -- every `kubernetes.core.helm` task now pins
+  `chart_version` to what is deployed. An unpinned task drifts on any unrelated
+  run (that is how coredns went 1.47.0 -> 1.47.1 during this work) and renovate
+  can only raise upgrade PRs for pins.
+- **`yq` unpinned** -- `bw-sync.sh` hard-requires it; it is now in `mise.toml`.
+  That in turn exposed `IRL_SSH_PUBKEY`'s `exec()` template aborting the whole
+  mise config when `~/.ssh/id_ed25519.pub` is absent, which had been silently
+  skipping a hygiene test; the template now tolerates a missing key.
+- **`bw get` ambiguity** -- `fnox.toml`'s `AWS_ACCESS_KEY_ID` matched two items
+  (the sibling item's notes mention it by name), so it now references the
+  Bitwarden item by UUID.
+
+Still open:
+
+- **Restore has not been rehearsed.** The backup runs and the objects are in the
+  bucket, but nobody has restored from them yet. An untested backup is a rumour.

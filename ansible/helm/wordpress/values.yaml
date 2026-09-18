@@ -37,3 +37,20 @@ ingress:
 # PVs are node-local hostPath on the ZFS pool.
 nodeSelector:
   irl.dev/tier: data
+
+# Nightly mariadb-dump + wp-content tar to the Garage bucket
+# `wordpress-backups` (IAM key `wordpress-backup`, read+write, 50GiB bucket
+# quota; keys from the bw-sync lane). Sanoid snapshots of the datasets live on
+# the same pool as the data -- this is the copy that survives losing the pool.
+# Restore procedure: ansible/docs/runbooks/wordpress-down.md.
+backup:
+  enabled: true
+  schedule: "0 3 * * *"
+  timeZone: "America/New_York"
+  retentionDays: 30
+  s3:
+    # In-cluster Garage S3 API over plain HTTP: the public https endpoint is a
+    # self-signed cert that aws-cli rejects (SSL: CERTIFICATE_VERIFY_FAILED).
+    endpoint: "http://garage:3900"
+    bucket: "wordpress-backups"
+    existingSecret: wordpress-backup-s3

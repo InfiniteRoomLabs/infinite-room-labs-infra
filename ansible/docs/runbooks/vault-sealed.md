@@ -1,63 +1,70 @@
 # Runbook: Vault Sealed
 
-## Severity: HIGH (blocks secret access for all services)
+## Severity: HIGH (blocks every secret External Secrets Operator delivers)
+
+Vault runs in the `irl` namespace as the StatefulSet pod `vault-0` (Shamir seal, file storage, 3-of-5 threshold). It re-seals on **every** restart -- pod eviction, node reboot, OOM kill, chart upgrade -- and nothing unseals it automatically.
 
 ## Detection
 
-- Vault health check returns sealed status
-- Services that read from Vault fail to start or authenticate
-- `docker exec irl-vault vault status` shows `Sealed: true`
+- `kubectl exec -n irl vault-0 -- vault status` shows `Sealed: true` (exit code 2)
+- `https://vault.lab.infiniteroomlabs.cloud/v1/sys/health` returns 503 (200 = unsealed and active)
+- **The usual first symptom is downstream**: the ClusterSecretStore goes `InvalidProviderConfig` ("unable to create client") and every ExternalSecret stops syncing:
 
-## Cause
+```bash
+kubectl get clustersecretstore vault-irl
+kubectl get externalsecret -A     # watch the LAST SYNC column go stale
+```
 
-Vault auto-seals on:
-- Container restart
-- Server reboot
-- Out-of-memory kill
-- Manual seal command
+Nothing alerts on this today -- Vault is not a Prometheus scrape target and ESO exports no metrics the cluster collects, so a sealed Vault can sit unnoticed for days. Tracked in `docs/plans/RESEARCH.md`.
 
 ## Resolution
 
-### Unseal Vault
+### 1. Unseal
 
-Vault requires 3 of 5 unseal keys (key threshold configured at init).
+Keys live in the Bitwarden item **`Vault Unseal Keys + Root Token`** (folder `IRL/Services/Vault`), as a numbered list in the item's notes alongside the root token. Three of the five are required.
 
 ```bash
-# Check status
-docker exec irl-vault vault status
+kubectl exec -n irl vault-0 -- vault status | grep -E 'Sealed|Unseal Progress'
 
-# Unseal (repeat 3 times with different keys)
-docker exec -it irl-vault vault operator unseal
-# Enter unseal key 1
+# Repeat three times with DIFFERENT keys. Never echo the key; paste it into
+# the command, or pull it straight from Bitwarden:
+KEY=$(bw get item "Vault Unseal Keys + Root Token" | jq -r '.notes' | sed -n 's/^Unseal Key 1: //p')
+kubectl exec -n irl vault-0 -- vault operator unseal "$KEY"; unset KEY
+# ... keys 2 and 3
 
-docker exec -it irl-vault vault operator unseal
-# Enter unseal key 2
-
-docker exec -it irl-vault vault operator unseal
-# Enter unseal key 3
-
-# Verify
-docker exec irl-vault vault status
-# Should show: Sealed: false
+kubectl exec -n irl vault-0 -- vault status | grep Sealed    # Sealed  false
 ```
 
-### After Unseal
+`Unseal Progress 2/3` between steps is normal. A wrong key resets progress to 0.
 
-Services that depend on Vault may need a restart:
+### 2. Kick External Secrets Operator
+
+ESO caches its failed Vault client and will not retry promptly; restart the controller so the store re-validates instead of waiting out the refresh interval:
+
 ```bash
-cd /opt/irl/{stack}
-sudo docker compose restart
+kubectl rollout restart -n external-secrets deploy/external-secrets
+kubectl rollout status  -n external-secrets deploy/external-secrets
+
+kubectl get clustersecretstore vault-irl          # STATUS Valid, READY True
+kubectl get externalsecret -A                     # SecretSynced, LAST SYNC recent
+```
+
+### 3. Check what else waited on it
+
+Anything whose Secret is ESO-delivered may have been running on a stale Secret or failing to start:
+
+```bash
+kubectl get pods -A | grep -vE 'Running|Completed'
 ```
 
 ## Unseal Key Storage
 
-Unseal keys must be stored securely and separately:
-- Never store all keys in one place
-- Never store keys on the server itself
-- Consider: password manager, hardware security key, encrypted USB
+The keys and the root token are in Bitwarden, which is the single source of truth for this homelab. Deliberate trade-off, written down so nobody "fixes" it by accident: splitting the five keys across separate custodians is the textbook answer, but a single-operator homelab with no second custodian gets *less* available, not more secure, from key-splitting theatre. The real hardening step is auto-unseal (below), not key sharding.
+
+Never write unseal keys onto the server itself, into a values file, or into this repo.
 
 ## Prevention
 
-- Avoid unnecessary Vault container restarts
-- Monitor Vault health in Grafana
-- Consider auto-unseal with a cloud KMS (future enhancement)
+- **Auto-unseal** is the actual fix: Vault's transit seal against a second Vault, or a cloud KMS. Both add an external dependency; neither has been set up. Until then every restart needs a human.
+- Keep `vault-0` off nodes that get drained casually; it has no HA peer.
+- After any chart upgrade or node reboot, check `vault status` as part of the post-change walk -- it is the one service that comes back "up" and useless.

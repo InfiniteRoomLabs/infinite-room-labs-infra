@@ -539,3 +539,20 @@ When a topic graduates from "project-wide question" to "we're actually building 
   - [Cloudflare Email Workers](https://developers.cloudflare.com/email-routing/email-workers/)
 - **Findings**: _Pending._
 - **Decision**: _Pending. Until resolved, reports accumulate unparsed in the destination mailbox._
+
+### R19: Alerting on a sealed Vault / stalled ExternalSecrets
+
+- **Status**: open
+- **Roadmap link**: Observability (Phase 2 -- the stack that already runs kube-prometheus-stack + Loki)
+- **Trigger**: On 2026-09-17 Vault was found sealed with the ClusterSecretStore `vault-irl` in `InvalidProviderConfig` and both gunio ExternalSecrets stuck at `SecretSyncedError` -- last successful sync **3d3h** earlier. Nothing surfaced it: the failure is silent because the pods that already hold their Secrets keep running. Unsealing plus an ESO controller restart fixed it in under a minute; the three days of not knowing is the actual defect.
+- **Key questions**:
+  1. Scrape Vault itself? `vault_core_unsealed` is the direct signal, but Vault's `/v1/sys/metrics` needs `telemetry.prometheus_retention_time` set and either an unauthenticated-metrics ACL or a scrape token in the ServiceMonitor. Which of those is acceptable for a single-node homelab?
+  2. Or scrape External Secrets Operator instead? It exports `externalsecret_status_condition` on its controller service, which catches this failure AND every other ESO stall in one rule. It lives in the `external-secrets` namespace, so Prometheus needs `serviceMonitorNamespaceSelector` widened -- does that pull in anything unwanted?
+  3. Where should the alert land? Alertmanager currently routes to a placeholder receiver (`http://127.0.0.1:9999/alert`), so an alert would fire into nothing. Fixing the route (ntfy? email via SendGrid? Grafana contact point?) is a prerequisite for this being worth anything.
+  4. Is a synthetic probe (blackbox exporter against `https://vault.lab.../v1/sys/health`, which returns 503 when sealed) simpler than either of the above?
+- **Resources**:
+  - [Vault telemetry / Prometheus](https://developer.hashicorp.com/vault/docs/configuration/telemetry)
+  - [External Secrets Operator metrics](https://external-secrets.io/latest/api/metrics/)
+  - `ansible/docs/runbooks/vault-sealed.md` (the manual procedure this would page for)
+- **Findings**: _Pending._
+- **Decision**: _Pending. Until resolved, a sealed Vault is only found by hand -- check `vault status` after any node reboot or chart upgrade._
