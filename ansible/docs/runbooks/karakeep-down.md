@@ -38,6 +38,57 @@ kubectl describe pod -n irl -l app.kubernetes.io/name=karakeep | tail -20
 If secrets are missing, re-sync: `mise run secrets:sync`, then
 `uv run ansible-playbook playbooks/k8s-secrets.yml` from `ansible/`.
 
+### KNOWN BROKEN (2026-09-17): chrome sidecar in permanent CrashLoopBackOff
+
+`karakeep-chrome` has been crashlooping since it was created on 2026-07-11 --
+838 restarts and counting -- so **bookmarks have had no screenshots or
+full-page archives that whole time**. The app itself is healthy; only capture
+is affected, which is why it went unnoticed.
+
+```
+[FATAL:credentials.cc(127)] Check failed: . : Permission denied (13)
+```
+exit code 133, container dies in under a second, every time.
+
+That is Chrome's sandbox failing to set up its namespace, not a karakeep bug.
+What has been ruled out on the host:
+
+```bash
+ssh homelab-ts '/usr/sbin/sysctl kernel.unprivileged_userns_clone'   # = 1, allowed
+ssh homelab-ts '/usr/sbin/sysctl kernel.apparmor_restrict_unprivileged_userns'  # absent
+```
+
+So the Debian 13 AppArmor userns restriction is NOT the cause. The pod runs
+`gcr.io/zenika-hub/alpine-chrome:124` as uid 1000 with `readOnlyRootFilesystem:
+true`, `allowPrivilegeEscalation: false` and `capabilities.add: [SYS_ADMIN]`
+(chart defaults, see the comment in `ansible/helm/karakeep/values.yaml`).
+
+Candidate fixes, **both of the non-invasive ones tested on the node and ruled
+out** on 2026-09-17:
+
+1. ~~Relax seccomp (`seccompProfile: {type: Unconfined}`) and keep everything
+   else~~ -- tested with a standalone pod: identical `credentials.cc(127)`
+   failure. Not a seccomp problem.
+2. ~~Run as root with SYS_ADMIN~~ -- tested: Chrome refuses outright,
+   `Running as root without --no-sandbox is not supported` (crbug 638180).
+3. `--no-sandbox` in the container args. This is what actually works, and it is
+   what almost every k8s Chrome deployment ends up doing. It is also a real
+   trade-off: this container exists to render arbitrary untrusted pages, and
+   the sandbox is what stands between a malicious bookmark and the container.
+   If taken, pair it with a NetworkPolicy pinning the chrome pod's egress.
+
+**Why the chart's `capabilities.add: [SYS_ADMIN]` does nothing here**: the
+container runs as uid 1000. A non-root process gets an EMPTY effective
+capability set on exec unless ambient capabilities are set, which k8s does not
+do -- so SYS_ADMIN (and the default SYS_CHROOT) are not actually held by the
+process, and Chrome's sandbox fails at `chroot(".")` with EPERM. The capability
+in the chart values is decorative for as long as `runAsUser: 1000` stands.
+
+Whatever is chosen belongs in `ansible/helm/karakeep/values.yaml` (the chart is
+pinned at 0.32.0, so a render-diff review comes with it), never as a live
+`kubectl edit`. Until then, karakeep works but never captures screenshots.
+
+
 ### Capture works but pages have no content/screenshot
 Chrome worker unreachable. It's stateless -- restart it:
 

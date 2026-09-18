@@ -1,0 +1,56 @@
+# WordPress -- the journal at journal.lab.infiniteroomlabs.cloud.
+# IRL chart irl-wordpress (pinned in helm-deploy.yml): official
+# wordpress:*-apache image + a bundled MariaDB, both on ZFS-backed static
+# claims. Tailnet-only by construction: the only route in is the chart's
+# IngressRoute on Traefik's websecure entrypoint, and journal.lab resolves
+# solely through the internal CoreDNS zone that Tailscale Split DNS serves.
+fullnameOverride: wordpress
+
+wordpress:
+  # Pins WP_HOME/WP_SITEURL. WordPress stores these in the DB otherwise and
+  # then cheerfully redirects to whatever hostname it first saw.
+  siteUrl: "https://journal.lab.infiniteroomlabs.cloud"
+  existingClaim: wordpress-content
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+mariadb:
+  existingClaim: wordpress-db
+  # bw-sync lane: items wordpress-db-root-password / wordpress-db-password.
+  existingSecret: wordpress-secrets
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+
+ingress:
+  enabled: true
+  host: journal.lab.infiniteroomlabs.cloud
+
+# PVs are node-local hostPath on the ZFS pool.
+nodeSelector:
+  irl.dev/tier: data
+
+# Nightly mariadb-dump + wp-content tar to the Garage bucket
+# `wordpress-backups` (IAM key `wordpress-backup`, read+write, 50GiB bucket
+# quota; keys from the bw-sync lane). Sanoid snapshots of the datasets live on
+# the same pool as the data -- this is the copy that survives losing the pool.
+# Restore procedure: ansible/docs/runbooks/wordpress-down.md.
+backup:
+  enabled: true
+  schedule: "0 3 * * *"
+  timeZone: "America/New_York"
+  retentionDays: 30
+  s3:
+    # In-cluster Garage S3 API over plain HTTP: the public https endpoint is a
+    # self-signed cert that aws-cli rejects (SSL: CERTIFICATE_VERIFY_FAILED).
+    endpoint: "http://garage:3900"
+    bucket: "wordpress-backups"
+    existingSecret: wordpress-backup-s3

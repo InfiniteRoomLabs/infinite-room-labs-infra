@@ -56,8 +56,10 @@ HISTORICAL_PREFIXES = (
     ".claude/",
     "CHANGELOG.md",
 )
-# Live docs still carrying dead refs -- fixed in WS3. Shrink-only ratchet.
-DEAD_REF_GAPS = {"CONTRIBUTING.md"}
+# Live docs still carrying dead refs. Shrink-only ratchet -- CONTRIBUTING.md
+# came off the list when its "Adding a New Service" section was rewritten for
+# Traefik/IngressRoute (the old text still documented a `caddy_proxy` field).
+DEAD_REF_GAPS: set[str] = set()
 
 
 def test_markdown_encoding():
