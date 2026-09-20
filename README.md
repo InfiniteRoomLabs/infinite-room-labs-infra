@@ -331,6 +331,7 @@ Workspace names are derived from the directory path relative to `root.hcl`: `env
 | `dev-porkbun-nameservers`        | `terraform/environments/dev/porkbun/nameservers/`        |
 | `prod-cloudflare-zones`          | `terraform/environments/prod/cloudflare/zones/`          |
 | `prod-cloudflare-dns-records`    | `terraform/environments/prod/cloudflare/dns-records/`    |
+| `prod-cloudflare-website-offline` | `terraform/environments/prod/cloudflare/website-offline/` |
 | `prod-porkbun-nameservers`       | `terraform/environments/prod/porkbun/nameservers/`       |
 | `prod-sendgrid-config`           | `terraform/environments/prod/sendgrid/config/`           |
 | `homelab-cloudflare-dns-records` | `terraform/environments/homelab/cloudflare/dns-records/` |
