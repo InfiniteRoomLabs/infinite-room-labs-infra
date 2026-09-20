@@ -49,6 +49,9 @@ generate "main" {
       perm_email_routing_rules_write     = "79b3ec0d10ce4148a8f8bdc0cc5f97f2"
       perm_email_routing_addresses_read  = "5272e56105d04b5897466995b9bd4643"
       perm_email_routing_addresses_write = "e4589eb09e63436686cd64252a3aebeb"
+      # Added for prod/cloudflare/website-offline (zone WAF custom ruleset).
+      # Verified against GET /accounts/{id}/tokens/permission_groups on 2026-09-20.
+      perm_zone_waf_write = "fb6778dc191143babbfaa57993f1d275"
     }
 
     resource "cloudflare_account_token" "infra" {
@@ -71,6 +74,7 @@ generate "main" {
             { id = local.perm_email_routing_rules_write },
             { id = local.perm_email_routing_addresses_read },
             { id = local.perm_email_routing_addresses_write },
+            { id = local.perm_zone_waf_write },
           ]
           resources = jsonencode({
             "com.cloudflare.api.account.$${var.account_id}" = "*"
