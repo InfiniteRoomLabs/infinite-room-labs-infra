@@ -27,70 +27,127 @@ scripts/             bw-sync.sh, bootstrap scripts
 
 ## Adding a New Service
 
-This is the most common operation. Follow this checklist exactly:
+This is the most common operation. `pytest -m hygiene` in `tests/` encodes most
+of this checklist -- run it before you push and it will tell you what you
+forgot.
 
-### 1. Add to `irl_services` dict
+### 1. Add to the `irl_services` registry
 
-`ansible/inventory/group_vars/all/main.yml` -- add an entry:
+`ansible/inventory/group_vars/all/main.yml`:
 
 ```yaml
 myservice:
   subdomain: "myservice"        # becomes myservice.lab.infiniteroomlabs.cloud
-  port: 30XXX                   # NodePort number (pick an unused one)
-  internal: false               # true = *.internal.lab domain + Caddy internal TLS
-  health_path: "/health"        # optional, used by docs
-  caddy_proxy: true             # set false for ClusterIP-only services
+  internal: false               # true = *.internal.lab.infiniteroomlabs.cloud
+  cluster_svc: "myservice"      # k8s Service name Traefik routes to
+  cluster_port: 8080
+  health_path: "/health"        # optional, defaults to "/" in the tests
+  # cluster_only: true          # no HTTP route at all (game servers, S3 API)
+  # deploy_tag: "monitoring"    # if a different play/tag deploys it
 ```
 
-This is the **single source of truth**. It drives:
-- Caddy reverse proxy (Caddyfile.j2 template)
-- CoreDNS zone file (coredns-internal-zone.db.j2 template)
-- Documentation
+This is the **single source of truth**. It drives the CoreDNS zone file
+(`coredns-internal-zone.db.j2`), the derived service list in `tests/conftest.py`
+and the hygiene contracts (homepage tile, runbook, DNS record).
 
-### 2. Create Helm values file
+There are no NodePorts and no Caddy any more: routing is Traefik IngressRoute
+CRDs, and reachability is "the name only resolves on the tailnet".
 
-`ansible/helm/{service}/values.yaml` -- chart-specific config:
-- Set `nodeSelector: { irl.dev/tier: data }` for homelab
-- Use `existingSecret` pattern for credentials (never plaintext)
-- Set resource limits appropriate for homelab
+### 2. Pick or write the chart
 
-### 3. Add deployment tasks to `helm-deploy.yml`
+Prefer an upstream chart plus a values file. Check that its images are actually
+maintained -- Bitnami's community images moved to `bitnamilegacy` in Aug 2025
+and are frozen, so a Bitnami chart means pinning stale images.
 
-`ansible/playbooks/helm-deploy.yml` -- add tasks in the right phase:
-- Phase 2: Core infrastructure (databases, storage, DNS)
-- Phase 3: Dev platform + monitoring (apps, dashboards)
-- Phase 5: Agent integration (AI/ML services)
+If no upstream chart fits, write one in the `helm-charts/` submodule
+(`charts/irl-{name}/`, see `irl-wordpress` for the shape: app + optional
+app-owned database + chart-owned IngressRoute + `existingClaim`/`existingSecret`
+everywhere). **Commit and push the submodule first**: ansible installs from the
+published IRL Helm repo (`chart_ref: irl/irl-{name}`), not from the local path,
+so the chart must exist at `https://infiniteroomlabs.github.io/helm-charts/`
+before the deploy task can work. Then update the submodule pointer here.
 
-Each service needs:
-- Helm repo addition (if upstream chart)
-- Values file upload
-- Secret creation (if needed, with `no_log: true`)
-- `kubernetes.core.helm` deploy task with proper tags
+Keep operator-specific values (hostnames, claim names, secret names) out of
+chart defaults -- `helm-charts` is public.
 
-### 4. Add secrets (if needed)
+Routing: if the chart owns its IngressRoute, do NOT also add the service to
+`irl_traefik_standalone_services`; that list is only for services deployed from
+a chart that has no route of its own.
 
-1. Generate secret values
-2. Store in Bitwarden under `IRL/Services/{ServiceName}/`
-3. Add to `scripts/bw-sync-config.yaml`
-4. Add to `ansible/inventory/group_vars/all/vault.yml` (via `bw-sync.sh --target ansible`)
-5. Create K8s Secret in helm-deploy.yml task
+### 3. Storage (if it needs persistence)
 
-### 5. Redeploy Caddy
+Four places, in this order:
 
-Run `./ansible/run-ansible.sh playbook playbooks/caddy.yml` -- the Caddyfile template auto-generates from `irl_services`.
+1. `irl_zfs_datasets` in `group_vars/all/main.yml` -- dataset + quota (+
+   `recordsize: "16K"` for a database).
+2. `ansible/playbooks/zfs.yml` -- a chown task tagged with the service name.
+   hostPath PVs ignore `fsGroup`, so this is what actually makes the volume
+   writable by the container's uid.
+3. `ansible/playbooks/k3s.yml` -- a `pv-{service}-{purpose}` entry in the
+   ZFS-backed PersistentVolumes loop.
+4. `ansible/files/sanoid/sanoid.conf` -- a retention policy. Sanoid is
+   per-dataset opt-in (`recursive = no` on the pool); a dataset that is not
+   listed is never snapshotted.
 
-### 6. Update tests
+The PVC itself is created in `helm-deploy.yml` with an explicit `volumeName`
+(a selector alone can bind the wrong PV when a service has two).
 
-- `tests/conftest.py` -- add to SERVICES dict
-- `tests/test_dns.py` -- add domain to EXPECTED_RECORDS
-- Caddy tests pick it up automatically via parametrization
+### 4. Secrets
 
-### 7. Update docs
+Bitwarden is the source of truth and `bw-sync.sh` is the only writer:
 
-- `~/.claude/CLAUDE.md` -- service table
-- `docs/homelab-access-guide.md` -- access info
-- `CHANGELOG.md` -- what changed
+1. Create the item in Bitwarden under `IRL/Services/{ServiceName}`.
+2. Map it in `scripts/bw-sync-config.yaml` (`k8s_secret` + `k8s_key`; several
+   items may target the same Secret).
+3. `./scripts/with-secrets.sh ./scripts/bw-sync.sh --target both`.
+4. Reference it from the chart as `existingSecret`. Never author a k8s Secret
+   in a playbook task, and never put values in a values file.
 
+### 5. Add the deploy tasks
+
+`ansible/playbooks/helm-deploy.yml`, in the right phase (2 = core infra, 3 =
+apps, 5 = agent/AI + game servers): PVC creation, values upload, then the
+`kubernetes.core.helm` task. **Pin `chart_version`** -- an unpinned task
+silently upgrades whenever the repo cache moves, and renovate can only raise a
+PR for versions that are pinned. Tag every task `[phaseN, {service}]`.
+
+### 6. Fan-out obligations (enforced by `pytest -m hygiene`)
+
+- `ansible/helm/homepage/values.yaml` -- a tile for any non-internal service.
+- `ansible/docs/runbooks/{service}-down.md` -- detection, assessment, common
+  causes, recovery.
+- `tests/test_dns.py` -- add the domain to `EXPECTED_RECORDS`.
+- `tests/conftest.py` -- only if the service answers something other than 200
+  on `/` (`HEALTH_OVERRIDES`); the service list itself is derived from the
+  registry.
+
+The `HOMEPAGE_GAPS` / `RUNBOOK_GAPS` allowlists are ratcheted -- they may only
+shrink. Do not add a new service to them.
+
+### 7. Deploy
+
+```bash
+cd ansible/
+ansible-playbook playbooks/zfs.yml   --tags datasets,sanoid,{service}
+ansible-playbook playbooks/k3s.yml   --tags pvs
+ansible-playbook playbooks/helm-deploy.yml --tags {service}
+ansible-playbook playbooks/helm-deploy.yml --tags coredns   # explicit DNS record
+ansible-playbook playbooks/helm-deploy.yml --tags homepage  # new tile
+```
+
+Then verify from a tailnet host:
+
+```bash
+curl -sI https://{subdomain}.lab.infiniteroomlabs.cloud/
+cd tests/ && uv run pytest -m "smoke or hygiene"
+```
+
+### 8. Update docs
+
+- `docs/plans/YYYY-MM-DD-{slug}.md` -- design doc: what was chosen and what was
+  rejected, so the next person does not re-litigate it.
+- `docs/homelab-access-guide.md` -- URL, node, credentials.
+- `CHANGELOG.md` -- under `## [Unreleased]`.
 ## Running Ansible
 
 All Ansible runs through a Docker container. Never install Ansible locally.
@@ -187,11 +244,17 @@ tolerate it.
 
 ## Networking
 
-- **Flannel VXLAN** over Tailscale (`flannel-iface: tailscale0` on both nodes)
+- **Flannel VXLAN** over Tailscale (`flannel-iface: tailscale0`)
 - **MTU**: 1230 (VXLAN 50 bytes + WireGuard 60 bytes overhead)
 - **Split DNS**: CoreDNS on homelab (hostNetwork port 53), Tailscale routes `*.lab.infiniteroomlabs.cloud` to it
-- **Caddy**: Bare-metal reverse proxy, internal TLS (Caddy CA), proxies NodePorts
-- **NetworkPolicies**: default-deny-all + allow-intra-namespace + allow-dns-egress
+- **Traefik**: in-cluster, hostNetwork on 80/443, LE wildcard via DNS-01 (Cloudflare). Services are routed by IngressRoute CRDs -- either owned by their own chart or generated from `irl_traefik_standalone_services`. (Caddy was the bare-metal predecessor and is gone.)
+- **NetworkPolicies** (all in `k3s.yml`, namespace-wide unless noted):
+  `default-deny-all`, `allow-intra-namespace`, `allow-dns-egress`,
+  `allow-ingress-tailscale` (100.64.0.0/10 -- the ONLY external entry path,
+  which is what makes every service tailnet-only), `allow-egress-internet`
+  (0.0.0.0/0 minus RFC1918), plus per-service ones
+  (`allow-homepage-kube-api`, `allow-satisfactory-game-lan`,
+  `allow-palworld-game-lan`).
 
 ## Testing
 

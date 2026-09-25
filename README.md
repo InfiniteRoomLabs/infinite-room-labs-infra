@@ -90,7 +90,7 @@ flowchart LR
         traefik[Traefik - hostNetwork, LE DNS-01 via Cloudflare]
         jobops[JobOps]
         gunio[gunio-mcp - namespace gunio]
-        websvcs[Gitea / Authentik / Vault / Grafana / Homepage / Vaultwarden / Nextcloud / Paperless / Firefly / Ghostfolio / Karakeep]
+        websvcs[Gitea / Authentik / Vault / Grafana / Homepage / Vaultwarden / Nextcloud / Paperless / Firefly / Ghostfolio / Karakeep / WordPress]
         intsvcs[Prometheus / Alertmanager / Garage / OpenViking]
         games[Satisfactory :30777-30888 / Palworld :30211 udp]
         cnpg[CNPG PostgreSQL 16 - 9 databases]

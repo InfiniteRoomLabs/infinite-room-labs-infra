@@ -8,6 +8,8 @@
 # -- never loaded ambiently. There is no .envrc.
 #
 # value syntax: "item" -> Login password field; "item/notes" -> secure-note body.
+# A Bitwarden item UUID works in place of "item" and is the fix when a name is
+# ambiguous (`bw get` substring-matches names AND notes -- see AWS_* below).
 
 [secrets]
 # ── Cloudflare ───────────────────────────────────────────────
@@ -28,8 +30,14 @@ IRL_EMAIL_ROUTING_DESTINATION = { provider = "bitwarden", value = "email-routing
 # standard AWS_* vars. Wiring these restores state access for the whole CF IaC
 # chain (tokens -> zones -> dns-records -> tunnel), which was broken by the
 # May-2026 Garage state migration never being committed to fnox.
-AWS_ACCESS_KEY_ID     = { provider = "bitwarden", value = "garage-tfstate-access-key", description = "Garage S3 access key for the irl-tfstate state bucket" }
-AWS_SECRET_ACCESS_KEY = { provider = "bitwarden", value = "garage-tfstate-secret-key", description = "Garage S3 secret key for the irl-tfstate state bucket" }
+# Referenced by Bitwarden ITEM ID, not name: `bw get` does a substring search
+# across names AND notes, and the secret-key item's notes mention the
+# access-key item by name, so `garage-tfstate-access-key` matched two items and
+# fnox failed with "More than one result was found".
+#   5641758f... = garage-tfstate-access-key   (IRL/Infrastructure/Terraform)
+#   6dc6b681... = garage-tfstate-secret-key   (IRL/Infrastructure/Terraform)
+AWS_ACCESS_KEY_ID     = { provider = "bitwarden", value = "5641758f-24c6-4653-aa7c-b45a011b1e4c", description = "Garage S3 access key for the irl-tfstate state bucket (item garage-tfstate-access-key)" }
+AWS_SECRET_ACCESS_KEY = { provider = "bitwarden", value = "6dc6b681-8dd6-4406-ad09-b45a011b2ba2", description = "Garage S3 secret key for the irl-tfstate state bucket (item garage-tfstate-secret-key)" }
 
 # ── Porkbun ──────────────────────────────────────────────────
 PORKBUN_API_KEY    = { provider = "bitwarden", value = "porkbun-api-key/notes" }

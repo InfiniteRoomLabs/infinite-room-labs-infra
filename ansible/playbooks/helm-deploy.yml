@@ -7,6 +7,12 @@
 #   - IRL Helm repo (https://infiniteroomlabs.github.io/helm-charts/)
 #   - Upstream repos (vault, authentik, jenkins, ollama)
 #
+# EVERY release pins chart_version. An unpinned kubernetes.core.helm task
+# resolves to whatever the repo cache holds at run time, so an unrelated
+# `--tags foo` run can silently upgrade a chart (coredns went 1.47.0 -> 1.47.1
+# exactly that way). Renovate's custom regex manager bumps these pins, so a
+# pin is also the only way a chart gets a review-able upgrade PR.
+#
 # Prerequisites:
 #   - k3s.yml complete (cluster running, namespace created, PVs created)
 #   - k8s-secrets.yml complete (Kubernetes Secrets provisioned)
@@ -28,6 +34,17 @@
     helm_values_path: "/home/{{ irl_admin_user }}/helm-values"
 
   tasks:
+    # ── kubernetes.core dependency ───────────────────────────────
+    # The kubernetes.core modules in this play run ON the homelab and need
+    # the python kubernetes client there. It disappeared in the Debian 13
+    # upgrade (2026-09-14) -- every k8s task failed with "Failed to import
+    # the required Python library (kubernetes)" until this was codified.
+    - name: Install the python kubernetes client (kubernetes.core dependency)
+      ansible.builtin.apt:
+        name: python3-kubernetes
+        state: present
+      tags: [always]
+
     # ── Upload values override files to server ───────────────────
     - name: Create values override directories
       ansible.builtin.file:
@@ -52,6 +69,7 @@
         - ghostfolio
         - firefly-importer
         - karakeep
+        - wordpress
         - satisfactory
         - palworld
         - wotlk
@@ -107,6 +125,7 @@
       kubernetes.core.helm:
         name: postgresql
         chart_ref: irl/irl-postgres
+        chart_version: "0.2.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -180,6 +199,7 @@
       kubernetes.core.helm:
         name: valkey
         chart_ref: irl/irl-valkey
+        chart_version: "0.2.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -241,6 +261,7 @@
       kubernetes.core.helm:
         name: coredns-internal
         chart_ref: coredns/coredns
+        chart_version: "1.47.1"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -319,6 +340,7 @@
       kubernetes.core.helm:
         name: garage
         chart_ref: irl/irl-garage
+        chart_version: "0.3.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -385,6 +407,7 @@
       kubernetes.core.helm:
         name: openviking
         chart_ref: irl/irl-openviking
+        chart_version: "0.5.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -404,6 +427,7 @@
       kubernetes.core.helm:
         name: vault
         chart_ref: hashicorp/vault
+        chart_version: "0.32.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         values_files:
@@ -600,6 +624,7 @@
       kubernetes.core.helm:
         name: gitea
         chart_ref: irl/irl-gitea
+        chart_version: "0.2.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -652,6 +677,7 @@
       kubernetes.core.helm:
         name: authentik
         chart_ref: goauthentik/authentik
+        chart_version: "2026.2.1"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -673,6 +699,7 @@
       kubernetes.core.helm:
         name: monitoring
         chart_ref: irl/irl-monitoring
+        chart_version: "0.3.2"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -725,6 +752,7 @@
       kubernetes.core.helm:
         name: homepage
         chart_ref: jameswynn/homepage
+        chart_version: "2.1.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -748,6 +776,7 @@
       kubernetes.core.helm:
         name: vaultwarden
         chart_ref: irl/irl-vaultwarden
+        chart_version: "0.1.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -786,6 +815,7 @@
       kubernetes.core.helm:
         name: nextcloud
         chart_ref: nextcloud/nextcloud
+        chart_version: "9.0.4"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -923,6 +953,7 @@
       kubernetes.core.helm:
         name: paperless
         chart_ref: irl/irl-paperless
+        chart_version: "0.2.1"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -951,6 +982,7 @@
       kubernetes.core.helm:
         name: firefly
         chart_ref: firefly-iii/firefly-iii
+        chart_version: "1.9.17"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -976,6 +1008,7 @@
       kubernetes.core.helm:
         name: ghostfolio
         chart_ref: ghostfolio/ghostfolio
+        chart_version: "0.5.4"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -1000,6 +1033,7 @@
       kubernetes.core.helm:
         name: firefly-importer
         chart_ref: firefly-iii/importer
+        chart_version: "1.6.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
@@ -1077,6 +1111,59 @@
         timeout: "10m0s"
       tags: [phase3, karakeep]
 
+    # ── WordPress (single-site journal + bundled MariaDB) ─────────
+    # IRL chart (irl-wordpress). Requires pv-wordpress-content +
+    # pv-wordpress-db (k3s.yml), the chowned wordpress-content (33) /
+    # wordpress-db (999) datasets (zfs.yml) and the wordpress-secrets Secret
+    # (bw-sync: wordpress-db-root-password -> MARIADB_ROOT_PASSWORD,
+    # wordpress-db-password -> MARIADB_PASSWORD). The chart owns its own
+    # IngressRoute, so nothing is added to irl_traefik_standalone_services.
+    # PVCs bind by explicit volumeName: both PVs carry app=wordpress, so a
+    # selector alone could hand the 10Gi claim the 20Gi PV (karakeep lesson).
+    - name: "Phase 3: Create WordPress PVCs"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ item.name }}"
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            volumeName: "{{ item.pv }}"
+            resources:
+              requests:
+                storage: "{{ item.size }}"
+      loop:
+        - { name: wordpress-content, pv: pv-wordpress-content, size: "20Gi" }
+        - { name: wordpress-db, pv: pv-wordpress-db, size: "10Gi" }
+      tags: [phase3, wordpress]
+
+    - name: "Phase 3: Upload WordPress values"
+      ansible.builtin.copy:
+        src: ../helm/wordpress/values.yaml
+        dest: "{{ helm_values_path }}/wordpress/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase3, wordpress]
+
+    - name: "Phase 3: Deploy WordPress (irl-wordpress chart)"
+      kubernetes.core.helm:
+        name: wordpress
+        chart_ref: irl/irl-wordpress
+        chart_version: "0.2.1"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/wordpress/values.yaml"
+        wait: true
+        timeout: "10m0s"
+      tags: [phase3, wordpress]
+
     # ── Phase 4: CI/CD ────────────────────────────────────────────
     # Jenkins SKIPPED: plugin version incompatibility (chart 2.479,
     # plugins need 2.479.1+). Revisit when CI/CD is needed.
@@ -1139,6 +1226,7 @@
       kubernetes.core.helm:
         name: ollama
         chart_ref: ollama-helm/ollama
+        chart_version: "1.52.0"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         values_files:

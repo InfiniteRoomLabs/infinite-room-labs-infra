@@ -285,6 +285,36 @@ secrets:
     k8s_secret: "wotlk-secrets"
     k8s_key: "MYSQL_ROOT_PASSWORD"
 
+  # ── WordPress journal (bundled MariaDB) ─────────────────────
+  # Both keys land in ONE Secret (wordpress-secrets): the root password is
+  # what the mariadb container initializes with and what mariadb-dump uses
+  # for backups; the app password is the `wordpress` DB user, handed to the
+  # pod as WORDPRESS_DB_PASSWORD. Service secrets, 365-day rotation.
+  # NOTE: rotating these in Bitwarden does not rotate them inside MariaDB --
+  # the MARIADB_* env vars only take effect on an empty datadir. See
+  # ansible/docs/sops/rotate-secrets.md.
+  - bw_item: "wordpress-db-root-password"
+    ansible_var: "vault_wordpress_db_root_password"
+    k8s_secret: "wordpress-secrets"
+    k8s_key: "MARIADB_ROOT_PASSWORD"
+
+  - bw_item: "wordpress-db-password"
+    ansible_var: "vault_wordpress_db_password"
+    k8s_secret: "wordpress-secrets"
+    k8s_key: "MARIADB_PASSWORD"
+
+  # Garage S3 IAM keys for the wordpress-backups bucket (nightly CronJob
+  # uploader, key name `wordpress-backup`, read+write, 50GiB bucket quota).
+  - bw_item: "wordpress-backup-s3-access-key"
+    ansible_var: "vault_wordpress_backup_s3_access_key"
+    k8s_secret: "wordpress-backup-s3"
+    k8s_key: "AWS_ACCESS_KEY_ID"
+
+  - bw_item: "wordpress-backup-s3-secret-key"
+    ansible_var: "vault_wordpress_backup_s3_secret_key"
+    k8s_secret: "wordpress-backup-s3"
+    k8s_key: "AWS_SECRET_ACCESS_KEY"
+
   # -- External Secrets Operator (separate namespace: "external-secrets") --
   # THE one Bitwarden-delivered bootstrap secret of the Vault + ESO pattern:
   # the AppRole credential ESO uses to log in to Vault. Everything

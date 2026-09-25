@@ -16,6 +16,10 @@ kubectl    = "1.31.4"
 task       = "3.49.1"
 fnox       = "1.25.1"
 usage      = "3.3.0"
+# bw-sync.sh hard-requires yq (it parses bw-sync-config.yaml with it); it was
+# never pinned, so the script failed with "missing required commands: yq" on a
+# host that did not happen to have it.
+yq         = "4.53.6"
 "aqua:grafana/mcp-grafana" = "latest"
 
 # Non-secret environment only. Anything sensitive lives in fnox, not here.
@@ -24,7 +28,11 @@ HOMELAB_TAILSCALE_IP = "100.86.213.22"
 # SSH key fingerprint the do-droplet module injects. Retained capability:
 # no droplet is declared today (the k3s agent node was retired).
 DO_SSH_FINGERPRINT   = "72:f4:34:64:4f:2b:39:5a:56:d4:e5:0a:65:91:d3:31"
-IRL_SSH_PUBKEY       = "{{ exec(command='cat ~/.ssh/id_ed25519.pub') }}"
+# Tolerates a missing key file on purpose: a bare `cat` makes mise fail to
+# render this config, and that failure takes down EVERY mise-managed tool in
+# the repo, not just this variable (the hygiene bw-sync test runs bw-sync.sh
+# with a sandboxed HOME and hit exactly that -- yq came back empty).
+IRL_SSH_PUBKEY       = "{{ exec(command='cat ~/.ssh/id_ed25519.pub 2>/dev/null || true') }}"
 TAILSCALE_TAILNET    = "wes.gilleland@gmail.com"
 GRAFANA_URL          = "https://grafana.lab.infiniteroomlabs.cloud"
 # TODO(user): fill these two non-secret identifiers (see fnox.toml notes).
