@@ -96,10 +96,15 @@ jobs:
             fi
             echo "::endgroup::"
           }
+          # Charts that fail fast on unset values (`required`) cannot render
+          # with defaults; validate those with their deployed ansible overlay.
           for chart in helm-charts/charts/*/; do
             chart="${chart%/}"
             name="$(basename "$chart")"
-            validate "$name" "$name" "$chart"
+            case "$name" in
+              irl-wordpress) validate "$name" "$name" "$chart" -f ansible/helm/wordpress/values.yaml ;;
+              *)             validate "$name" "$name" "$chart" ;;
+            esac
           done
           validate cloudnative-pg cnpg-operator cnpg/cloudnative-pg \
             --version "${CNPG_CHART_VERSION}"
