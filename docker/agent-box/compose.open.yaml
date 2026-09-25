@@ -24,3 +24,7 @@ services:
     <<: *open
   doctor:
     <<: *open
+  batch:
+    <<: *open
+  mcp:
+    <<: *open

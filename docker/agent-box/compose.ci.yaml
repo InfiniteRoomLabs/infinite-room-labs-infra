@@ -24,6 +24,10 @@ services:
     <<: *ci
   doctor:
     <<: *ci
+  batch:
+    <<: *ci
+  mcp:
+    <<: *ci
 
 volumes:
   ci-home: {}

@@ -9,6 +9,7 @@
 #   docker compose run --rm box            # bash inside
 #   docker compose run --rm claude         # Claude Code inside
 #   docker compose run --rm doctor         # acceptance report
+#   docker compose run --rm -T mcp         # MCP server on stdio (no TTY!)
 #   docker compose build                   # rebuild the image
 #
 # Prefer the host wrapper (`./agent-box.sh compose ...`, or the Taskfile),
@@ -21,6 +22,7 @@
 #   compose.override.yaml   auto-merged if present; git-ignored; your private knobs
 #   compose.open.yaml       opt-in: firewall off, no NET_* caps (-f, or COMPOSE_FILE)
 #   compose.ci.yaml         opt-in: no workspace bind, no TTY, for a future CI lane
+#   compose.scoped.yaml     batch/mcp: bind ONE directory instead of the workspace
 
 name: agent-box
 
@@ -68,6 +70,20 @@ services:
   doctor:
     extends: box
     command: ["agent-box-doctor"]
+
+  # Non-interactive variants. No TTY: a TTY merges stderr into stdout and
+  # rewrites line endings, and here stdout is a byte stream a program reads
+  # (the MCP protocol, the agent's result). stdin stays open: the prompt
+  # or the MCP client's messages arrive on it. Run them with `run --rm -T`.
+  batch:
+    extends: box
+    tty: false
+    command: ["agent-box-batch"]         # args come from `agent-box.sh batch`
+
+  mcp:
+    extends: box
+    tty: false
+    command: ["claude", "mcp", "serve"]  # Claude Code as an MCP server over stdio
 
 volumes:
   # External on purpose: the volume outlives any compose project and may

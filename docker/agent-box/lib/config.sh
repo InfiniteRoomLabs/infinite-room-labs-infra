@@ -27,6 +27,10 @@ AGENT_BOX_KNOBS=(
   "AGENT_BOX_FIREWALL|1|1 = apply the egress denylist from image/denylist.txt, 0 = no firewall"
   "AGENT_BOX_TZ|\${TZ:-America/New_York}|timezone inside the box"
   "AGENT_BOX_KUBE_CONTEXT|homelab|host kubectl context used by 'kubeconfig'"
+  # Defaults for `batch`; each has a flag that overrides it per run.
+  "AGENT_BOX_BATCH_TIMEOUT|30m|batch: agent wall clock (90s, 30m, 2h; 0 = none)"
+  "AGENT_BOX_BATCH_MAX_TURNS||batch: max agent turns (empty = Claude Code's default)"
+  "AGENT_BOX_BATCH_PERMISSION_MODE|acceptEdits|batch: claude --permission-mode"
   # SSH target for the box's ~/.ssh/config. Defaults are read from files the
   # repo already tracks (inventory + mise.toml) so no host detail is
   # duplicated in this directory; override them in the config file.
@@ -110,7 +114,7 @@ print_config() {
   for entry in "${AGENT_BOX_KNOBS[@]}"; do
     [[ "$entry" == \#* || -z "$entry" ]] && continue
     _knob_fields "$entry"
-    printf '%-24s %-36s %s\n' "$_k_name" "${!_k_name}" "$_k_desc"
+    printf '%-32s %-36s %s\n' "$_k_name" "${!_k_name}" "$_k_desc"
   done
-  printf '%-24s %-36s %s\n' "AGENT_BOX_REPO_DIR" "$AGENT_BOX_REPO_DIR" "(derived) working dir inside the box"
+  printf '%-32s %-36s %s\n' "AGENT_BOX_REPO_DIR" "$AGENT_BOX_REPO_DIR" "(derived) working dir inside the box"
 }

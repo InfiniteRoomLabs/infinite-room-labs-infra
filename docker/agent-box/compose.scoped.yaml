@@ -1,0 +1,26 @@
+# docker/agent-box/compose.scoped.yaml
+# Overlay for the unattended variants (`batch`, `mcp`): bind ONE host
+# directory instead of the whole workspace. An interactive session has a
+# person watching it; a batch run or an MCP client does not, so it only
+# gets the directory it was pointed at. The wrapper sets both values:
+#
+#   AGENT_BOX_MOUNT_SRC   host directory (docker form; Windows style under Git Bash)
+#   AGENT_BOX_MOUNT_DST   where it lands: /work/<path relative to the workspace>,
+#                         so in-box paths match an interactive session's
+#
+#   ./agent-box.sh batch --dir ~/Projects/some-repo "..."   (adds this file)
+#   ./agent-box.sh batch --workspace ...                    (does not)
+#
+# `!override` replaces the inherited list, like compose.ci.yaml. Caps, env,
+# user and the firewall are untouched: only the mount set changes.
+
+x-scoped: &scoped
+  volumes: !override
+    - home:/home/agent
+    - ${AGENT_BOX_MOUNT_SRC:?set by agent-box.sh}:${AGENT_BOX_MOUNT_DST:?set by agent-box.sh}
+
+services:
+  batch:
+    <<: *scoped
+  mcp:
+    <<: *scoped
