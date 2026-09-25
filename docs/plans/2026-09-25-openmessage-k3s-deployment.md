@@ -35,6 +35,10 @@ OpenMessage source: fork `github.com/Deathnerd/openmessage` (Go). The fork chang
      runbook, tests.
 6. If something in this plan turns out to be wrong for this repo, do the closest correct thing and list
    the deviation in the final report.
+7. **Docs and runbooks stay current and coherent with every change.** A change is not done until every
+   doc that describes the affected area says the same thing as the code. New docs are required (WP3),
+   and existing docs must be updated where the change touches them (WP3b). No doc may contradict
+   another or the chart/values after this run.
 
 ## 3. Interface contract (fixed; from the fork)
 
@@ -117,6 +121,25 @@ OpenMessage source: fork `github.com/Deathnerd/openmessage` (Go). The fork chang
 - Add the service to whatever index/access guide lists `*.lab` services and to the backup SOP.
 - `CHANGELOG.md` entry.
 
+### WP3b. Keep existing docs coherent (do this as you go, then sweep at the end)
+
+- **Find every affected doc.** Search both repos (`README.md`, `CLAUDE.md`, `CONTRIBUTING.md`,
+  `TESTING.md`, `docs/`, `ansible/docs/` incl. `runbooks/` and `sops/`, chart READMEs, the helm-charts
+  repo's own README/CHANGELOG/index) for anything that enumerates or describes: services in the `irl`
+  namespace, `*.lab` hostnames, ZFS datasets/PVs, Bitwarden/bw-sync secret mappings, NetworkPolicies,
+  backup scope, monitoring/alert coverage, test inventories (e.g. "17 smoke tests"), and MCP servers
+  hosted in the cluster. Update each one that the new service changes.
+- **Cross-link.** The chart README, the runbook, the values file header and this plan link to each other.
+  The runbook names the chart, values path, dataset, secret name and hostname exactly as the code does.
+- **One source of truth per fact.** Where a fact (hostname, CIDRs, secret name, dataset, port) is
+  repeated in docs, it must match the chart/values byte for byte. Prefer linking over restating.
+- **Counts and lists.** If a doc states a count (services, tests, datasets) or keeps a list, fix the
+  count/list, don't just append.
+- **This plan.** At the end, add a short "Status" line at the top of this file (what was done, pointer to
+  the final report) so the plan isn't read later as still-unexecuted.
+- **Final coherence sweep.** Before the last commit, re-read every doc you touched plus the chart
+  `values.yaml` and `ansible/helm/openmessage/values.yaml` side by side and fix any mismatch.
+
 ### WP4. Tests
 
 - Add the service to the repo's test suites the way karakeep was added (DNS test, policy/conftest checks,
@@ -146,5 +169,7 @@ Plain markdown, short:
 1. What was created/changed (files, per repo) and the commit list for both repos.
 2. Every deviation from this plan and why.
 3. Verification run and results (lint/template/tests), plus live tests that exist but were not run.
+3b. Docs: every doc created or updated (path + one line on what changed), and any doc you found that
+   describes the area but deliberately left unchanged, with why.
 4. Open questions and anything the reviewer must decide, especially: Traefik client-IP visibility (D4),
    secret mechanism chosen (D3), anything that blocks the deploy phase.
