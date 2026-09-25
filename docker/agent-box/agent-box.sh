@@ -49,6 +49,11 @@
 # a fresh host before any of that exists.
 set -euo pipefail
 
+# A Windows program (an MCP client, say) that starts Git's usr\bin\bash.exe
+# directly hands it the Windows PATH, without /usr/bin: no uname, no
+# cygpath, and every path to docker comes out wrong. No-op elsewhere.
+case ":$PATH:" in *:/usr/bin:*) ;; *) [[ -d /usr/bin ]] && PATH="/usr/bin:$PATH" ;; esac
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/log.sh
 source "$SCRIPT_DIR/lib/log.sh"
@@ -168,10 +173,13 @@ resolve_mount() {
 }
 
 # run_oneoff NAME <compose args...>: run a named one-off container and make
-# sure it is gone afterwards, however this script ends (Ctrl-C, the MCP
-# client killing us). compose runs in the background so the traps can fire
-# while it runs (bash defers traps until a foreground child exits), and
-# `0<&0` keeps stdin attached, since an async command otherwise gets /dev/null.
+# sure it is gone afterwards, however this script ends (Ctrl-C, SIGTERM,
+# SIGHUP). compose runs in the background so the traps can fire while it
+# runs (bash defers traps until a foreground child exits), and `0<&0` keeps
+# stdin attached, since an async command otherwise gets /dev/null. A kill
+# no trap sees (SIGKILL; a Windows client terminating the process) orphans
+# the docker client instead; the container still ends when the client's
+# stdin closes (agent-box-mcp makes sure of that for MCP).
 run_oneoff() {
   local name="$1"; shift
   local pid rc=0

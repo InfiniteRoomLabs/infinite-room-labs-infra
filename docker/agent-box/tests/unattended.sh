@@ -99,6 +99,19 @@ n="$(jqq -sr 'map(select(.id == 2))[0].result.tools | length' <"$work/mcp" 2>/de
 [[ "${n:-0}" -gt 0 ]] && pass "tools/list returned $n tools" || fail "tools/list returned nothing"
 [[ -z "$(leftovers mcp)" ]] && pass "stdin EOF ends the server and removes the container" || fail "mcp containers left: $(leftovers mcp)"
 
+printf '\n\e[1mmcp: a client that hangs up before the handshake\e[0m\n'
+# `claude mcp serve` alone ignores this EOF; agent-box-mcp must not.
+"$BOX" mcp --dir "$work" </dev/null >"$work/mcp" 2>/dev/null &
+early=$!
+for _ in $(seq 1 90); do kill -0 "$early" 2>/dev/null || break; sleep 1; done
+if kill -0 "$early" 2>/dev/null; then
+  fail "server still running 90s after stdin closed"; kill -TERM "$early" 2>/dev/null; wait "$early" 2>/dev/null
+else
+  wait "$early"; expect_rc "stdin closed at once: the server stops cleanly" $? 0
+fi
+[[ ! -s "$work/mcp" ]] && pass "and wrote nothing to stdout" || fail "stdout not empty: $(head -c 200 "$work/mcp")"
+[[ -z "$(leftovers mcp)" ]] && pass "no mcp containers left behind" || fail "mcp containers left: $(leftovers mcp)"
+
 printf '\n\e[1mmcp: a killed wrapper leaves nothing running\e[0m\n'
 "$BOX" mcp --dir "$work" < <(sleep 120) >/dev/null 2>&1 &
 wrapper=$!

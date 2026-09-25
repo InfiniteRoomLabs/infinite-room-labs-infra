@@ -196,7 +196,8 @@ directory you ran it from as `--dir`; a `--dir` of your own wins).
 ### MCP: the box as a stdio MCP server
 
 `agent-box.sh mcp` runs `claude mcp serve` inside the box on the wrapper's
-own stdin/stdout. Register the wrapper as the server command. Claude Code
+own stdin/stdout (through `agent-box-mcp`, which stops the server when the
+client hangs up). Register the wrapper as the server command. Claude Code
 starts MCP servers in the directory it was launched from, so that directory
 is what the box mounts; add `--dir DIR` to the args to pin one instead.
 
@@ -208,9 +209,10 @@ claude mcp add agent-box -s user -- bash ~/Projects/infinite-room-labs-infra/doc
 
 Windows (from Git Bash or PowerShell). Give the full path to Git for
 Windows' `bash.exe` (the standard install is shown; scoop puts it under
-`scoop\apps\git\current\usr\bin\bash.exe`): a bare `bash` can resolve to
-WSL's `C:\Windows\System32\bash.exe`, which is a different Linux with its
-own paths.
+`scoop\apps\git\current\bin\bash.exe`): a bare `bash` can resolve to WSL's
+`C:\Windows\System32\bash.exe`, which is a different Linux with its own
+paths. (Whether it does depends on how the client searches for programs;
+it happened not to on the test host, but the full path removes the doubt.)
 
 ```bash
 claude mcp add agent-box -s user -- "C:\Program Files\Git\bin\bash.exe" "C:\Users\you\Projects\infinite-room-labs-infra\docker\agent-box\agent-box.sh" mcp
@@ -244,18 +246,21 @@ keep it in user or local scope rather than a committed file.
 ```
 
 Without the wrapper (any MCP client, any host with Docker; `-i` without
-`-t` is required, a TTY corrupts the stream). You give up the SSH values
-the wrapper derives from the repo (no `homelab-ts` inside) and its cleanup
-on kill; `--rm` still removes the container when the client closes stdin.
+`-t` is required, a TTY corrupts the stream). Run `agent-box-mcp`, not
+`claude mcp serve` directly: the latter can outlive a client that hangs up
+early. You give up the SSH values the wrapper derives from the repo (no
+`homelab-ts` inside) and its signal handling; `--rm` still removes the
+container when the client closes stdin.
 
 ```bash
-claude mcp add-json agent-box '{"type":"stdio","command":"docker","args":["run","-i","--rm","--init","--cap-add","NET_ADMIN","--cap-add","NET_RAW","-v","irl-agent-box-home:/home/agent","-v","/home/you/Projects/some-repo:/work/some-repo","-w","/work/some-repo","irl-agent-box:local","claude","mcp","serve"]}' -s user
+claude mcp add-json agent-box '{"type":"stdio","command":"docker","args":["run","-i","--rm","--init","--cap-add","NET_ADMIN","--cap-add","NET_RAW","-v","irl-agent-box-home:/home/agent","-v","/home/you/Projects/some-repo:/work/some-repo","-w","/work/some-repo","irl-agent-box:local","agent-box-mcp"]}' -s user
 ```
 
-(`-s` goes after the JSON for `add-json`. On Windows write the bind source
-with forward slashes, `C:/Users/you/Projects/some-repo:/work/some-repo`,
-and run it from PowerShell or with `MSYS_NO_PATHCONV=1` in Git Bash so the
-container paths are not rewritten.)
+(`-s` goes after the JSON for `add-json`. On Windows write every path in
+the JSON with forward slashes, e.g. `C:/Users/you/Projects/some-repo:/work/some-repo`:
+escaped backslashes do not survive the Windows command line and `add-json`
+reports `Invalid input`. From Git Bash also prefix `MSYS_NO_PATHCONV=1` so
+the container paths are not rewritten.)
 
 Each client session gets its own container. It ends when the client closes
 stdin or kills the wrapper, and the wrapper removes it either way.
@@ -270,7 +275,9 @@ host   agent-box.sh batch|mcp [--dir DIR | --workspace]
 box    tini -> entrypoint: stdout parked on fd 3, fd 1 -> stderr
                  firewall (denylist + self-test), home skeleton, ssh key + agent
               -> exec with stdout restored:
-                 mcp:   claude mcp serve                          JSON-RPC on stdin/stdout
+                 mcp:   agent-box-mcp                             stdin relayed through a FIFO
+                          -> claude mcp serve                     JSON-RPC on stdin/stdout
+                          -> client EOF: 5s grace, then SIGTERM
                  batch: agent-box-batch                           prompt on stdin
                           -> timeout DUR claude -p --output-format json|stream-json
                           -> result to stdout, outcome to the exit code
@@ -308,8 +315,25 @@ handles the other direction: Ctrl-C, SIGTERM or SIGHUP to it removes the
 container. compose runs as a background job so bash can act on a signal
 while waiting (it defers traps until a foreground child exits), and stdin
 is passed through explicitly because an async job otherwise gets
-`/dev/null`. When a Windows client kills the wrapper outright (no signal to
-trap), stdin closes, the server exits, and `--rm` removes the container.
+`/dev/null`. When a client kills the wrapper outright (SIGKILL, or a
+Windows client terminating the process: no signal to trap), the docker
+client is orphaned but the client's end of stdin closes; that EOF reaches
+the box, `agent-box-mcp` stops the server, and `--rm` removes the container.
+
+**Why `agent-box-mcp` exists.** `claude mcp serve` (2.1.273) does not exit
+when stdin closes before the MCP handshake has completed, which is exactly
+what a health check such as `claude mcp get` does. Without the relay every
+such check left a container (and an orphaned docker client on Windows)
+running. The relay feeds the server through a FIFO, notices the client's
+EOF itself, gives the server five seconds to finish (`-e
+AGENT_BOX_MCP_GRACE=N` on a plain `docker run` changes that), then sends
+SIGTERM and exits 0; if the server ends first, its exit
+status is passed on.
+
+**Windows specifics.** A Windows program that starts Git's
+`usr\bin\bash.exe` directly hands it the Windows `PATH`, without `/usr/bin`;
+the wrapper puts `/usr/bin` back first thing so `uname` and `cygpath` (and
+with them every host path given to docker) work.
 
 **The prompt travels on stdin**, never in argv: no size limit, no quoting
 problems, and it does not show up in `docker ps` or `docker inspect`.
@@ -385,6 +409,7 @@ persistent volume.
 | `image/Dockerfile` | build | `debian:trixie-slim`, user `agent` (uid 1000), every pin as an `ARG` or from the repo's `mise.toml`. |
 | `image/entrypoint.sh` | container | Firewall, home skeleton, SSH identity + agent, then `exec`. All of its own output goes to stderr; stdout belongs to the exec'd command. |
 | `image/batch.sh` | container | `agent-box-batch`: the in-box half of `batch`. Prompt on stdin, `claude -p` under `timeout`, result to stdout, outcome to the exit code. |
+| `image/mcp.sh` | container | `agent-box-mcp`: the in-box half of `mcp`. `claude mcp serve` fed through a FIFO, stopped when the client closes stdin. |
 | `image/init-firewall.sh` | container (sudo) | Egress denylist from `denylist.txt` (default allow). The only sudo the user has. |
 | `image/denylist.txt` | container | Hostnames, IPs, CIDRs to block. One line per destination. Ships with cloud metadata endpoints and the `example.com` canary. |
 | `image/doctor.sh` | container | PASS/WARN/FAIL report of tools, logins, reach, firewall, extras. |
@@ -511,4 +536,5 @@ and does not protect such a run, and the design doc for why).
 | `refusing to mount your whole home directory` | `batch`/`mcp` ran from `~` (Claude Code started there, for MCP). `cd` into a project or pass `--dir`. |
 | `claude mcp get agent-box` shows `Failed to connect` | Run the registered command by hand with `</dev/null` to see its stderr. On Windows check the `bash.exe` path (not WSL's). If it is only slow, raise `MCP_TIMEOUT`. |
 | `git` fails in a batch/mcp run on a git worktree | A worktree's `.git` is a file pointing at the main checkout's `.git/worktrees/...`, which is not mounted (and on Windows is a `C:/` path Linux cannot resolve). Point `--dir` at a normal checkout. |
-| Containers named `agent-box-batch-*` / `agent-box-mcp-*` linger | Only if the wrapper and docker were both killed hard. `docker ps -a --filter name=agent-box-` and `docker rm -f` them. |
+| Containers named `agent-box-batch-*` / `agent-box-mcp-*` linger | Only if the client never closed stdin and the wrapper was killed without a signal, or with a plain `docker run` of `claude mcp serve` instead of `agent-box-mcp`. `docker ps -a --filter name=agent-box-` and `docker rm -f` them. |
+| `claude mcp add-json` says `Invalid input` on Windows | Backslashes in the JSON; use forward slashes in every path. |

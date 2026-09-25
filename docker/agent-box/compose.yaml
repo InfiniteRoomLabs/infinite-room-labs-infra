@@ -83,7 +83,7 @@ services:
   mcp:
     extends: box
     tty: false
-    command: ["claude", "mcp", "serve"]  # Claude Code as an MCP server over stdio
+    command: ["agent-box-mcp"]           # claude mcp serve on stdio, stopped on client EOF
 
 volumes:
   # External on purpose: the volume outlives any compose project and may

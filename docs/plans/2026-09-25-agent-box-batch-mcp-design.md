@@ -34,6 +34,7 @@ and how to keep stdout clean.
 | In-box path of the directory | `/work/<path relative to the workspace>` (else `/work/<basename>`) | Claude Code keys sessions and per-project state by absolute path. Matching the interactive path lets a batch run resume a session and see the same project settings; verified by resuming a batch session by id. |
 | Refused mounts | `/`, drive roots, `$HOME` | A mistake (running from `~`) should fail loudly, not mount every file the user owns into an unattended agent. |
 | Transport for MCP | `claude mcp serve` on the wrapper's stdio, container `-i -T` | That is the transport Claude Code itself uses, and every MCP client speaks stdio. No port, no listener, nothing new on the network. |
+| MCP server lifetime | A small in-box relay, `agent-box-mcp` (`image/mcp.sh`): stdin goes to `claude mcp serve` through a FIFO; on client EOF the server gets 5s, then SIGTERM, exit 0 | Found in testing: `claude mcp serve` 2.1.273 does not exit when stdin closes before the handshake completes, which is what `claude mcp get` (a health check) does, and a Windows client terminating the wrapper orphans the docker client. Each check left a running container. Tried first: a host-side watchdog subshell polling the wrapper; Claude Code on Windows kills it along with the wrapper while the docker client survives, so the fix has to live where the EOF is certain to arrive, in the box. |
 | stdout discipline | Entrypoint parks stdout on fd 3 and sends fd 1 to stderr during setup, restoring it only in the final `exec`; services are `tty: false`; the wrapper and runner log to stderr only | Making it structural beats auditing every tool the entrypoint calls (`ssh-keygen`, `ssh-add`, `sudo`, `iptables`, `curl`). No change for interactive use: both fds are the terminal there. The `ssh-agent` daemon is started with fd 3 closed so it cannot hold the stream open. |
 | Batch runner location | A small in-box script, `agent-box-batch` (`image/batch.sh`) | It needs `jq` and GNU `timeout`, both in the image and neither guaranteed on the host (the host needs only docker). Keeps the wrapper free of JSON handling. |
 | Outcome reporting | Always run `claude -p` with `--output-format json` or `stream-json`; read the `result` message; map to 0 / 2 (error) / 3 (max turns) / 4 (no result) / 124 (timeout); 64 usage; 1 reserved for "box could not start" | Claude Code's exit status is a plain 0/1 (an error result such as "Not logged in" exits 1, checked against 2.1.273), so it cannot tell a caller whether to retry with more turns or give up. `subtype` and `terminal_reason` can. Leaving 1 unused by the runner keeps it meaning "infrastructure failed", which is what the entrypoint and the wrapper already exit with. |
@@ -41,7 +42,8 @@ and how to keep stdout clean.
 | Prompt transport | stdin into the container, then stdin into `claude -p` | No argv size limit, no quoting across bash, compose and Git Bash, and the prompt is not visible in `docker ps`/`inspect`. |
 | Timeout enforcement | GNU `timeout` in the box, TERM then KILL after 30s; default 30m (`AGENT_BOX_BATCH_TIMEOUT`); 0 disables | Identical on Linux, macOS (no `timeout` there) and Git Bash. The firewall self-test at start is not charged to the agent. |
 | Turn limit | `--max-turns` passed through (hidden but accepted by Claude Code 2.1.273); no default | A default turn cap would be a guess about task size; the wall-clock timeout is the safety net. Knob `AGENT_BOX_BATCH_MAX_TURNS` for people who want one. |
-| Cleanup | Named container (`agent-box-<mode>-<pid>-<n>`), `run --rm`, and wrapper traps on EXIT/INT/TERM/HUP that `docker rm -f` it; compose runs as a background job with stdin passed explicitly (`0<&0`) | bash defers traps while a foreground child runs, and an async job gets `/dev/null` for stdin unless told otherwise. Verified: SIGTERM to the wrapper removes the container; a Windows client killing the process outright (no signal) closes stdin, the server exits, `--rm` removes it. |
+| Cleanup | Named container (`agent-box-<mode>-<pid>-<n>`), `run --rm`, and wrapper traps on EXIT/INT/TERM/HUP that `docker rm -f` it; compose runs as a background job with stdin passed explicitly (`0<&0`) | bash defers traps while a foreground child runs, and an async job gets `/dev/null` for stdin unless told otherwise. Verified: SIGTERM to the wrapper removes the container; a Windows client killing the process outright (no signal) closes stdin, `agent-box-mcp` stops the server, `--rm` removes it. |
+| Windows PATH | The wrapper prepends `/usr/bin` when it is missing | A Windows program starting Git's `usr\bin\bash.exe` directly passes the Windows PATH, so `uname`/`cygpath` were missing and every host path handed to docker came out as `C:\c\Users\...`. Git's `bin\bash.exe` launcher sets PATH itself; the fix makes either work. |
 | Default permission mode | `acceptEdits`, plus `--permission-prompts none` | Useful out of the box (read and edit the mounted project) without making shell commands and web fetches silently allowed. Callers widen it deliberately: `--allowedTools` via `-a`, `auto`, or `bypassPermissions` (warned on stderr). |
 | Egress for unattended runs | Keep the denylist; do NOT switch to an allowlist for batch | See trade-off below. |
 | Credentials | The box's own Claude login from the home volume; nothing from the host | Invariant 2 of the box. `ANTHROPIC_API_KEY` passthrough was left out on purpose; if wanted later it belongs in fnox, injected per run. |
@@ -76,19 +78,23 @@ is for every other subcommand).
 
 ## Verification (2026-09-25, Windows 10 host, Docker 29.6.2, Compose v5.3.1)
 
-- `tests/unattended.sh` (new, throwaway volume, no model calls): 22 checks
+- `tests/unattended.sh` (new, throwaway volume, no model calls): 25 checks
   pass, covering usage errors, stdout purity for batch json/text and MCP,
   the exit-code mapping (against a fake `claude`), the scoped mount set, and
-  container removal on stdin EOF and on SIGTERM.
+  container removal on stdin EOF (after a handshake and before one) and on
+  SIGTERM.
+- Native Windows client (a .NET process standing in for an MCP client):
+  closing stdin ends the wrapper and the container, with and without an
+  `initialize` first; before `agent-box-mcp` both cases hung.
 - Real runs on a signed-in volume: a trivial prompt returned exit 0 with one
   JSON object; a prompt that needed a tool with `--max-turns 1` returned
   exit 3 (`subtype: error_max_turns`); `-a --resume -a <session_id>` in the
   same `--dir` continued the earlier session.
 - Host Claude Code 2.1.282 on Windows: `claude mcp add` with the wrapper
-  (full path to Git's `bash.exe`), a `.mcp.json`-style entry with the
-  relative path from the repo root, and the plain `docker run -i` form all
-  report `Connected` (about five seconds to connect); no containers left
-  afterwards.
+  (Git's `bin\bash.exe` launcher and `usr\bin\bash.exe`), a JSON entry with
+  a bare `bash` command and with the relative path from the repo root, and
+  the plain `docker run -i ... agent-box-mcp` form all report `Connected`
+  (about five seconds) and leave no container behind.
 - `task lint` equivalent: shellcheck clean over `agent-box.sh lib/*.sh
   image/*.sh tests/*.sh`. `doctor` on the new image: firewall and
   everything else as before; the one FAIL (git on the repo) is because the
