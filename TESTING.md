@@ -41,7 +41,7 @@ task goss               # All nodes (currently just homelab)
 
 ### Layer 2: Service Tests (pytest)
 
-Runs from the laptop. 136 tests across 8 service modules plus the `hygiene/` contract suite.
+Runs from the laptop. 138 tests across 8 service modules plus the `hygiene/` contract suite.
 
 | Module | Marker | Tests |
 |--------|--------|-------|

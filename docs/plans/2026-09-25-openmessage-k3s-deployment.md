@@ -1,5 +1,15 @@
 # OpenMessage on k3s: repository changes (agent-box batch plan)
 
+> **Status (2026-09-25): repository changes EXECUTED, nothing deployed.** WP1-WP5 and WP3b are done
+> in the working tree of branch `feat/openmessage-k3s` (this repo) and `feat/openmessage`
+> (`helm-charts` submodule). Nothing was pushed and the cluster was not touched. Two things did not
+> happen: the agent-box session had no git identity and could not create commits, so the changes sit
+> uncommitted and the submodule pointer is not updated; and `pytest`/`uv` could not be executed there,
+> so no test suite was run (`helm lint` / `helm template` were run and pass). See the final report in
+> the session transcript for the full list. Deploy steps are section 8 below; operational procedures
+> live in `ansible/docs/runbooks/openmessage-down.md` and the chart is documented in
+> `helm-charts/charts/irl-openmessage/README.md`.
+
 **Date:** 2026-09-25
 **Executor:** agent-box `batch` (unattended). **Reviewer:** Wes, before anything is pushed or deployed.
 **Scope of this plan:** repository changes only, in this repo and the `helm-charts` submodule.
@@ -92,7 +102,7 @@ OpenMessage source: fork `github.com/Deathnerd/openmessage` (Go). The fork chang
 
 - `Chart.yaml` (version 0.1.0; appVersion `0.2.9-fork`, with a comment that the image is built from the
   `Deathnerd/openmessage` fork and the digest in values is authoritative),
-  `values.yaml` (defaults per sections 3–4, digest required), `README.md` (what it is, values table,
+  `values.yaml` (defaults per sections 3-4, digest required), `README.md` (what it is, values table,
   the one-pod rule), `templates/`: `_helpers.tpl`, `deployment.yaml`, `service.yaml` (ClusterIP 7007),
   ingress/IngressRoute + middleware (whichever the repo uses for `*.lab` services), `networkpolicy.yaml`,
   secret wiring per D3, `serviceaccount.yaml` (automount false), PVC per D2.
@@ -173,3 +183,121 @@ Plain markdown, short:
    describes the area but deliberately left unchanged, with why.
 4. Open questions and anything the reviewer must decide, especially: Traefik client-IP visibility (D4),
    secret mechanism chosen (D3), anything that blocks the deploy phase.
+
+---
+
+## 8. Deploy phase (human-supervised)
+
+Written by the repo-changes run; **not executed by it**. Every step below touches the cluster, a
+secret, or the desktop, and is deliberately out of scope for an unattended session. Do them in order:
+each one is a prerequisite for the next.
+
+### 0. Land the repository changes
+
+1. Review and commit the working-tree changes on `feat/openmessage` (submodule) and
+   `feat/openmessage-k3s` (this repo).
+2. **Push the submodule branch and merge it to `helm-charts` `main` first.** `helm-deploy.yml` installs
+   `chart_ref: irl/irl-openmessage` from `https://infiniteroomlabs.github.io/helm-charts/`, not from the
+   local submodule path, so `chart-releaser` must have published `irl-openmessage-0.1.0` before the
+   deploy task can resolve. (`CONTRIBUTING.md`, "Pick or write the chart".)
+3. Then update the submodule pointer in this repo and push `feat/openmessage-k3s`.
+4. Confirm CI is green: `hygiene`, `kubeconform`, `conftest`.
+
+### 1. Publish the image and fill the digest
+
+5. Build and push the fork image to `ghcr.io/deathnerd/openmessage`.
+6. Resolve the manifest digest:
+   `docker buildx imagetools inspect ghcr.io/deathnerd/openmessage:<tag> --format '{{.Manifest.Digest}}'`
+7. Replace the placeholder in `ansible/helm/openmessage/values.yaml` -> `image.digest`. Until this is
+   done every deploy ends in `ImagePullBackOff` (fail-safe, by design). Commit that change.
+
+### 2. Create the control token
+
+8. Generate a token off-box (for example `openssl rand -base64 48`) and store it in Bitwarden as
+   `openmessage-control-token` under `IRL/Services/OpenMessage`. Put `{"rotation_days": 365}` in the
+   item's Notes -- without it `bw-sync.sh --check-rotation` silently skips the item.
+9. Sync it: `mise run secrets:sync`, then verify the Secret exists without printing it:
+   `kubectl get secret -n irl openmessage-secrets -o jsonpath='{.data.token}' | wc -c`
+
+### 3. Create storage
+
+10. `cd ansible/ && uv run ansible-playbook playbooks/zfs.yml --tags datasets,sanoid,openmessage`
+    (creates `main/openmessage`, applies the sanoid policy, chowns it to 1000:1000).
+11. `uv run ansible-playbook playbooks/k3s.yml --tags pvs` (creates `pv-openmessage-data`).
+12. Confirm: `ssh homelab-ts "zfs list main/openmessage; ls -ld /media/root/storage1/openmessage"`
+    -- owner must be `1000:1000`, or the daemon cannot write `messages.db`.
+
+### 4. Stop the desktop daemon and move its data in
+
+**This is the step that must not be rushed: from here until the pod is up, exactly one OpenMessage
+may exist on this Google pairing.**
+
+13. On the Windows desktop, stop the `OpenMessage` service and set it to Manual so a reboot cannot
+    revive it behind your back:
+    ```powershell
+    Stop-Service OpenMessage
+    Set-Service OpenMessage -StartupType Manual
+    Get-Service OpenMessage    # must report Stopped
+    ```
+14. Copy `C:\Users\wesgi\.local\share\openmessage\{messages.db,messages.db-wal,messages.db-shm,session.json}`
+    off the desktop. Take all four together -- SQLite is in WAL mode, so `messages.db` alone can be a
+    torn database. (`-wal`/`-shm` are absent after a clean stop; that is fine.)
+15. Create the PVC but keep the pod at zero, then copy the files in. The PV is a hostPath on the ZFS
+    dataset, so the simplest path is straight onto the host:
+    ```bash
+    uv run ansible-playbook playbooks/helm-deploy.yml --tags openmessage   # creates the PVC
+    kubectl scale -n irl deploy/openmessage --replicas=0 2>/dev/null || true
+    scp messages.db* session.json homelab-ts:/tmp/om/
+    ssh homelab-ts "sudo cp -a /tmp/om/. /media/root/storage1/openmessage/ && \
+      sudo chown -R 1000:1000 /media/root/storage1/openmessage && \
+      sudo rm -rf /tmp/om"
+    ```
+    Reusing the existing `session.json` is the whole point: it means no re-pairing and no re-sync.
+
+### 5. Deploy
+
+16. `uv run ansible-playbook playbooks/helm-deploy.yml --tags openmessage`
+17. `uv run ansible-playbook playbooks/helm-deploy.yml --tags coredns` (regenerates the zone from
+    `irl_services`; the wildcard record means the name resolves even without this, so do not take
+    resolution as proof it ran).
+18. Watch the first start: `kubectl -n irl logs -f deploy/openmessage`. Pairing state appears only in
+    the logs -- `/healthz` says nothing about it.
+
+### 6. Verify
+
+From a tailnet host:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://openmessage.lab.infiniteroomlabs.cloud/healthz   # 200
+curl -sS -o /dev/null -w '%{http_code}\n' https://openmessage.lab.infiniteroomlabs.cloud/mcp       # 401
+curl -sS https://openmessage.lab.infiniteroomlabs.cloud/mcp \
+  -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'                                              # 200 + tool list
+```
+
+19. Confirm the token gate really is a gate (the 401 above) before pointing any client at it.
+20. Confirm sync resumed: recent messages appear, and the logs show no re-pair prompt.
+21. `cd tests/ && uv run pytest -m "smoke or hygiene"` -- DNS record, runbook, secret mapping and
+    registry contracts all land here.
+
+### 7. Client cutover
+
+22. Point each client at the cluster endpoint, one machine at a time, checking each works before
+    moving on:
+    ```bash
+    claude mcp add --scope user --transport http openmessage \
+      https://openmessage.lab.infiniteroomlabs.cloud/mcp \
+      --header "Authorization: Bearer <token>"
+    ```
+    Claude Desktop: same URL and header in its MCP config.
+23. Remove the per-machine OpenMessage configuration from every client that had a local daemon, so
+    nothing can start a second one by habit.
+24. Only once every client is cut over: uninstall the Windows service on the desktop (leaving its
+    data directory in place as a cold backup until you are confident).
+
+### Rollback
+
+The desktop data directory is untouched by all of the above. To fall back: scale the cluster pod to
+zero (`kubectl scale -n irl deploy/openmessage --replicas=0`), wait for the pod to be gone, then
+start the Windows service again. The PVC keeps its copy for a later retry. Do not run both.

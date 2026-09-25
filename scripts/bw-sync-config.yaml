@@ -315,6 +315,20 @@ secrets:
     k8s_secret: "wordpress-backup-s3"
     k8s_key: "AWS_SECRET_ACCESS_KEY"
 
+  # ── OpenMessage (household SMS/RCS MCP server) ──────────────
+  # The bearer token every /mcp* request must carry. The chart mounts the
+  # Secret as a FILE (OPENMESSAGES_CONTROL_TOKEN_FILE), not an env var, so the
+  # value never shows up in `kubectl describe pod`. Service secret, 365-day
+  # rotation -- set rotation_days: 365 in the Bitwarden item's Notes JSON, or
+  # --check-rotation skips it silently.
+  # Rotating it is a two-step: sync the new value, then restart the pod AND
+  # update every client's Authorization header. See
+  # ansible/docs/runbooks/openmessage-down.md.
+  - bw_item: "openmessage-control-token"
+    ansible_var: "vault_openmessage_control_token"
+    k8s_secret: "openmessage-secrets"
+    k8s_key: "token"
+
   # -- External Secrets Operator (separate namespace: "external-secrets") --
   # THE one Bitwarden-delivered bootstrap secret of the Vault + ESO pattern:
   # the AppRole credential ESO uses to log in to Vault. Everything

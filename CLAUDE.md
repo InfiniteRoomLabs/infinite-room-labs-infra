@@ -108,7 +108,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide on adding services, ru
 
 See [TESTING.md](TESTING.md) for the full acceptance test suite documentation.
 
-Quick: `cd tests/ && task smoke` (17 smoke tests). Full: `task validate` (Goss + pytest + report).
+Quick: `cd tests/ && task smoke` (24 smoke tests). Full: `task validate` (Goss + pytest + report).
 
 ## Research Protocol
 

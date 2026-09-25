@@ -159,6 +159,18 @@
         recurse: true
       tags: [wordpress]
 
+    # OpenMessage runs as uid/gid 1000 with readOnlyRootFilesystem, so /data is
+    # the only path it can write -- and fsGroup does not apply to hostPath PVs.
+    # Without this chown the daemon cannot create messages.db or session.json.
+    - name: Chown openmessage dataset to UID 1000 (container user)
+      ansible.builtin.file:
+        path: "{{ irl_zfs_mount }}/openmessage"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        recurse: true
+      tags: [openmessage]
+
     # ── ZFS scrub schedule ─────────────────────────────────────────
     - name: Schedule weekly ZFS scrub (Sunday 3am)
       ansible.builtin.cron:
