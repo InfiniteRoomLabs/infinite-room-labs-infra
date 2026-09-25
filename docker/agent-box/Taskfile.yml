@@ -38,6 +38,20 @@ tasks:
     desc: Tools, logins, reach, firewall report (the acceptance test)
     cmds: [./agent-box.sh doctor]
 
+  # task runs from this directory, so pass the caller's directory on as
+  # --dir; a --dir in the args wins (the wrapper takes the last one).
+  batch:
+    desc: Unattended agent run on one prompt in the directory you ran task from (options after --)
+    cmds: ['./agent-box.sh batch --dir "{{.USER_WORKING_DIR}}" {{.CLI_ARGS}}']
+
+  mcp:
+    desc: Claude Code as an MCP server on stdio, for the directory you ran task from
+    cmds: ['./agent-box.sh mcp --dir "{{.USER_WORKING_DIR}}"']
+
+  test:
+    desc: Smoke test batch + mcp against a throwaway volume (no login, no model calls)
+    cmds: [./tests/unattended.sh]
+
   identity:
     desc: Print the box's SSH public key (flags after --, e.g. -- --authorize-homelab)
     cmds: ["./agent-box.sh identity {{.CLI_ARGS}}"]
@@ -53,4 +67,4 @@ tasks:
   lint:
     desc: shellcheck every script, inside the box
     cmds:
-      - ./agent-box.sh compose --open run --rm box bash -c 'cd docker/agent-box && shellcheck -x -P SCRIPTDIR agent-box.sh lib/*.sh image/*.sh && echo shellcheck clean'
+      - ./agent-box.sh compose --open run --rm box bash -c 'cd docker/agent-box && shellcheck -x -P SCRIPTDIR agent-box.sh lib/*.sh image/*.sh tests/*.sh && echo shellcheck clean'
