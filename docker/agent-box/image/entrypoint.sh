@@ -13,6 +13,12 @@ set -euo pipefail
 
 log() { printf 'agent-box: %s\n' "$*" >&2; }
 
+# stdout belongs to the command we exec, never to this setup. In MCP mode
+# (`claude mcp serve`) it is the protocol channel and in batch mode it is
+# the agent's result, so one stray line from a tool below would corrupt
+# it. Park the real stdout on fd 3 and point fd 1 at stderr until the exec.
+exec 3>&1 1>&2
+
 # 1. Firewall (denylist: default allow, listed destinations blocked). A
 #    misconfigured run (no NET_ADMIN cap) fails loudly rather than silently
 #    skipping the blocks.
@@ -80,8 +86,10 @@ chmod 600 "$HOME/.ssh/config"
 # PATH for everything, including Claude Code's hooks, not only interactive
 # shells. So export it here, before the exec.
 export PATH="$HOME/.local/bin:$PATH"
-eval "$(ssh-agent -s)" >/dev/null
+# The daemon must not inherit fd 3 (the real stdout) and hold it open.
+eval "$(ssh-agent -s 3>&-)" >/dev/null
 ssh-add -q "$HOME/.ssh/id_ed25519" 2>/dev/null || log "could not load ~/.ssh/id_ed25519 into ssh-agent"
 
-# 4. Hand off. `exec` so signals reach the real process.
-exec "$@"
+# 4. Hand off. `exec` so signals reach the real process; restore stdout
+#    (and close the spare fd) on the way.
+exec "$@" 1>&3 3>&-
