@@ -88,6 +88,17 @@ cat results/report.md
 - **New k8s resource?** Add to the expected lists in `test_k8s_resources.py`.
 - **New label?** Add to the expected dicts in `test_node_labels.py`.
 
+## Other Suites
+
+`docker/agent-box/` (the Claude Code container) has its own checks, run from
+that directory with bash + docker only (Task optional):
+
+| Command | What it Does |
+|---------|-------------|
+| `./agent-box.sh doctor` (`task doctor`) | Acceptance test of the interactive box: tools, logins, reach, firewall |
+| `./tests/unattended.sh` (`task test`) | Smoke test of `batch` and `mcp`: stdout purity, exit codes, mount scope, cleanup. Throwaway volume, no login, no model calls |
+| `task lint` | shellcheck over every agent-box script, inside the box |
+
 ## CI Integration
 
 pytest generates JUnit XML at `results/pytest.xml`. Goss generates JSON at `results/goss-*.json`. Both are CI-compatible formats.

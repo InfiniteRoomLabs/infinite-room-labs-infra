@@ -101,6 +101,13 @@ hosts that have `task`.
 `agent-box.sh doctor` exits 0 with no FAIL lines. WARN lines name the
 one-time logins still to do on a fresh volume.
 
+## Addendum 2026-09-25: unattended modes
+
+`agent-box.sh batch` (one prompt, run to completion, exit with the outcome)
+and `agent-box.sh mcp` (Claude Code's MCP server on stdio) are two more
+services that `extends: box`. Design and trade-offs, including why
+unattended runs keep the denylist: `docs/plans/2026-09-25-agent-box-batch-mcp-design.md`.
+
 ## Out of scope (for now)
 
 `devcontainer.json`, GPU passthrough, a Docker socket inside the box, MCP
