@@ -628,6 +628,13 @@
           app: wordpress
           capacity: "10Gi"
           hostPath: "{{ irl_zfs_mount }}/wordpress-db"
+        # ── OpenMessage ──
+        # /data: SQLite messages.db + session.json (the Google pairing).
+        # Dataset chowned to 1000 in zfs.yml (fsGroup ignores hostPath PVs).
+        - name: pv-openmessage-data
+          app: openmessage
+          capacity: "5Gi"
+          hostPath: "{{ irl_zfs_mount }}/openmessage"
       tags: [pvs]
 
     - name: Create zfs-local StorageClass

@@ -153,6 +153,20 @@ irl_zfs_datasets:
       compression: "lz4"
       recordsize: "16K"
 
+  # ── OpenMessage (household SMS/RCS MCP server) ───────────────
+  # /data: SQLite messages.db (+ -wal/-shm) AND session.json, the Google
+  # Messages pairing credential. Losing this costs a re-pair from the phone
+  # plus a full re-sync, so it is authoritative, not a cache. 16K recordsize
+  # matches SQLite's page-at-a-time write pattern (same call as wotlk-db).
+  # Runs as 1000:1000, chowned in zfs.yml (hostPath PVs ignore fsGroup).
+  - name: "{{ irl_zfs_pool }}/openmessage"
+    mountpoint: "{{ irl_zfs_mount }}/openmessage"
+    quota: "5G"
+    properties:
+      atime: "off"
+      compression: "lz4"
+      recordsize: "16K"
+
 # ── NFS (hand-managed on homelab, not via ansible) ──────────────────
 # The homelab already exports /media/root/storage1/nfs-share via NFSv4.2
 # (set up manually, not via ansible). Laptop mounts at /mnt/homelab-nfs.
@@ -268,6 +282,13 @@ irl_services:
     internal: false
     cluster_svc: "wordpress"
     cluster_port: 80
+  openmessage:
+    subdomain: "openmessage"
+    internal: false
+    cluster_svc: "openmessage"
+    cluster_port: 7007
+    health_path: "/healthz"   # unauthenticated; every /mcp* path needs a bearer token
+    homepage: false           # MCP endpoint only -- no web UI to link a tile to
   satisfactory:
     subdomain: "satisfactory"
     internal: true

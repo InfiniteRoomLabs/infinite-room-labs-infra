@@ -44,6 +44,7 @@ myservice:
   health_path: "/health"        # optional, defaults to "/" in the tests
   # cluster_only: true          # no HTTP route at all (game servers, S3 API)
   # deploy_tag: "monitoring"    # if a different play/tag deploys it
+  # homepage: false             # no browser UI to link a tile to (MCP/API only)
 ```
 
 This is the **single source of truth**. It drives the CoreDNS zone file
@@ -114,6 +115,9 @@ PR for versions that are pinned. Tag every task `[phaseN, {service}]`.
 ### 6. Fan-out obligations (enforced by `pytest -m hygiene`)
 
 - `ansible/helm/homepage/values.yaml` -- a tile for any non-internal service.
+  A service with nothing for a browser to open (an MCP endpoint, an API behind
+  a bearer token) sets `homepage: false` in the registry instead; the contract
+  test accepts that and nothing else.
 - `ansible/docs/runbooks/{service}-down.md` -- detection, assessment, common
   causes, recovery.
 - `tests/test_dns.py` -- add the domain to `EXPECTED_RECORDS`.
@@ -262,7 +266,7 @@ See [TESTING.md](TESTING.md) for full details.
 
 ```bash
 cd tests/
-task smoke      # Quick: 17 smoke tests
+task smoke      # Quick: 24 smoke tests
 task validate   # Full: Goss + pytest + report
 ```
 

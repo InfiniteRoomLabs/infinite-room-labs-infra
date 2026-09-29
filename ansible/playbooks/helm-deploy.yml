@@ -70,6 +70,7 @@
         - firefly-importer
         - karakeep
         - wordpress
+        - openmessage
         - satisfactory
         - palworld
         - wotlk
@@ -1387,6 +1388,63 @@
           - "{{ helm_values_path }}/palworld/values.yaml"
         wait: false
       tags: [phase5, palworld]
+
+    # ── OpenMessage (household SMS/RCS MCP server) ────────────────
+    # IRL chart (irl-openmessage). Requires pv-openmessage-data (k3s.yml), the
+    # chowned openmessage dataset (zfs.yml) and the openmessage-secrets Secret
+    # (bw-sync: item openmessage-control-token -> key token). The chart owns
+    # its IngressRoute and its ipAllowList middleware, so nothing is added to
+    # irl_traefik_standalone_services.
+    #
+    # ONE POD, EVER. The Google Messages pairing is a single logical device
+    # backed by one session.json on this claim; a second daemon on the same
+    # pairing can get it revoked. The chart pins replicas 1 / strategy
+    # Recreate -- do not override either from here.
+    #
+    # BLOCKED ON THE IMAGE: ansible/helm/openmessage/values.yaml still carries
+    # a placeholder image digest, so this task deploys a pod that cannot pull.
+    # Fill the real digest first -- see the "Deploy phase" section of
+    # docs/plans/2026-09-25-openmessage-k3s-deployment.md.
+    - name: "Phase 5: Create OpenMessage data PVC"
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: openmessage-data
+            namespace: "{{ k3s_namespace }}"
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: zfs-local
+            volumeName: pv-openmessage-data
+            resources:
+              requests:
+                storage: "5Gi"
+      tags: [phase5, openmessage]
+
+    - name: "Phase 5: Upload OpenMessage values"
+      ansible.builtin.copy:
+        src: ../helm/openmessage/values.yaml
+        dest: "{{ helm_values_path }}/openmessage/values.yaml"
+        owner: "{{ irl_admin_user }}"
+        mode: "0640"
+      tags: [phase5, openmessage]
+
+    - name: "Phase 5: Deploy OpenMessage (irl-openmessage chart)"
+      kubernetes.core.helm:
+        name: openmessage
+        chart_ref: irl/irl-openmessage
+        chart_version: "0.1.0"
+        release_namespace: "{{ k3s_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ helm_values_path }}/openmessage/values.yaml"
+        wait: true
+        timeout: "10m0s"
+      tags: [phase5, openmessage]
 
     # ── Deploy summary ────────────────────────────────────────────
 

@@ -44,6 +44,8 @@ baseline := {
 	"CronJob/jobops-irl-jobops-cron-daily-agentic-ai/trigger",
 	"CronJob/jobops-irl-jobops-cron-daily-midlevel-sustainable/trigger",
 	"CronJob/jobops-irl-jobops-cron-daily-qa-automation/trigger",
+	# irl-openmessage (release: openmessage, fullnameOverride: openmessage)
+	"Deployment/openmessage/openmessage",
 	# irl-valkey (release: valkey)
 	"Deployment/valkey/valkey",
 	"Deployment/valkey/valkey-init",

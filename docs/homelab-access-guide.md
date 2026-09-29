@@ -1,6 +1,6 @@
 # Homelab Service Access Guide
 
-Last updated: 2026-03-23
+Last updated: 2026-09-25
 
 ## Prerequisites
 
@@ -22,7 +22,7 @@ on the same host are the next nodes to join.
 
 ## Service Access Table
 
-All services are accessed via Caddy reverse proxy with internal TLS (Tailscale-only access). Public-facing services use `*.lab.infiniteroomlabs.cloud`, internal services use `*.internal.lab.infiniteroomlabs.cloud`.
+All services are routed by in-cluster Traefik (hostNetwork, Let's Encrypt wildcard via DNS-01) and reachable on the tailnet only -- the names resolve solely through the internal CoreDNS zone. Public-facing services use `*.lab.infiniteroomlabs.cloud`, internal services use `*.internal.lab.infiniteroomlabs.cloud`. (Caddy was the bare-metal predecessor and is gone.)
 
 | Service | URL | Node | Credentials |
 |---------|-----|------|-------------|
@@ -36,6 +36,7 @@ All services are accessed via Caddy reverse proxy with internal TLS (Tailscale-o
 | **Alertmanager** (alerts) | https://alerts.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
 | **Karakeep** (bookmarks) | https://bookmarks.lab.infiniteroomlabs.cloud | Homelab | Single admin `wes@infiniteroomlabs.com`, password in BW `IRL/Services/Karakeep` (signups disabled) |
 | **WordPress** (journal) | https://journal.lab.infiniteroomlabs.cloud | Homelab | Admin account created at `/wp-admin/install.php` on first visit; store it in BW `IRL/Services/WordPress` |
+| **OpenMessage** (SMS/RCS MCP server) | https://openmessage.lab.infiniteroomlabs.cloud/mcp | Homelab | `Authorization: Bearer <token>`, token in BW `IRL/Services/OpenMessage` (item `openmessage-control-token`). No web UI -- see below |
 | **CoreDNS** (Split DNS) | N/A (hostNetwork port 53) | Homelab | No UI -- DNS resolver only |
 | **Ollama** (LLM inference) | ClusterIP only | Homelab | See kubectl access below |
 | **Satisfactory** (game server) | Game client only -- see below | Homelab | Admin password set in-game at claim time |
@@ -72,6 +73,37 @@ LAN + tailnet only and the server never appears in the community browser.
 Saves are snapshotted hourly (sanoid) plus the image's own daily tar backups --
 recovery procedures in `ansible/docs/sops/backup-and-restore.md` and
 `ansible/docs/runbooks/palworld-down.md`.
+
+## Connecting to OpenMessage (MCP)
+
+One daemon for every machine: the Google Messages pairing is a single logical
+device, so Claude Code and Claude Desktop on both the laptop and the desktop
+point at this one endpoint. **Never run a second OpenMessage against the same
+pairing** -- the two fight over the session and Google can revoke it.
+
+- Endpoint: `https://openmessage.lab.infiniteroomlabs.cloud/mcp`
+  (legacy SSE clients: `/mcp/sse`)
+- Auth: `Authorization: Bearer <token>` on every request, from BW
+  `IRL/Services/OpenMessage`
+- Reachable from the tailnet and the home LAN only: no public DNS record, no
+  tunnel, and a Traefik IP allowlist for `192.168.2.0/24` + `100.64.0.0/10`
+
+```bash
+claude mcp add --scope user --transport http openmessage \
+  https://openmessage.lab.infiniteroomlabs.cloud/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+Quick check (no token needed for the health path):
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://openmessage.lab.infiniteroomlabs.cloud/healthz   # 200
+curl -sS -o /dev/null -w '%{http_code}\n' https://openmessage.lab.infiniteroomlabs.cloud/mcp       # 401
+```
+
+403 means the IP allowlist or the daemon's Host check rejected you; 401 means
+the token is missing or wrong. Full triage:
+`ansible/docs/runbooks/openmessage-down.md`.
 
 ## Accessing Ollama (ClusterIP-only)
 

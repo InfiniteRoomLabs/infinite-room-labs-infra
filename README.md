@@ -59,7 +59,7 @@ Multi-tool IaC monorepo for the IRL homelab: a single-node k3s cluster on an HP 
 | Cloudflare DNS | Porkbun-registered domains delegated to Terraform-managed Cloudflare zones; a module updates Porkbun nameservers from the zone outputs automatically |
 | ZFS + sanoid | Per-service datasets with quotas and tuned recordsizes; sanoid templates give hourly snapshots to irreplaceable data like game saves ('point-in-time recovery for fat-fingered factories') and minimal retention to redownloadable model blobs |
 | Packer + KVM/libvirt | Versioned Ubuntu 24.04 gold masters built on the laptop and published to the `main/vms` dataset; VMs are declared in host_vars and provisioned by `vms.yml` against a hard RAM-budget assertion |
-| Goss + pytest + Task | Acceptance suite: `task smoke` (17 health checks), `task validate` (full Goss + pytest pipeline), plus repo-hygiene contract tests that run in a GitHub Actions workflow on every PR and push to master |
+| Goss + pytest + Task | Acceptance suite: `task smoke` (24 health checks), `task validate` (full Goss + pytest pipeline), plus repo-hygiene contract tests that run in a GitHub Actions workflow on every PR and push to master |
 | usage | Declarative `#USAGE` arg specs give bootstrap.sh, bw-sync.sh, and run-ansible.sh real flag parsing and `--help` from a shebang, not hand-rolled getopts |
 
 ## Topology
@@ -91,6 +91,7 @@ flowchart LR
         jobops[JobOps]
         gunio[gunio-mcp - namespace gunio]
         websvcs[Gitea / Authentik / Vault / Grafana / Homepage / Vaultwarden / Nextcloud / Paperless / Firefly / Ghostfolio / Karakeep / WordPress]
+        openmessage[openmessage - MCP, bearer token + IP allowlist]
         intsvcs[Prometheus / Alertmanager / Garage / OpenViking]
         games[Satisfactory :30777-30888 / Palworld :30211 udp]
         cnpg[CNPG PostgreSQL 16 - 9 databases]
@@ -105,6 +106,8 @@ flowchart LR
     laptop -->|git SSH :30022| websvcs
     traefik --> websvcs
     traefik --> intsvcs
+    traefik --> openmessage
+    openmessage --> zfs
     deck -->|LAN NodePorts| games
     websvcs --> cnpg
     websvcs --> valkey
@@ -367,16 +370,26 @@ See `ansible/CLAUDE.md` for full documentation (layout, running, secrets, SSH ac
 
 `helm-charts/` is a git submodule pointing to `InfiniteRoomLabs/helm-charts`. Available charts:
 
-| Chart             | Purpose                               |
-|-------------------|---------------------------------------|
-| `irl-caddy`       | Reverse proxy with ACME DNS-01        |
-| `irl-garage`      | S3-compatible object storage          |
-| `irl-gitea`       | Self-hosted Git                       |
-| `irl-monitoring`  | Prometheus + Grafana + Loki stack     |
-| `irl-openviking`  | Agent memory / RAG service            |
-| `irl-postgres`    | PostgreSQL via CNPG                   |
-| `irl-valkey`      | Redis-compatible key-value store      |
-| `irl-vaultwarden` | Bitwarden-compatible password manager |
+| Chart             | Purpose                                                  |
+|-------------------|----------------------------------------------------------|
+| `irl-garage`      | S3-compatible object storage                             |
+| `irl-gitea`       | Self-hosted Git                                          |
+| `irl-gunio-mcp`   | gun.io MCP server, published via a Cloudflare Tunnel     |
+| `irl-jobops`      | JobOps app + tunnel + daily pipeline CronJobs            |
+| `irl-monitoring`  | Prometheus + Grafana + Loki stack                        |
+| `irl-openmessage` | Google Messages SMS/RCS as a single-pod MCP server       |
+| `irl-openviking`  | Agent memory / RAG service                               |
+| `irl-palworld`    | Palworld dedicated game server                           |
+| `irl-paperless`   | Paperless-ngx document archive                           |
+| `irl-postgres`    | PostgreSQL via CNPG                                      |
+| `irl-satisfactory`| Satisfactory dedicated game server                       |
+| `irl-valkey`      | Redis-compatible key-value store                         |
+| `irl-vaultwarden` | Bitwarden-compatible password manager                    |
+| `irl-wordpress`   | Single-site WordPress + bundled MariaDB                  |
+| `irl-wotlk`       | AzerothCore WotLK server + bundled MySQL                 |
+
+(`irl-caddy` was retired with the Caddy-to-Traefik migration -- see
+`docs/decisions/0002-traefik-over-caddy.md`.)
 
 Charts are deployed via Ansible (`ansible/playbooks/helm-deploy.yml`), never manually. Values overrides live in `ansible/helm/{name}/values.yaml`.
 

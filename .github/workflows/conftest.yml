@@ -4,9 +4,13 @@ name: conftest
 # repo introspection only -- no cluster or secret access (KUBECONFIG never
 # used; `helm template` is offline apart from chart dependency downloads).
 #
-# Enforced policies (policy/*.rego) -- all verified green against the 2026-08
-# rendered output of the 11 IRL charts with deployed values, plus the
-# separately installed cnpg/cloudnative-pg operator release:
+# Enforced policies (policy/*.rego) -- all verified green against the rendered
+# output of exactly the charts listed in the "Render charts" step below (with
+# their deployed values), plus the separately installed cnpg/cloudnative-pg
+# operator release. That list is NOT every chart in helm-charts/charts/:
+# irl-wordpress and irl-wotlk are not rendered here and so are not policy-
+# tested (kubeconform.yml does validate every chart). Deliberately left as
+# found; closing that gap is its own change.
 #   - deny-privileged-and-privilege-escalation (carries a shrink-only baseline
 #     of containers that omit allowPrivilegeEscalation: false)
 #   - readonly-rootfs-ratchet (value regressions in rego; the presence half is
@@ -148,6 +152,9 @@ jobs:
           render irl-gunio-mcp irl-gunio-mcp   ""
           render jobops       irl-jobops       ""
           render monitoring   irl-monitoring   monitoring
+          # irl-openmessage has no default image digest, hostname, claim or
+          # secret name -- it only renders with the deployed overlay.
+          render openmessage  irl-openmessage  openmessage
           render openviking   irl-openviking   ""
           render palworld     irl-palworld     palworld
           render paperless    irl-paperless    paperless

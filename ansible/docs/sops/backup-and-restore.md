@@ -40,6 +40,76 @@ sudo zfs snapshot main/backups@{stack}-$(date +%Y%m%d)
 sudo docker compose start
 ```
 
+## OpenMessage
+
+One dataset, `main/openmessage` (sanoid `service_data`: hourly x24, daily x30,
+weekly x4, monthly x6), holding two things of very different value:
+
+- `session.json` -- the Google Messages pairing credential. **Irreplaceable
+  from the cluster**: losing it means re-pairing by scanning a QR code from the
+  phone (procedure in `ansible/docs/runbooks/openmessage-down.md`).
+- `messages.db` (+ `-wal`/`-shm`) -- SQLite message history. Re-syncable from
+  Google, but slowly.
+
+SQLite runs in WAL mode, so `messages.db` alone is not a backup: the `-wal`
+file can hold committed transactions that are not in the main file yet. Treat
+all four files as one unit, and **stop the pod before copying**. Snapshots are
+crash-consistent, not quiesced.
+
+### Copy the data out (the common case)
+
+```bash
+# Stop the daemon and wait for the pod to actually go away -- the RWO claim
+# cannot be mounted twice, and two daemons on one pairing can get it revoked.
+kubectl scale -n irl deploy/openmessage --replicas=0
+kubectl wait -n irl --for=delete pod -l app.kubernetes.io/instance=openmessage --timeout=120s
+
+ssh homelab-ts "sudo tar -C /media/root/storage1/openmessage -cf - \
+  messages.db messages.db-wal messages.db-shm session.json" > openmessage-data.tar
+
+kubectl scale -n irl deploy/openmessage --replicas=1
+```
+
+`messages.db-wal` / `messages.db-shm` are absent after a clean shutdown; `tar`
+will say so and that is fine.
+
+### Restore individual files from a snapshot
+
+Prefer this over `zfs rollback` -- it lets you take back `session.json` without
+also rewinding message history, or vice versa.
+
+```bash
+kubectl scale -n irl deploy/openmessage --replicas=0
+kubectl wait -n irl --for=delete pod -l app.kubernetes.io/instance=openmessage --timeout=120s
+
+ssh homelab-ts "sudo zfs list -t snapshot -o name,creation main/openmessage | tail -30"
+
+# Snapshots are browsable as read-only directories.
+ssh homelab-ts "sudo ls -l /media/root/storage1/openmessage/.zfs/snapshot/<snap>/"
+ssh homelab-ts "sudo cp -a /media/root/storage1/openmessage/.zfs/snapshot/<snap>/messages.db* \
+  /media/root/storage1/openmessage/ && \
+  sudo chown 1000:1000 /media/root/storage1/openmessage/messages.db*"
+
+kubectl scale -n irl deploy/openmessage --replicas=1
+```
+
+Restore `messages.db` and its `-wal`/`-shm` together or not at all: a new
+`messages.db` next to a stale `-wal` is a corrupt database. The chown matters
+-- hostPath PVs ignore `fsGroup`, so ownership on the host is what makes the
+files writable by the container's uid 1000.
+
+### Full-dataset rollback (DESTRUCTIVE)
+
+```bash
+kubectl scale -n irl deploy/openmessage --replicas=0
+kubectl wait -n irl --for=delete pod -l app.kubernetes.io/instance=openmessage --timeout=120s
+ssh homelab-ts "sudo zfs rollback main/openmessage@<snapshot>"
+kubectl scale -n irl deploy/openmessage --replicas=1
+```
+
+This also rewinds `session.json`. If the pairing was re-established after that
+snapshot, the rollback invalidates it and you must re-pair.
+
 ## Karakeep
 
 Two datasets, different value:
