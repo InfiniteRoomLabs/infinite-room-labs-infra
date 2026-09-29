@@ -46,6 +46,8 @@ x-box-common: &box-common
     AGENT_BOX_SSH_HOST: ${AGENT_BOX_SSH_HOST:-}
     AGENT_BOX_GIT_HOST: ${AGENT_BOX_GIT_HOST:-}
     AGENT_BOX_GIT_SSH_PORT: ${AGENT_BOX_GIT_SSH_PORT:-30022}
+    AGENT_BOX_GIT_NAME: ${AGENT_BOX_GIT_NAME:-}          # commit identity; wrapper defaults it to the host's
+    AGENT_BOX_GIT_EMAIL: ${AGENT_BOX_GIT_EMAIL:-}
   volumes:
     - home:/home/agent                                   # state: logins, keys, caches
     - ${AGENT_BOX_WORKSPACE:-~/Projects}:/work           # your repos, read-write

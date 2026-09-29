@@ -70,6 +70,11 @@ fi
 section "Logins (one-time, persisted in the home volume)"
 if [[ -s "$HOME/.claude/.claude.json" ]] && grep -q '"oauthAccount"' "$HOME/.claude/.claude.json" 2>/dev/null; then pass "Claude Code signed in"; else warn "Claude Code not signed in: run 'claude' once and follow the prompt"; fi
 if gh auth status >/dev/null 2>&1; then pass "gh authenticated"; else warn "gh not authenticated: run 'gh auth login'"; fi
+if git config --global --get user.email >/dev/null; then
+  pass "git identity: $(git config --global --get user.name) <$(git config --global --get user.email)>"
+else
+  warn "no git identity: set AGENT_BOX_GIT_NAME/AGENT_BOX_GIT_EMAIL (default: the host's git config) or 'gh auth login', then restart the box"
+fi
 if (cd / && tea whoami >/dev/null 2>&1); then pass "tea login works"; else warn "tea has no working login: run 'tea login add'"; fi
 case "$(bw status 2>/dev/null | jq -r .status 2>/dev/null)" in
   unlocked) pass "Bitwarden CLI unlocked" ;;
