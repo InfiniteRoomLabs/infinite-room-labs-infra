@@ -134,9 +134,11 @@ perfectly healthy daemon.
 
 ### Pod crashlooping on startup, cannot write /data
 
-`readOnlyRootFilesystem: true` means `/data` is the only writable path that
-matters, and hostPath PVs ignore `fsGroup` -- the dataset must be owned by
-1000:1000 on the host:
+Log shows `init app: secure data dir: chmod /data: operation not permitted`
+(the daemon chmods its data dir to 0700 at startup, which only the owner may
+do). `readOnlyRootFilesystem: true` means `/data` is the only writable path
+that matters, and hostPath PVs ignore `fsGroup` -- the dataset must be owned
+by 1000:1000 on the host:
 
 ```bash
 ssh homelab-ts "ls -ld /media/root/storage1/openmessage"
