@@ -23,8 +23,13 @@ This is a multi-tool IaC monorepo. Each IaC tool has its own top-level directory
 | `ansible/` | Ansible | Homelab server configuration and service deployment |
 | `helm-charts/` | Helm (git submodule) | IRL custom Helm charts (`irl-caddy`, `irl-garage`, etc.) |
 | `docker/` | Docker | Custom container image builds (Dockerfiles only, no compose) |
+| `desktop/` | PowerShell 7 | Windows desktop converge (local-run, no remote listener) |
 
 Do NOT put Terraform files at the repo root -- they live under `terraform/`. Do NOT put Ansible files at the repo root -- they live under `ansible/`.
+
+### Desktop (`desktop/`)
+
+The Windows workstation is NOT managed by Ansible: Ansible cannot be a Windows control node, and reaching the desktop over SSH/WinRM would mean a standing remote-administration listener on a personal machine. Instead it converges itself, the same way `ansible/playbooks/laptop.yml` does -- an idempotent `pwsh` script driven by the declarative `desktop/desktop.psd1`, run locally by the person at the keyboard. `-WhatIf` is check mode. Full rationale and the rejected options: `docs/superpowers/specs/2026-09-29-desktop-iac-design.md`. Usage: `desktop/README.md`.
 
 ### Helm Charts (submodule)
 

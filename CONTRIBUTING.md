@@ -20,10 +20,21 @@ to the tailnet so cross-node traffic rides Tailscale when a second node exists.
 ```
 terraform/           Terraform + Terragrunt (cloud resources, DNS, Split DNS)
 ansible/             Ansible playbooks (server config, k8s deployments)
+desktop/             Windows desktop converge (PowerShell 7, local-run)
 tests/               Acceptance tests (pytest + Goss + Task orchestrator)
 docs/                Plans, runbooks, SOPs, access guides
 scripts/             bw-sync.sh, bootstrap scripts
 ```
+
+## Which layer manages which machine
+
+| Machine | Tool | How it runs |
+|---------|------|-------------|
+| Homelab (`home`) | `ansible/` playbooks, `site.yml` | Over SSH from the agent-box |
+| Laptop | `ansible/playbooks/laptop.yml` | On the laptop, `connection: local`. Deliberately not in `site.yml`. |
+| Windows desktop | `desktop/Invoke-DesktopConverge.ps1` | On the desktop, elevated when an item needs it. `-WhatIf` is check mode. |
+
+Neither personal machine is reachable by the homelab orchestrator, and the desktop has no remote-administration listener at all -- it converges itself. The reasoning, and the options that were rejected, are in `docs/superpowers/specs/2026-09-29-desktop-iac-design.md`.
 
 ## Adding a New Service
 
