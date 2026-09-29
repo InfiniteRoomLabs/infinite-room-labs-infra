@@ -1,0 +1,293 @@
+---
+# tasks/openmessage_client.yml
+# ============================
+# The laptop's OpenMessage client: binary, control token, and the two Claude
+# MCP registrations, all pointed at the cluster daemon at
+# openmessage.lab.infiniteroomlabs.cloud.
+#
+# The laptop never ran a local OpenMessage daemon, so there is nothing to
+# retire here -- this file only ever converges the three client items. The
+# desktop, which did run one, has a fourth (two-phase) retirement item; see
+# desktop/lib/Items/OpenMessageDaemon.psm1.
+#
+# Windows counterpart: desktop/lib/Items/OpenMessageClient.psm1. The two
+# describe the same target state in two languages and share no code; if you
+# change the endpoint, the release pin or the argument vector here, change it
+# there too (and in desktop/desktop.psd1).
+#
+# Design:  docs/superpowers/specs/2026-09-29-desktop-iac-design.md
+# Plan:    docs/superpowers/plans/2026-09-29-desktop-iac-openmessage.md
+# Runbook: ansible/docs/runbooks/openmessage-down.md
+#
+# THE BRIDGE, AND WHY IT IS NOT JUST AN HTTP MCP SERVER
+# Claude Code could talk to the cluster over `--transport http` with an
+# Authorization header, but that writes the bearer token into Claude's own
+# config in plaintext, and Claude Desktop cannot do it at all -- its remote
+# connectors run from Anthropic's cloud and cannot reach a tailnet-only host.
+# `openmessage mcp-bridge` is a local stdio process that reads the token from
+# a 0600 file and adds the header itself, so one mechanism serves both clients
+# and no Claude config ever contains a secret.
+#
+# SECRETS
+# The token arrives in $OPENMESSAGE_CONTROL_TOKEN for the duration of one
+# command, from Bitwarden item `openmessage-control-token` (declared in
+# fnox.toml). Run the play through the repo's wrapper:
+#
+#   cd ansible/
+#   ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml \
+#     --tags openmessage_client
+#
+# Without the variable the token task is skipped when the file already exists
+# and fails loudly when it does not -- so a routine converge needs no vault.
+#
+# Required vars (set in playbooks/laptop.yml):
+#   openmessage_version, openmessage_release_base, openmessage_archive,
+#   openmessage_endpoint, openmessage_mcp_name
+
+- name: Resolve the OpenMessage client paths
+  ansible.builtin.set_fact:
+    openmessage_bin: "{{ ansible_user_dir }}/.local/bin/openmessage"
+    openmessage_cache_dir: "{{ ansible_user_dir }}/.cache/openmessage/{{ openmessage_version }}"
+    openmessage_stamp: "{{ ansible_user_dir }}/.local/state/openmessage/client-version"
+    openmessage_token_file: "{{ ansible_user_dir }}/.config/openmessage/token"
+    openmessage_claude_desktop_config: "{{ ansible_user_dir }}/.config/Claude/claude_desktop_config.json"
+
+- name: Read the control token from the environment
+  # Its own task so `no_log` covers the secret without hiding the paths above.
+  ansible.builtin.set_fact:
+    openmessage_control_token: "{{ lookup('ansible.builtin.env', 'OPENMESSAGE_CONTROL_TOKEN') | default('', true) | trim }}"
+  no_log: true
+
+# -- binary ------------------------------------------------------------------
+# Verified against the release's own SHA256SUMS rather than a hash pinned in
+# this repo: the fork's release workflow generates SHA256SUMS with
+# `sha256sum -- *` over the artifacts it just built, so it is the authority for
+# what that tag published. The tag is the thing we pin.
+
+- name: Ensure the OpenMessage download cache exists
+  ansible.builtin.file:
+    path: "{{ openmessage_cache_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Fetch the release checksum manifest
+  ansible.builtin.get_url:
+    url: "{{ openmessage_release_base }}/{{ openmessage_version }}/SHA256SUMS"
+    dest: "{{ openmessage_cache_dir }}/SHA256SUMS"
+    mode: "0644"
+
+- name: Read the release checksum manifest
+  ansible.builtin.slurp:
+    src: "{{ openmessage_cache_dir }}/SHA256SUMS"
+  register: openmessage_sums
+
+- name: Extract the checksum for this platform's archive
+  ansible.builtin.set_fact:
+    # The empty string appended to the match list keeps `first` from raising
+    # on a miss -- an empty result then fails the explicit check below with a
+    # message that names the tag, instead of a Jinja stack trace.
+    openmessage_archive_sha256: >-
+      {{ ((openmessage_sums.content | b64decode).splitlines()
+          | select('search', '^[0-9a-fA-F]{64}\s+\*?' ~ (openmessage_archive | regex_escape) ~ '$')
+          | list + [''])
+         | first | regex_replace('^([0-9a-fA-F]{64}).*$', '\1') }}
+
+- name: Fail clearly when the archive is not in the checksum manifest
+  ansible.builtin.fail:
+    msg: >-
+      {{ openmessage_archive }} has no entry in the {{ openmessage_version }}
+      SHA256SUMS. Check the release tag in playbooks/laptop.yml.
+  when: openmessage_archive_sha256 | length != 64
+
+- name: Download the pinned OpenMessage release archive
+  ansible.builtin.get_url:
+    url: "{{ openmessage_release_base }}/{{ openmessage_version }}/{{ openmessage_archive }}"
+    dest: "{{ openmessage_cache_dir }}/{{ openmessage_archive }}"
+    checksum: "sha256:{{ openmessage_archive_sha256 }}"
+    mode: "0644"
+
+- name: Read the installed client version stamp
+  ansible.builtin.slurp:
+    src: "{{ openmessage_stamp }}"
+  register: openmessage_installed
+  failed_when: false
+
+- name: Check for an existing OpenMessage binary
+  ansible.builtin.stat:
+    path: "{{ openmessage_bin }}"
+  register: openmessage_bin_stat
+
+- name: Determine whether the binary needs installing
+  ansible.builtin.set_fact:
+    # A missing stamp, a stale stamp or a missing binary all mean "install".
+    openmessage_install_needed: >-
+      {{ (not openmessage_bin_stat.stat.exists)
+         or (openmessage_installed.content is not defined)
+         or ((openmessage_installed.content | b64decode | trim) != openmessage_version) }}
+
+- name: Ensure ~/.local/bin exists
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.local/bin"
+    state: directory
+    mode: "0755"
+
+- name: Install the OpenMessage binary
+  # The archive holds a single bare `openmessage` at its root
+  # (scripts/ci/cross-build.sh in the fork).
+  ansible.builtin.unarchive:
+    src: "{{ openmessage_cache_dir }}/{{ openmessage_archive }}"
+    dest: "{{ ansible_user_dir }}/.local/bin"
+    remote_src: true
+    include:
+      - openmessage
+  when: openmessage_install_needed | bool
+
+- name: Ensure the OpenMessage binary is executable
+  ansible.builtin.file:
+    path: "{{ openmessage_bin }}"
+    mode: "0755"
+    state: file
+
+- name: Ensure the client state directory exists
+  ansible.builtin.file:
+    path: "{{ openmessage_stamp | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Record the installed client version
+  ansible.builtin.copy:
+    content: "{{ openmessage_version }}\n"
+    dest: "{{ openmessage_stamp }}"
+    mode: "0644"
+
+# -- control token -----------------------------------------------------------
+
+- name: Ensure the OpenMessage config directory exists
+  ansible.builtin.file:
+    path: "{{ openmessage_token_file | dirname }}"
+    state: directory
+    mode: "0700"
+
+- name: Check for an existing control token file
+  ansible.builtin.stat:
+    path: "{{ openmessage_token_file }}"
+  register: openmessage_token_stat
+
+- name: Fail clearly when no control token is available
+  ansible.builtin.fail:
+    msg: >-
+      {{ openmessage_token_file }} does not exist and $OPENMESSAGE_CONTROL_TOKEN
+      is not set. Re-run through the secret wrapper:
+      ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml
+      --tags openmessage_client
+  when:
+    - openmessage_control_token | length == 0
+    - not openmessage_token_stat.stat.exists
+
+- name: Install the OpenMessage control token
+  # Skipped when the variable is absent, so a converge without an unlocked
+  # vault leaves an already-correct token alone instead of truncating it.
+  ansible.builtin.copy:
+    content: "{{ openmessage_control_token }}"
+    dest: "{{ openmessage_token_file }}"
+    mode: "0600"
+  no_log: true
+  when: openmessage_control_token | length > 0
+
+# -- Claude Code (user scope) ------------------------------------------------
+
+- name: Read the current Claude Code MCP registration
+  ansible.builtin.command:
+    cmd: "claude mcp get {{ openmessage_mcp_name }}"
+  register: openmessage_mcp_current
+  changed_when: false
+  failed_when: false
+  environment:
+    PATH: "{{ ansible_user_dir }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Decide whether the Claude Code registration needs rewriting
+  ansible.builtin.set_fact:
+    # `claude mcp add` errors when the name already exists, so "converge" is
+    # always remove-then-add. Drift is judged from the CLI's printed output
+    # rather than from Claude's config file, whose shape is an internal detail.
+    openmessage_mcp_rewrite: >-
+      {{ (openmessage_mcp_current.rc | default(1)) != 0
+         or 'mcp-bridge' not in (openmessage_mcp_current.stdout | default(''))
+         or openmessage_endpoint not in (openmessage_mcp_current.stdout | default(''))
+         or openmessage_token_file not in (openmessage_mcp_current.stdout | default('')) }}
+
+- name: Drop the stale Claude Code MCP registration
+  ansible.builtin.command:
+    cmd: "claude mcp remove {{ openmessage_mcp_name }} --scope user"
+  register: openmessage_mcp_removed
+  changed_when: openmessage_mcp_removed.rc == 0
+  failed_when: false
+  when: openmessage_mcp_rewrite | bool
+  environment:
+    PATH: "{{ ansible_user_dir }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Point the Claude Code user MCP server at the cluster bridge
+  ansible.builtin.command:
+    argv:
+      - claude
+      - mcp
+      - add
+      - --scope
+      - user
+      - "{{ openmessage_mcp_name }}"
+      - --
+      - "{{ openmessage_bin }}"
+      - mcp-bridge
+      - --url
+      - "{{ openmessage_endpoint }}"
+      - --token-file
+      - "{{ openmessage_token_file }}"
+  changed_when: true
+  when: openmessage_mcp_rewrite | bool
+  environment:
+    PATH: "{{ ansible_user_dir }}/.local/bin:{{ ansible_env.PATH }}"
+
+# -- Claude Desktop ----------------------------------------------------------
+# Merge, never overwrite: the file holds every other MCP server and any other
+# Claude Desktop settings. `backup: true` keeps a copy whenever it changes.
+
+- name: Ensure the Claude Desktop config directory exists
+  ansible.builtin.file:
+    path: "{{ openmessage_claude_desktop_config | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Read the existing Claude Desktop config
+  ansible.builtin.slurp:
+    src: "{{ openmessage_claude_desktop_config }}"
+  register: openmessage_claude_desktop_raw
+  failed_when: false
+
+- name: Merge the bridge into the Claude Desktop MCP servers
+  ansible.builtin.set_fact:
+    # A malformed config fails here rather than being silently replaced --
+    # replacing it would discard every other MCP server in the file.
+    openmessage_claude_desktop_merged: >-
+      {{ (
+           (openmessage_claude_desktop_raw.content | b64decode | from_json)
+           if (openmessage_claude_desktop_raw.content is defined
+               and (openmessage_claude_desktop_raw.content | b64decode | trim | length) > 0)
+           else {}
+         )
+         | combine({'mcpServers': {openmessage_mcp_name: {
+             'command': openmessage_bin,
+             'args': ['mcp-bridge', '--url', openmessage_endpoint,
+                      '--token-file', openmessage_token_file]}}}, recursive=true) }}
+
+- name: Write the Claude Desktop config
+  ansible.builtin.copy:
+    content: "{{ openmessage_claude_desktop_merged | to_nice_json }}\n"
+    dest: "{{ openmessage_claude_desktop_config }}"
+    mode: "0600"
+    backup: true
+  register: openmessage_claude_desktop_written
+
+- name: Note that Claude Desktop must be restarted
+  ansible.builtin.debug:
+    msg: "Claude Desktop config changed -- restart Claude Desktop for the openmessage MCP server to reload."
+  when: openmessage_claude_desktop_written.changed

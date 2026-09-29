@@ -5,7 +5,7 @@
 # Deliberately NOT imported by site.yml -- the homelab orchestrator must never
 # touch the personal laptop. Run it on its own.
 #
-# What: installs five laptop --user timers:
+# What: installs six laptop --user timers:
 #   - threadwatch (5-hourly read-only `claude -p` knowledge-thread scanner),
 #     cloned + pinned from the standalone threadwatch repo;
 #   - claudesync (hourly claude.ai export + git commit) and claudesync-indexer
@@ -18,14 +18,26 @@
 #     (ansible/files/laptop/) and copied into place; it only operates on the
 #     claude-ai-export data dir, with no symlink coupling to that repo's internals;
 #   - knowledge-backup (6-hourly Tailscale-gated rsync of the knowledge archives
-#     over SSH to the homelab main/backups ZFS dataset), shipped from ansible/files/laptop/.
+#     over SSH to the homelab main/backups ZFS dataset), shipped from ansible/files/laptop/;
+#   - gunio-cookie-refresh (weekly gun.io session cookie -> Vault, so the public
+#     gunio-mcp deployment keeps a valid session), shipped from ansible/files/laptop/.
+# It also converges one non-timer item:
+#   - openmessage_client (tasks/openmessage_client.yml): the OpenMessage binary,
+#     its control-token file, and the Claude Code + Claude Desktop MCP
+#     registrations, all pointed at the cluster daemon. Not a timer -- it is a
+#     one-shot converge of client config.
 # DR: docs/runbooks/laptop-agentic-dr.md covers rebuilding this from scratch.
-# Secrets: none of its own. It still inherits the repo's vault-password
+# Secrets: the openmessage_client item needs $OPENMESSAGE_CONTROL_TOKEN (fnox
+# secret OPENMESSAGE_CONTROL_TOKEN, Bitwarden item `openmessage-control-token`)
+# on its first run, so run the play through ../scripts/with-secrets.sh when
+# that item is in scope. The play also inherits the repo's vault-password
 # mechanism via group_vars/all/vault.yml like every host, so fnox/BW_SESSION
 # must be available when you run it.
 #
 # Run standalone (from ansible/):
 #   uv run ansible-playbook playbooks/laptop.yml
+#   ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml \
+#     --tags openmessage_client
 
 - name: Laptop-local automations
   hosts: laptop
@@ -45,6 +57,15 @@
     # Grafana Alloy ships the timers' journals to the homelab. Pin explicitly
     # (jdx tools are installed globally as `latest`; project configs pin).
     alloy_version: "1.17.0"
+    # OpenMessage client. Keep this tag on the same fork release as the image
+    # digest in ansible/helm/openmessage/values.yaml and the Version in
+    # desktop/desktop.psd1 -- client and daemon should speak the same
+    # protocol, and nothing enforces that but this comment.
+    openmessage_version: "v0.2.9-remote.1"
+    openmessage_release_base: "https://github.com/Deathnerd/openmessage/releases/download"
+    openmessage_archive: "openmessage-linux-amd64.tar.gz"
+    openmessage_endpoint: "https://openmessage.lab.infiniteroomlabs.cloud/mcp"
+    openmessage_mcp_name: "openmessage"
 
   tasks:
     # -- threadwatch ----------------------------------------------------------
@@ -241,3 +262,11 @@
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_user_uid }}/bus"
+
+    # -- openmessage_client (MCP clients -> the cluster daemon) ---------------
+    # import_tasks, not include_tasks: a static import propagates the tag to
+    # every task in the file, so `--tags openmessage_client` selects them.
+    # A dynamic include would only tag the include itself.
+    - name: Converge the OpenMessage client
+      ansible.builtin.import_tasks: tasks/openmessage_client.yml
+      tags: [openmessage_client]
