@@ -1,6 +1,13 @@
 # OpenMessage on k3s: repository changes (agent-box batch plan)
 
-> **Status (2026-09-25): repository changes EXECUTED, nothing deployed.** WP1-WP5 and WP3b are done
+> **Status (2026-09-29): branches pushed for review, nothing deployed.** The repo changes below were
+> committed on the host (the agent box had no git identity), moved to the canonical clone, merged with
+> current `master`/`main`, and pushed: `helm-charts` PR on `feat/openmessage` (plus a `ci.ephemeral`
+> switch so `ct install` can boot the chart on kind) and this repo's PR on `feat/openmessage-k3s`.
+> Deploy step 1 is done: image `ghcr.io/deathnerd/openmessage:0.2.9-remote.1` (public) is pinned by
+> digest. Next: merge the helm-charts PR (publishes the chart), then step 2 (Bitwarden item).
+>
+> **Original status (2026-09-25): repository changes EXECUTED, nothing deployed.** WP1-WP5 and WP3b are done
 > in the working tree of branch `feat/openmessage-k3s` (this repo) and `feat/openmessage`
 > (`helm-charts` submodule). Nothing was pushed and the cluster was not touched. Two things did not
 > happen: the agent-box session had no git identity and could not create commits, so the changes sit
@@ -203,13 +210,17 @@ each one is a prerequisite for the next.
 3. Then update the submodule pointer in this repo and push `feat/openmessage-k3s`.
 4. Confirm CI is green: `hygiene`, `kubeconform`, `conftest`.
 
-### 1. Publish the image and fill the digest
+### 1. Publish the image and fill the digest (DONE 2026-09-29)
 
-5. Build and push the fork image to `ghcr.io/deathnerd/openmessage`.
+Done: fork release `v0.2.9-remote.1` published a public multi-arch image, and
+`ansible/helm/openmessage/values.yaml` pins its index digest
+`sha256:831a593e59e43dc8b984d203caf99dba6a7c4c8e343f6025c2842779113b5fdd`. For later upgrades:
+
+5. Tag a fork release (`release.yml` publishes `ghcr.io/deathnerd/openmessage`; see the fork's
+   `docs/ci-cd.md`).
 6. Resolve the manifest digest:
    `docker buildx imagetools inspect ghcr.io/deathnerd/openmessage:<tag> --format '{{.Manifest.Digest}}'`
-7. Replace the placeholder in `ansible/helm/openmessage/values.yaml` -> `image.digest`. Until this is
-   done every deploy ends in `ImagePullBackOff` (fail-safe, by design). Commit that change.
+7. Put the new digest in `ansible/helm/openmessage/values.yaml` -> `image.digest` and commit it.
 
 ### 2. Create the control token
 

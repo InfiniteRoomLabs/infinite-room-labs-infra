@@ -32,15 +32,11 @@
 fullnameOverride: openmessage
 
 image:
-  # ============================================================
-  # PLACEHOLDER DIGEST -- MUST BE REPLACED BEFORE DEPLOYING.
-  # The fork image has not been published yet. Deploying as-is gives a
-  # permanent ImagePullBackOff (fail-safe, not fail-open). Replace with the
-  # real manifest digest of ghcr.io/deathnerd/openmessage after the fork's
-  # image is pushed; see the "Deploy phase" section of
-  # docs/plans/2026-09-25-openmessage-k3s-deployment.md.
-  # ============================================================
-  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  # ghcr.io/deathnerd/openmessage v0.2.9-remote.1 (multi-arch index; the
+  # node pulls linux/amd64). Public package, no pull secret. To upgrade, tag a
+  # fork release, then: docker buildx imagetools inspect
+  # ghcr.io/deathnerd/openmessage:<version>
+  digest: "sha256:831a593e59e43dc8b984d203caf99dba6a7c4c8e343f6025c2842779113b5fdd"
 
 ingress:
   enabled: true

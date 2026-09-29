@@ -112,10 +112,13 @@ has no public DNS record and the bearer token still applies.
 
 ### Pod in ImagePullBackOff
 
-Most likely the placeholder digest. `ansible/helm/openmessage/values.yaml`
-ships a clearly-marked placeholder `image.digest` until the fork image is
-published; a deploy with it still in place cannot pull (fail-safe, not
-fail-open). Fill the real digest and redeploy.
+`image.digest` in `ansible/helm/openmessage/values.yaml` must name a
+published manifest of `ghcr.io/deathnerd/openmessage` (from a fork release
+tag). Check, in order: the digest was mistyped or points at an unpublished
+build; the GHCR package was made private (it is public, so the cluster has
+no pull secret); GHCR itself is unreachable from the node. Confirm the
+digest resolves with
+`docker buildx imagetools inspect ghcr.io/deathnerd/openmessage@<digest>`.
 
 ```bash
 kubectl describe pod -n irl -l app.kubernetes.io/instance=openmessage | tail -20
