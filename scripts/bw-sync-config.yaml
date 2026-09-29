@@ -62,7 +62,9 @@ secrets:
   - bw_item: "gitea-admin"
     ansible_var: "vault_gitea_admin_password"
     k8s_secret: "gitea-admin"
-    k8s_key: "password"
+    k8s_keys:
+      username: "username"
+      password: "password"
 
   - bw_item: "authentik-admin"
     ansible_var: "vault_authentik_bootstrap_password"

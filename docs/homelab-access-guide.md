@@ -26,7 +26,7 @@ All services are routed by in-cluster Traefik (hostNetwork, Let's Encrypt wildca
 
 | Service | URL | Node | Credentials |
 |---------|-----|------|-------------|
-| **Gitea** (git server) | https://git.lab.infiniteroomlabs.cloud | Homelab | Admin: `admin` / password in BW `IRL/Services/Gitea` |
+| **Gitea** (git server) | https://git.lab.infiniteroomlabs.cloud | Homelab | Admin: `gitea_admin` / password in BW `gitea-admin` (synced to k8s Secret `gitea-admin` by `bw-sync.sh`) |
 | **Grafana** (dashboards) | https://grafana.lab.infiniteroomlabs.cloud | Homelab | Admin: `admin` / password in BW `IRL/Services/Grafana` |
 | **Vault** (secrets mgmt) | https://vault.lab.infiniteroomlabs.cloud | Homelab | Root token in BW `IRL/Services/Vault` |
 | **Authentik** (SSO) | https://auth.lab.infiniteroomlabs.cloud | Homelab | Bootstrap password in BW `IRL/Services/Authentik` |
