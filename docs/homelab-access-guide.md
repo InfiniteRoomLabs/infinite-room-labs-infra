@@ -88,11 +88,30 @@ pairing** -- the two fight over the session and Google can revoke it.
 - Reachable from the tailnet and the home LAN only: no public DNS record, no
   tunnel, and a Traefik IP allowlist for `192.168.2.0/24` + `100.64.0.0/10`
 
-```bash
-claude mcp add --scope user --transport http openmessage \
-  https://openmessage.lab.infiniteroomlabs.cloud/mcp \
-  --header "Authorization: Bearer <token>"
+### Client setup is IaC -- do not configure this by hand
+
+Clients do not talk to the endpoint directly. They run a local stdio bridge
+that reads the bearer token from a mode-0600 file and adds the header itself:
+
 ```
+openmessage mcp-bridge --url https://openmessage.lab.infiniteroomlabs.cloud/mcp --token-file <path>
+```
+
+Two reasons it is done this way. The token stays out of every Claude config,
+so rotation is one file rewrite per machine rather than an edit of four JSON
+blobs. And Claude Desktop cannot reach this service any other way: its remote
+connectors run from Anthropic's cloud, which has no route to a tailnet-only
+host.
+
+| Machine | Converge |
+|---|---|
+| Laptop | `cd ansible/ && ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml --tags openmessage_client` |
+| Desktop | `cd <repo>\desktop && fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1` |
+
+Both take a dry run (`--check` / `-WhatIf`) and both install the pinned
+`openmessage` release, write the token file and register the MCP server in
+Claude Code and Claude Desktop. See `desktop/README.md` and
+`ansible/playbooks/tasks/openmessage_client.yml`.
 
 Quick check (no token needed for the health path):
 

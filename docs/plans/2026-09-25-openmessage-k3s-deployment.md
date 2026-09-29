@@ -1,5 +1,12 @@
 # OpenMessage on k3s: repository changes (agent-box batch plan)
 
+> **Update (2026-09-29): section 8 steps 13-24 are now IaC, not hand commands.** The desktop got a
+> real IaC layer (`desktop/`, design in `docs/superpowers/specs/2026-09-29-desktop-iac-design.md`),
+> the laptop got a matching `openmessage_client` task file, and the data migration became a guarded
+> export/import pair. The sequence with checkboxes lives in
+> `docs/superpowers/plans/2026-09-29-desktop-iac-openmessage.md`; section 8 below points at it.
+> Still deployed: nothing.
+>
 > **Status (2026-09-29): branches pushed for review, nothing deployed.** The repo changes below were
 > committed on the host (the agent box had no git identity), moved to the canonical clone, merged with
 > current `master`/`main`, and pushed: `helm-charts` PR on `feat/openmessage` (plus a `ci.ephemeral`
@@ -167,7 +174,7 @@ OpenMessage source: fork `github.com/Deathnerd/openmessage` (Go). The fork chang
 
 Append to this plan file a section "Deploy phase (human-supervised)" listing, in order: publish image and
 fill digest; create Bitwarden item + sync secret; create dataset/PV; **stop the desktop's Windows
-`OpenMessage` service**; copy desktop `C:\Users\wesgi\.local\share\openmessage\{messages.db*,session.json}`
+`OpenMessage` service**; copy the desktop data dir's `messages.db*` + `session.json`
 into the PV (pod not running) so the existing pairing is reused; deploy; verify `/healthz`, 401 without
 token, 200 MCP `tools/list` with token, sync resumes; then client cutover. Keep it concrete.
 
@@ -243,25 +250,33 @@ Done: fork release `v0.2.9-remote.1` published a public multi-arch image, and
 **This is the step that must not be rushed: from here until the pod is up, exactly one OpenMessage
 may exist on this Google pairing.**
 
-13. On the Windows desktop, stop the `OpenMessage` service and set it to Manual so a reboot cannot
-    revive it behind your back:
+Steps 13-15 are no longer hand commands. The desktop is managed by the `desktop/` IaC layer
+(`docs/superpowers/specs/2026-09-29-desktop-iac-design.md`), and the migration is a guarded
+export/import pair -- guarded because the check that matters ("is the Windows service really
+stopped?") can only be made on Windows, and the step that needs it runs on Linux.
+
+13. On the desktop, in an **elevated** pwsh, stop the service and set it to Manual so a reboot
+    cannot revive it behind your back:
     ```powershell
-    Stop-Service OpenMessage
-    Set-Service OpenMessage -StartupType Manual
-    Get-Service OpenMessage    # must report Stopped
+    cd <repo>\desktop
+    pwsh -File .\Invoke-DesktopConverge.ps1 -Item openmessage-daemon-stop -WhatIf
+    pwsh -File .\Invoke-DesktopConverge.ps1 -Item openmessage-daemon-stop
     ```
-14. Copy `C:\Users\wesgi\.local\share\openmessage\{messages.db,messages.db-wal,messages.db-shm,session.json}`
-    off the desktop. Take all four together -- SQLite is in WAL mode, so `messages.db` alone can be a
-    torn database. (`-wal`/`-shm` are absent after a clean stop; that is fine.)
-15. Create the PVC but keep the pod at zero, then copy the files in. The PV is a hostPath on the ZFS
-    dataset, so the simplest path is straight onto the host:
+14. Stage the data. The export refuses to run unless the service is Stopped (or gone), takes
+    `messages.db` and every `-wal`/`-shm` companion together with `session.json` -- SQLite is in
+    WAL mode, so `messages.db` alone can be a torn database -- and writes `SHA256SUMS` plus a
+    `manifest.json` recording the service state it observed:
+    ```powershell
+    pwsh -File .\Export-OpenMessageData.ps1
+    ```
+    (`-wal`/`-shm` are absent after a clean stop; that is fine and the export says so.)
+15. Get the bundle to a tailnet host with `kubectl` and SSH to the homelab, then import it. The
+    import refuses a bundle whose manifest does not say Stopped, refuses while the Deployment has
+    replicas or pods, verifies checksums on the far side and again in their final location, chowns
+    to 1000:1000, and deliberately does **not** start the pod:
     ```bash
-    uv run ansible-playbook playbooks/helm-deploy.yml --tags openmessage   # creates the PVC
-    kubectl scale -n irl deploy/openmessage --replicas=0 2>/dev/null || true
-    scp messages.db* session.json homelab-ts:/tmp/om/
-    ssh homelab-ts "sudo cp -a /tmp/om/. /media/root/storage1/openmessage/ && \
-      sudo chown -R 1000:1000 /media/root/storage1/openmessage && \
-      sudo rm -rf /tmp/om"
+    ./scripts/openmessage-import-data.sh --from <bundle> --dry-run
+    ./scripts/openmessage-import-data.sh --from <bundle>
     ```
     Reusing the existing `session.json` is the whole point: it means no re-pairing and no re-sync.
 
@@ -294,21 +309,51 @@ curl -sS https://openmessage.lab.infiniteroomlabs.cloud/mcp \
 
 ### 7. Client cutover
 
-22. Point each client at the cluster endpoint, one machine at a time, checking each works before
-    moving on:
+Also IaC now, one converge per machine. Both machines end up running the same thing:
+`openmessage mcp-bridge --url https://openmessage.lab.infiniteroomlabs.cloud/mcp --token-file <file>`,
+a local stdio process that reads the bearer token from a 0600 file and adds the header itself. That
+is why no Claude config on either machine contains a token after this, and it is also the only way
+Claude Desktop can reach the service at all -- its remote connectors run from Anthropic's cloud and
+cannot see a tailnet-only host.
+
+Full sequence with checkboxes: `docs/superpowers/plans/2026-09-29-desktop-iac-openmessage.md`.
+
+22. One machine at a time, checking each works before moving on.
+
+    Laptop (the token comes from Bitwarden via fnox; no value is typed or stored):
     ```bash
-    claude mcp add --scope user --transport http openmessage \
-      https://openmessage.lab.infiniteroomlabs.cloud/mcp \
-      --header "Authorization: Bearer <token>"
+    cd ansible/
+    ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml \
+      --tags openmessage_client --check
+    ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml \
+      --tags openmessage_client
     ```
-    Claude Desktop: same URL and header in its MCP config.
-23. Remove the per-machine OpenMessage configuration from every client that had a local daemon, so
-    nothing can start a second one by habit.
-24. Only once every client is cut over: uninstall the Windows service on the desktop (leaving its
-    data directory in place as a cold backup until you are confident).
+
+    Desktop:
+    ```powershell
+    cd <repo>\desktop
+    fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1 -WhatIf
+    fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1
+    ```
+    (Without fnox on the desktop, set `$env:OPENMESSAGE_CONTROL_TOKEN` from
+    `bw get password openmessage-control-token` for one command -- see `desktop/README.md`.)
+
+23. Restart Claude Desktop on each machine, then verify from a fresh Claude session: `get_status`
+    and `list_conversations`. The converge rewrites the `openmessage` entry in both clients, so
+    there is no stale local-daemon configuration left to start a second one by habit.
+24. Only once every client is cut over and verified, uninstall the Windows service:
+    ```powershell
+    pwsh -File .\Invoke-DesktopConverge.ps1 -Item openmessage-daemon-remove
+    ```
+    It refuses unless the service is already Stopped and the cluster endpoint returns 200 on
+    `/healthz` **and** 401 on `/mcp` -- the 401 matters as much as the 200, because it proves the
+    token gate is a gate. That refusal is the feature; do not work around it. The data directory is
+    left in place as a cold backup.
 
 ### Rollback
 
 The desktop data directory is untouched by all of the above. To fall back: scale the cluster pod to
 zero (`kubectl scale -n irl deploy/openmessage --replicas=0`), wait for the pod to be gone, then
-start the Windows service again. The PVC keeps its copy for a later retry. Do not run both.
+`Start-Service OpenMessage` on the desktop (the service still exists until step 24) and point the
+desktop's Claude clients back at `C:\tools\openmessage.exe serve --mcp-stdio` by hand. The PVC keeps
+its copy for a later retry. Do not run both.
