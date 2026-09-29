@@ -624,7 +624,7 @@
       kubernetes.core.helm:
         name: gitea
         chart_ref: irl/irl-gitea
-        chart_version: "0.2.0"
+        chart_version: "0.2.1"
         release_namespace: "{{ k3s_namespace }}"
         create_namespace: false
         kubeconfig: "{{ kubeconfig }}"
