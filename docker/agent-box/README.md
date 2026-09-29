@@ -454,6 +454,13 @@ anything else belongs in your private `~/.config/agent-box/env`.
   `identity --authorize-homelab` appends the public key to
   `~/.ssh/authorized_keys` on the homelab using the host's own SSH once;
   `--github` uses the host's `gh` once. Gitea keys are added in its web UI.
+- **Git**: the box commits as whoever runs it, with no setup step.
+  `AGENT_BOX_GIT_NAME`/`AGENT_BOX_GIT_EMAIL` default to the host's own
+  `git config --global` identity; the entrypoint applies them on every start
+  (writing only on change). If both are empty it keeps what the volume
+  already has, then falls back to the account `gh` is logged in as (with the
+  GitHub noreply address). Existing volumes pick this up on their next start
+  after an upgrade. Set the knobs to commit as someone else.
 - **Kubernetes**: `kubeconfig` creates ServiceAccount `kube-system/agent-box`
   bound to `cluster-admin`, a long-lived token Secret, and writes a kubeconfig
   into the volume. Revoke: `kubectl -n kube-system delete sa agent-box` and

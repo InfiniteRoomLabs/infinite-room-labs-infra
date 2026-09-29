@@ -38,6 +38,11 @@ AGENT_BOX_KNOBS=(
   "AGENT_BOX_SSH_HOST|\$(sed -n '/^HOMELAB_TAILSCALE_IP/{s/.*\"\\(.*\\)\".*/\\1/p;q}' \"\$AGENT_BOX_REPO/mise.toml\" 2>/dev/null)|ssh host for homelab-ts inside the box"
   "AGENT_BOX_GIT_HOST||optional Gitea SSH hostname for the box's ssh config (empty = skip)"
   "AGENT_BOX_GIT_SSH_PORT|30022|SSH port for AGENT_BOX_GIT_HOST"
+  # Commit identity inside the box. Defaults to the host's own git identity,
+  # so whoever runs the box commits as themselves with no setup step; the
+  # entrypoint falls back to the box's gh login when both are empty.
+  "AGENT_BOX_GIT_NAME|\$(git config --global --get user.name 2>/dev/null)|git user.name inside the box (default: the host's)"
+  "AGENT_BOX_GIT_EMAIL|\$(git config --global --get user.email 2>/dev/null)|git user.email inside the box (default: the host's)"
   "AGENT_BOX_CONFIG_FILE|\${XDG_CONFIG_HOME:-\$HOME/.config}/agent-box/env|config file (env-or-default only)"
 )
 
