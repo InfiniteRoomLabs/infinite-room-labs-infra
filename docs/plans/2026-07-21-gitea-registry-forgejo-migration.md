@@ -36,10 +36,10 @@ flowchart LR
 
 Packages are on by default since Gitea 1.17 but we make the config explicit, size storage deliberately, and prove the flows.
 
-1. In `ansible/helm/gitea/values.yaml` add under `gitea.config`:
+1. In `ansible/helm/gitea/values.yaml` add under `gitea.gitea.config` (that file overrides the `irl-gitea` wrapper chart, so upstream keys nest one level deeper under `gitea:`):
    - `packages: { ENABLED: true }`
    - Set `packages.LIMIT_TOTAL_OWNER_SIZE` or per-type limits if we want guardrails (single-user instance: start unlimited, revisit).
-2. Storage decision: package blobs default to `/data/packages` on the 10Gi `local-path` PVC. Container images will blow through 10Gi fast. **Chosen approach**: add a dedicated ZFS-backed PVC (mirror the LFS pattern: `gitea-packages-pvc` mounted at `/data/packages`), 50Gi to start. Alternative rejected for now: `STORAGE_TYPE: minio` against Garage S3 -- more moving parts during a migration window; revisit post-Forgejo.
+2. Storage decision: package blobs default to `/data/packages` on the 10Gi `local-path` PVC. Container images will blow through 10Gi fast. **Chosen approach**: add a dedicated ZFS-backed PVC (`gitea-packages-pvc` mounted at `/data/packages` via `gitea.extraVolumes` / `gitea.extraVolumeMounts`; note there is no working LFS precedent -- the old LFS PVC block in the override file was mis-nested and never applied), 50Gi to start. Alternative rejected for now: `STORAGE_TYPE: minio` against Garage S3 -- more moving parts during a migration window; revisit post-Forgejo.
 3. Caddy check: confirm no request body size cap on the `git.lab` vhost (image layers are hundreds of MB) and that proxy buffering/timeouts tolerate slow blob uploads.
 4. Bump memory limit to 1Gi for the duration of registry testing + later Forgejo migrations; re-evaluate after.
 5. Deploy: `./ansible/run-ansible.sh playbook playbooks/helm-deploy.yml --tags gitea`.
