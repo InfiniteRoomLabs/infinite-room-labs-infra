@@ -32,46 +32,46 @@
 
 **File:** `desktop/desktop.psd1`
 
-- [ ] Add a top-level `Karakeep` section next to `OpenMessage`:
+- [x] Add a top-level `Karakeep` section next to `OpenMessage`:
   `Package = '@karakeep/mcp'`, `PackageVersion = '0.33.1'`, `ApiAddr = 'https://bookmarks.lab.infiniteroomlabs.cloud'`,
   `KeyFile = '%USERPROFILE%\.config\karakeep\api-key'`, `KeyEnvVar = 'KARAKEEP_API_KEY'`,
   `LauncherSource = 'files\karakeep-mcp.ps1'` (relative to `desktop/`), `LauncherPath = '%LOCALAPPDATA%\irl-desktop\bin\karakeep-mcp.ps1'`,
   `McpServerName = 'karakeep'`.
-- [ ] Comment the section the way `OpenMessage` is commented: what each key is, where the secret comes from, and that the file holds no user names (tokens only). `SchemaVersion` stays 1 -- this adds a section, it does not change an existing item's keys.
+- [x] Comment the section the way `OpenMessage` is commented: what each key is, where the secret comes from, and that the file holds no user names (tokens only). `SchemaVersion` stays 1 -- this adds a section, it does not change an existing item's keys.
 
 ## Task 2: The launcher
 
 **File:** `desktop/files/karakeep-mcp.ps1` (new)
 
-- [ ] `param([Parameter(Mandatory)][string]$ApiAddr, [Parameter(Mandatory)][string]$KeyFile, [Parameter(Mandatory)][string]$Package)`.
-- [ ] `Set-StrictMode -Version Latest`; `$ErrorActionPreference = 'Stop'`.
-- [ ] Read the key with `[System.IO.File]::ReadAllText($KeyFile).Trim()`. If the file is missing or empty, write one line to **stderr** (`[Console]::Error.WriteLine(...)`) naming the converge item that creates it, and `exit 1`. Nothing may go to stdout except the MCP stream: stdout is the protocol channel, so no `Write-Host`, no `Write-Output`, no progress.
-- [ ] `$env:KARAKEEP_API_ADDR = $ApiAddr`; `$env:KARAKEEP_API_KEY = $key`.
-- [ ] Resolve `npx.cmd` with `Get-Command npx.cmd -CommandType Application`; if absent, stderr + `exit 1` with a one-line hint (Node is a prerequisite, not something this layer installs).
-- [ ] `& $npx.Source -y $Package`; then `exit $LASTEXITCODE`. Native stdin/stdout pass straight through in pwsh 7 when nothing is piped; do not wrap the call in a pipeline.
-- [ ] Header comment: what it is, why it exists (decision 2), that `desktop/lib/Items/KarakeepMcp.psm1` installs it and `desktop.psd1` pins the package.
+- [x] `param([Parameter(Mandatory)][string]$ApiAddr, [Parameter(Mandatory)][string]$KeyFile, [Parameter(Mandatory)][string]$Package)`.
+- [x] `Set-StrictMode -Version Latest`; `$ErrorActionPreference = 'Stop'`.
+- [x] Read the key with `[System.IO.File]::ReadAllText($KeyFile).Trim()`. If the file is missing or empty, write one line to **stderr** (`[Console]::Error.WriteLine(...)`) naming the converge item that creates it, and `exit 1`. Nothing may go to stdout except the MCP stream: stdout is the protocol channel, so no `Write-Host`, no `Write-Output`, no progress.
+- [x] `$env:KARAKEEP_API_ADDR = $ApiAddr`; `$env:KARAKEEP_API_KEY = $key`.
+- [x] Resolve `npx.cmd` with `Get-Command npx.cmd -CommandType Application`; if absent, stderr + `exit 1` with a one-line hint (Node is a prerequisite, not something this layer installs).
+- [x] `& $npx.Source -y $Package`; then `exit $LASTEXITCODE`. Native stdin/stdout pass straight through in pwsh 7 when nothing is piped; do not wrap the call in a pipeline.
+- [x] Header comment: what it is, why it exists (decision 2), that `desktop/lib/Items/KarakeepMcp.psm1` installs it and `desktop.psd1` pins the package.
 
 ## Task 3: The items
 
 **File:** `desktop/lib/Items/KarakeepMcp.psm1` (new). Mirror the structure and comment style of `OpenMessageClient.psm1`. Import `Converge.psm1` the same way (no `-Force`).
 
-- [ ] **`Invoke-KarakeepApiKeyItem`** (item `karakeep-api-key`). A copy of `Invoke-OpenMessageTokenItem` with the names changed: directory exists; file content matches `$env:KARAKEEP_API_KEY` by SHA-256 (no-op when the variable is absent and the file is non-empty; fails when neither exists, naming the Bitwarden item and the two supply commands from Task 5); ACL is owner-only.
-- [ ] **`Invoke-KarakeepLauncherItem`** (item `karakeep-launcher`). Test: installed file exists and its SHA-256 equals the repo copy's. Set: create the directory, `Copy-Item -Force`. The source path is resolved against the entry point's directory, so the handler takes `-Config` and `-DesktopRoot`; `Invoke-DesktopConverge.ps1` supplies `$PSScriptRoot`. (This is the one contract change; see Task 4.)
-- [ ] **`Invoke-KarakeepClaudeCodeItem`** (item `karakeep-claude-code`). Same shape as `Invoke-OpenMessageClaudeCodeItem`: `claude mcp get karakeep` via `Invoke-NativeCapture`; converged when exit 0 **and** the output contains the launcher path, the API address and the package spec (`@karakeep/mcp@0.33.1`), so a version bump in `desktop.psd1` reads as drift. Set: `claude mcp remove karakeep --scope user` (ignore exit), then `claude mcp add --scope user karakeep -- pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <launcher> -ApiAddr <addr> -KeyFile <key> -Package <spec>`; throw on non-zero. Build the argument vector in one `Get-KarakeepLaunchArgument -Config` function and export it, as `Get-BridgeArgument` is.
-- [ ] Export the three handlers and the argument builder.
+- [x] **`Invoke-KarakeepApiKeyItem`** (item `karakeep-api-key`). A copy of `Invoke-OpenMessageTokenItem` with the names changed: directory exists; file content matches `$env:KARAKEEP_API_KEY` by SHA-256 (no-op when the variable is absent and the file is non-empty; fails when neither exists, naming the Bitwarden item and the two supply commands from Task 5); ACL is owner-only.
+- [x] **`Invoke-KarakeepLauncherItem`** (item `karakeep-launcher`). Test: installed file exists and its SHA-256 equals the repo copy's. Set: create the directory, `Copy-Item -Force`. The source path is resolved against the entry point's directory, so the handler takes `-Config` and `-DesktopRoot`; `Invoke-DesktopConverge.ps1` supplies `$PSScriptRoot`. (This is the one contract change; see Task 4.)
+- [x] **`Invoke-KarakeepClaudeCodeItem`** (item `karakeep-claude-code`). Same shape as `Invoke-OpenMessageClaudeCodeItem`: `claude mcp get karakeep` via `Invoke-NativeCapture`; converged when exit 0 **and** the output contains the launcher path, the API address and the package spec (`@karakeep/mcp@0.33.1`), so a version bump in `desktop.psd1` reads as drift. Set: `claude mcp remove karakeep --scope user` (ignore exit), then `claude mcp add --scope user karakeep -- pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <launcher> -ApiAddr <addr> -KeyFile <key> -Package <spec>`; throw on non-zero. Build the argument vector in one `Get-KarakeepLaunchArgument -Config` function and export it, as `Get-BridgeArgument` is.
+- [x] Export the three handlers and the argument builder.
 
 ## Task 4: Entry point and docs
 
 **Files:** `desktop/Invoke-DesktopConverge.ps1`, `desktop/README.md`
 
-- [ ] `Import-Module` the new item module. Add the three names to the `ValidateSet` and to `$ItemRegistry` with `Section = 'Karakeep'`, `Default = $true`, and one-line descriptions. For `karakeep-launcher`, the handler needs the repo path: pass `-DesktopRoot $PSScriptRoot` to every handler that declares that parameter (check with `(Get-Command $meta.Handler).Parameters.ContainsKey('DesktopRoot')`) so the OpenMessage handlers are untouched.
-- [ ] README: three rows in the Items table; generalise "Supplying the control token" to "Supplying secrets" and list both variables and both Bitwarden items; add Node.js to Requirements ("for the Karakeep item; `npx` must resolve"); note under Known limitations that `claude mcp get` substring matching applies here too.
+- [x] `Import-Module` the new item module. Add the three names to the `ValidateSet` and to `$ItemRegistry` with `Section = 'Karakeep'`, `Default = $true`, and one-line descriptions. For `karakeep-launcher`, the handler needs the repo path: pass `-DesktopRoot $PSScriptRoot` to every handler that declares that parameter (check with `(Get-Command $meta.Handler).Parameters.ContainsKey('DesktopRoot')`) so the OpenMessage handlers are untouched.
+- [x] README: three rows in the Items table; generalise "Supplying the control token" to "Supplying secrets" and list both variables and both Bitwarden items; add Node.js to Requirements ("for the Karakeep item; `npx` must resolve"); note under Known limitations that `claude mcp get` substring matching applies here too.
 
 ## Task 5: Secret lane and repo docs
 
 **Files:** `fnox.toml`, `CHANGELOG.md`, `docs/homelab-access-guide.md`
 
-- [ ] `fnox.toml`, after the OpenMessage block, using the neighbouring blocks' header style:
+- [x] `fnox.toml`, after the OpenMessage block, using the neighbouring blocks' header style:
   ```toml
   # Karakeep (@karakeep/mcp on the desktop)
   # Per-user API key (named "mcp", admin account) for the homelab Karakeep.
@@ -80,9 +80,9 @@
   # No cluster or Ansible target, so nothing rides the bw-sync lane.
   KARAKEEP_API_KEY = { provider = "bitwarden", value = "karakeep-mcp-api-key", description = "Karakeep API key for @karakeep/mcp (client side)" }
   ```
-- [ ] `CHANGELOG.md`, `## [Unreleased]` / `### Added`, one entry in the repo's voice: what was added, why the launcher exists, what is pinned, where the key lives, that Claude Desktop and the laptop are follow-ups.
-- [ ] `docs/homelab-access-guide.md`: extend the Karakeep row -- MCP for Claude Code is converged by `desktop/` (items `karakeep-*`), key is BW `karakeep-mcp-api-key` in the same folder.
-- [ ] Supply commands to document (README and the item's error text):
+- [x] `CHANGELOG.md`, `## [Unreleased]` / `### Added`, one entry in the repo's voice: what was added, why the launcher exists, what is pinned, where the key lives, that Claude Desktop and the laptop are follow-ups.
+- [x] `docs/homelab-access-guide.md`: extend the Karakeep row -- MCP for Claude Code is converged by `desktop/` (items `karakeep-*`), key is BW `karakeep-mcp-api-key` in the same folder.
+- [x] Supply commands to document (README and the item's error text):
   ```powershell
   # with fnox on the machine
   fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1
@@ -98,10 +98,10 @@
 The agent-box has the Linux toolchain but no `pwsh`; the desktop has `pwsh` but no fnox. Each side checks what it can.
 
 **In the agent-box (before pushing):**
-- [ ] `fnox check` and `v="$(fnox get KARAKEEP_API_KEY)"; echo "len=${#v}"` -- expect `len=57`. Never print the value.
-- [ ] `cd tests && uv run pytest -m hygiene` -- docs encoding (ASCII only, no hard-wrapped prose) and fan-out contracts.
-- [ ] Public-readiness leak scan over the diff and the new files: no key material, no user names, no home paths (`%USERPROFILE%` / `%LOCALAPPDATA%` tokens only).
-- [ ] `git diff --check`; review the launcher by eye for anything that writes to stdout.
+- [ ] `fnox check` and `v="$(fnox get KARAKEEP_API_KEY)"; echo "len=${#v}"` -- expect `len=57`. Never print the value. (`fnox check` passed: 17 secrets, 1 provider, healthy. The length check is still open: Bitwarden is locked in the agent-box and there is no cached session there, so `fnox get` cannot resolve. Run it from a session with an unlocked vault.)
+- [x] `cd tests && uv run pytest -m hygiene` -- docs encoding (ASCII only, no hard-wrapped prose) and fan-out contracts.
+- [x] Public-readiness leak scan over the diff and the new files: no key material, no user names, no home paths (`%USERPROFILE%` / `%LOCALAPPDATA%` tokens only).
+- [x] `git diff --check`; review the launcher by eye for anything that writes to stdout.
 
 **On the desktop (after the PR is up; the operator or a host session does this):**
 - [ ] `pwsh -File .\Invoke-DesktopConverge.ps1 -ListItems` shows the three items.
