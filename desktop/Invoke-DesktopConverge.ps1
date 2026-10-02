@@ -47,6 +47,9 @@ param(
         'openmessage-token',
         'openmessage-claude-code',
         'openmessage-claude-desktop',
+        'karakeep-api-key',
+        'karakeep-launcher',
+        'karakeep-claude-code',
         'openmessage-daemon-stop',
         'openmessage-daemon-remove'
     )]
@@ -66,6 +69,7 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'lib' 'Converge.psm1')
 Import-Module (Join-Path $PSScriptRoot 'lib' 'Items' 'OpenMessageClient.psm1')
 Import-Module (Join-Path $PSScriptRoot 'lib' 'Items' 'OpenMessageDaemon.psm1')
+Import-Module (Join-Path $PSScriptRoot 'lib' 'Items' 'KarakeepMcp.psm1')
 
 # name -> { Handler; Section; Default; Description }
 # Section names the top-level key in desktop.psd1 the handler is given.
@@ -93,6 +97,24 @@ $ItemRegistry = [ordered]@{
         Section     = 'OpenMessage'
         Default     = $true
         Description = 'Merge the cluster bridge into claude_desktop_config.json (backs the file up first)'
+    }
+    'karakeep-api-key'           = @{
+        Handler     = 'Invoke-KarakeepApiKeyItem'
+        Section     = 'Karakeep'
+        Default     = $true
+        Description = 'Write the Karakeep API key to a per-user, owner-only file (needs $env:KARAKEEP_API_KEY on first run)'
+    }
+    'karakeep-launcher'          = @{
+        Handler     = 'Invoke-KarakeepLauncherItem'
+        Section     = 'Karakeep'
+        Default     = $true
+        Description = 'Install the MCP launcher from this repo to a stable per-user path'
+    }
+    'karakeep-claude-code'       = @{
+        Handler     = 'Invoke-KarakeepClaudeCodeItem'
+        Section     = 'Karakeep'
+        Default     = $true
+        Description = 'Point the user-scope Claude Code MCP server at that launcher and the pinned @karakeep/mcp'
     }
     'openmessage-daemon-stop'    = @{
         Handler     = 'Invoke-OpenMessageDaemonStopItem'
@@ -145,7 +167,18 @@ foreach ($name in $selected) {
     $meta = $ItemRegistry[$name]
     Write-Host $name -ForegroundColor White
     try {
-        & $meta.Handler -Config $Config[$meta.Section] -WhatIf:$WhatIfPreference
+        # Most handlers need nothing but their config section. The ones that
+        # install a file shipped in this repo also need to know where the repo
+        # is, so -DesktopRoot is passed only to handlers that declare it --
+        # splatting on the declaration keeps the others' signatures untouched.
+        $handlerArgs = @{
+            Config = $Config[$meta.Section]
+            WhatIf = $WhatIfPreference
+        }
+        if ((Get-Command $meta.Handler).Parameters.ContainsKey('DesktopRoot')) {
+            $handlerArgs['DesktopRoot'] = $PSScriptRoot
+        }
+        & $meta.Handler @handlerArgs
     }
     catch {
         $failures++
