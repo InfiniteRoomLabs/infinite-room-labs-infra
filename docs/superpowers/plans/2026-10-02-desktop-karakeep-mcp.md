@@ -89,7 +89,9 @@
   # without fnox (this desktop today)
   $env:BW_SESSION = (Get-Content "$HOME\.bw_session" -Raw).Trim()
   $env:KARAKEEP_API_KEY = (bw get password karakeep-mcp-api-key)
-  pwsh -File .\Invoke-DesktopConverge.ps1 -Item karakeep-api-key, karakeep-launcher, karakeep-claude-code
+  # The three items are in the default set. To name them, run in-process: `pwsh -File` does not split a
+  # comma list, so `pwsh -File ... -Item a, b, c` is rejected by the ValidateSet.
+  pwsh -Command '& .\Invoke-DesktopConverge.ps1 -Item karakeep-api-key, karakeep-launcher, karakeep-claude-code'
   Remove-Item Env:\KARAKEEP_API_KEY
   ```
 
@@ -104,13 +106,13 @@ The agent-box has the Linux toolchain but no `pwsh`; the desktop has `pwsh` but 
 - [x] `git diff --check`; review the launcher by eye for anything that writes to stdout.
 
 **On the desktop (after the PR is up; the operator or a host session does this):**
-- [ ] `pwsh -File .\Invoke-DesktopConverge.ps1 -ListItems` shows the three items.
-- [ ] `pwsh -File .\Invoke-DesktopConverge.ps1 -WhatIf -Item karakeep-api-key, karakeep-launcher, karakeep-claude-code` -- exit 2, three `would-change` lines, nothing changed.
-- [ ] Apply with the supply commands above. Exit 0.
-- [ ] Handshake without Claude: pipe an `initialize` + `tools/list` JSON-RPC pair into the launcher and confirm `serverInfo` and a tool list come back. Then a `search-bookmarks` call that returns `isError: false`.
-- [ ] Re-run `-WhatIf`: exit 0, all `ok`.
-- [ ] Restart Claude Code; `/mcp` shows `karakeep` connected.
-- [ ] The temporary key file the operator staged has already been deleted (2026-10-02); Bitwarden is the only copy.
+- [x] `pwsh -File .\Invoke-DesktopConverge.ps1 -ListItems` shows the three items. (2026-10-02: yes, all three listed as default.)
+- [x] `-WhatIf -Item karakeep-api-key, karakeep-launcher, karakeep-claude-code` (in-process; see the note above) -- exit 2, nothing changed. Five `would-change` lines, not three: the key item is three steps (directory, content, ACL) like its OpenMessage twin, plus one each for the launcher and the registration.
+- [x] Apply with the supply commands above. Exit 0. (2026-10-02: 5 changed, 0 failed; key pulled from Bitwarden, 57 characters, never printed.)
+- [x] Handshake without Claude: `initialize` returned `Karakeep 0.33.1`, `tools/list` returned 29 tools, `search-bookmarks` returned real bookmarks with no error.
+- [x] Re-run `-WhatIf`: exit 0, 5 `ok`.
+- [x] `claude mcp get karakeep` reports user scope, `Connected`, command `pwsh` with the launcher, key file and `@karakeep/mcp@0.33.1` as arguments. Running sessions pick it up on restart.
+- [x] The temporary key file the operator staged has already been deleted (2026-10-02); Bitwarden is the only copy.
 
 ## Worktree note for the agent-box
 

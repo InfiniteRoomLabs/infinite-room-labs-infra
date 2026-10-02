@@ -43,6 +43,10 @@ pwsh -File .\Invoke-DesktopConverge.ps1 -ListItems
 
 # One item only.
 pwsh -File .\Invoke-DesktopConverge.ps1 -Item openmessage-claude-desktop
+
+# Several items: run in-process. `pwsh -File` hands the comma list over as
+# separate words, which the item validator rejects.
+pwsh -Command '& .\Invoke-DesktopConverge.ps1 -Item karakeep-api-key, karakeep-launcher, karakeep-claude-code'
 ```
 
 Exit codes: `0` converged (or already converged), `1` at least one step failed, `2` under `-WhatIf` only, meaning drift was found and nothing was changed.
