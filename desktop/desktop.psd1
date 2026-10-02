@@ -70,4 +70,37 @@
         # The only one whose absence means "there is nothing to migrate".
         DataRequired    = @('messages.db', 'session.json')
     }
+
+    Karakeep      = @{
+        # --- package pin ----------------------------------------------------
+        # The official stdio MCP server for Karakeep, run with npx. Pinned:
+        # repo policy is no floating `latest`. Node.js must be on PATH --
+        # this layer does not install it.
+        Package        = '@karakeep/mcp'
+        PackageVersion = '0.33.1'
+
+        # --- cluster endpoint ----------------------------------------------
+        ApiAddr        = 'https://bookmarks.lab.infiniteroomlabs.cloud'
+
+        # --- API key -------------------------------------------------------
+        # Content comes from $env:KARAKEEP_API_KEY at apply time (Bitwarden
+        # item `karakeep-mcp-api-key`, login password field -- a per-user key
+        # named "mcp" on the admin account). Never stored here, never written
+        # into a Claude config.
+        KeyFile        = '%USERPROFILE%\.config\karakeep\api-key'
+        KeyEnvVar      = 'KARAKEEP_API_KEY'
+
+        # --- launcher -------------------------------------------------------
+        # @karakeep/mcp takes its key from the environment only, so a tiny
+        # repo-shipped launcher reads the key file and sets the variable just
+        # for that process. Source is relative to desktop/; the installed copy
+        # lives on a stable per-user path so the registration below never
+        # names a repo checkout.
+        LauncherSource = 'files\karakeep-mcp.ps1'
+        LauncherPath   = '%LOCALAPPDATA%\irl-desktop\bin\karakeep-mcp.ps1'
+
+        # --- MCP client registration ----------------------------------------
+        # Claude Code, user scope. Claude Desktop is a follow-up.
+        McpServerName  = 'karakeep'
+    }
 }
