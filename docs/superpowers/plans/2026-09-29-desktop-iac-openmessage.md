@@ -97,51 +97,53 @@ The shape of it: the desktop daemon stops *before* anything starts in the cluste
 
 ---
 
-## Part 2: Apply sequence (human-supervised, nothing below is done)
+## Part 2: Apply sequence (done 2026-10-03)
+
+Run end to end on 2026-10-03. The pod resumed the existing pairing (`Connected to Google Messages`, `Listen recovered`, no pairing prompt); `/healthz` 200, `/mcp` 401 without a token and 200 with one; both machines' Claude Code registrations report Connected. `pytest -m "smoke or hygiene"`: 65 passed, 1 failed, and the failure is the known `karakeep-chrome` crash loop (`ansible/docs/runbooks/karakeep-down.md`), not this change. Three bugs surfaced on the way and were fixed in the same PR as this note: a single `-Item` crashed the desktop converge, the import built a malformed remote copy list, and `--tags openmessage_client` skipped fact gathering. One limitation remains: `--check` on a machine that has never run the client play stops at the checksum download, because check mode does not create the cache directory the download writes into.
 
 This replaces steps 13-24 of `docs/plans/2026-09-25-openmessage-k3s-deployment.md` section 8. Steps 0-12 there (land the repo changes, publish the image, create the Bitwarden item, create the dataset and PV) are unchanged and must be done first.
 
 ### Prerequisites
 
-- [ ] Bitwarden unlocked (`bw-unlock`, or `./scripts/bw-unlock-prompt.sh`), so `fnox`/`with-secrets.sh` can resolve `OPENMESSAGE_CONTROL_TOKEN`.
-- [ ] The Bitwarden item `openmessage-control-token` exists and has been synced into the cluster Secret (`mise run secrets:sync`). Client and cluster read the same item; if they diverge, every client gets a 401.
-- [ ] `git pull` on the desktop and the laptop, so both have this branch.
-- [ ] Decide whether `fnox` will be installed on the desktop. If not, the `bw get password` path in `desktop/README.md` is the fallback -- no other change is needed.
+- [x] Bitwarden unlocked (`bw-unlock`, or `./scripts/bw-unlock-prompt.sh`), so `fnox`/`with-secrets.sh` can resolve `OPENMESSAGE_CONTROL_TOKEN`.
+- [x] The Bitwarden item `openmessage-control-token` exists and has been synced into the cluster Secret (`mise run secrets:sync`). Client and cluster read the same item; if they diverge, every client gets a 401.
+- [x] `git pull` on the desktop and the laptop, so both have this branch.
+- [x] Decide whether `fnox` will be installed on the desktop. If not, the `bw get password` path in `desktop/README.md` is the fallback -- no other change is needed. (Not installed; the `bw get password` path was used.)
 
 ### Stop the desktop daemon
 
-- [ ] On the desktop, elevated:
+- [x] On the desktop, elevated:
       `pwsh -File .\Invoke-DesktopConverge.ps1 -Item openmessage-daemon-stop -WhatIf`
       then the same without `-WhatIf`.
       Confirms Stopped and StartupType Manual. From here until the pod is up, **no OpenMessage is running anywhere**; that is intentional and is the only safe window for the next two steps.
 
 ### Move the data
 
-- [ ] `pwsh -File .\Export-OpenMessageData.ps1` on the desktop. Note the bundle path it prints.
-- [ ] Get the bundle to a tailnet host with `kubectl` and SSH to the homelab (the laptop, or the agent-box). Any copy method; the checksums are verified at the far end regardless.
-- [ ] `./scripts/openmessage-import-data.sh --from <bundle> --dry-run`, read the output, then run it for real.
+- [x] `pwsh -File .\Export-OpenMessageData.ps1` on the desktop. Note the bundle path it prints.
+- [x] Get the bundle to a tailnet host with `kubectl` and SSH to the homelab (the laptop, or the agent-box). Any copy method; the checksums are verified at the far end regardless.
+- [x] `./scripts/openmessage-import-data.sh --from <bundle> --dry-run`, read the output, then run it for real.
 
 ### Deploy and verify the cluster
 
-- [ ] `cd ansible/ && uv run ansible-playbook playbooks/helm-deploy.yml --tags openmessage`
-- [ ] `uv run ansible-playbook playbooks/helm-deploy.yml --tags coredns`
-- [ ] `kubectl -n irl logs -f deploy/openmessage` -- pairing state appears only in the logs. Expect a resumed session, not a pairing prompt. A pairing prompt means the import did not land; stop and re-check before doing anything else.
-- [ ] From a tailnet host: `/healthz` returns 200, `/mcp` without a token returns 401, `/mcp` with the token returns a tool list. Confirm the 401 before pointing any client at it.
-- [ ] `cd tests/ && uv run pytest -m "smoke or hygiene"`
+- [x] `cd ansible/ && uv run ansible-playbook playbooks/helm-deploy.yml --tags openmessage`
+- [x] `uv run ansible-playbook playbooks/helm-deploy.yml --tags coredns`
+- [x] `kubectl -n irl logs -f deploy/openmessage` -- pairing state appears only in the logs. Expect a resumed session, not a pairing prompt. A pairing prompt means the import did not land; stop and re-check before doing anything else.
+- [x] From a tailnet host: `/healthz` returns 200, `/mcp` without a token returns 401, `/mcp` with the token returns a tool list. Confirm the 401 before pointing any client at it.
+- [x] `cd tests/ && uv run pytest -m "smoke or hygiene"`
 
 ### Cut the clients over, one machine at a time
 
-- [ ] Laptop: `cd ansible/ && ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml --tags openmessage_client --check` then without `--check`.
-- [ ] Laptop: restart Claude Desktop; in a fresh Claude Code session call `get_status` and `list_conversations`.
-- [ ] Desktop: `fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1 -WhatIf`, then without `-WhatIf`.
-- [ ] Desktop: restart Claude Desktop; verify the same two calls.
+- [x] Laptop: `cd ansible/ && ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml --tags openmessage_client --check` then without `--check`.
+- [ ] Laptop: restart Claude Desktop; in a fresh Claude Code session call `get_status` and `list_conversations`. (2026-10-03: Claude Code verified Connected and the bridge answered `get_status`; the Claude Desktop app itself was not restarted or checked.)
+- [x] Desktop: `fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1 -WhatIf`, then without `-WhatIf`.
+- [ ] Desktop: restart Claude Desktop; verify the same two calls. (2026-10-03: Claude Code verified Connected and the bridge answered `get_status`; the Claude Desktop app itself was not restarted or checked.)
 
 ### Retire the desktop service
 
-- [ ] Only once both machines work: on the desktop, elevated,
+- [x] Only once both machines work: on the desktop, elevated,
       `pwsh -File .\Invoke-DesktopConverge.ps1 -Item openmessage-daemon-remove`.
       It will refuse if the cluster endpoint does not pass its health gate. That refusal is the feature; do not work around it.
-- [ ] Leave the desktop data directory in place. It is the rollback, and it costs nothing.
+- [x] Leave the desktop data directory in place. It is the rollback, and it costs nothing.
 
 ### Rollback, at any point before the remove
 
