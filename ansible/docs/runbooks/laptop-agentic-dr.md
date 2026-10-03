@@ -1,9 +1,10 @@
 # Runbook: Laptop Agentic Context -- Disaster Recovery
 
 Rebuild the laptop-local agentic automation stack on a fresh or wiped machine.
-The stack is three systemd `--user` timers, one always-on `--user` log shipper
-(Alloy), plus the knowledge data they operate on. All of it is version-controlled
-or backed up; this runbook is the order of operations to get it running again.
+The stack is six systemd `--user` timers, one always-on `--user` log shipper
+(Alloy), one non-timer client converge (OpenMessage), plus the knowledge data
+they operate on. All of it is version-controlled or backed up; this runbook is
+the order of operations to get it running again.
 
 ## System inventory
 
@@ -11,7 +12,11 @@ or backed up; this runbook is the order of operations to get it running again.
 |-----------|--------------|-----------------|-------------|
 | threadwatch | 5-hourly read-only `claude -p` scan of the archives -> `~/threadwatch/THREADWATCH.md` | GitHub `InfiniteRoomLabs/threadwatch` (pinned SHA) | `~/.local/share/threadwatch` |
 | claudesync | hourly `claude.ai` export + git commit into the archive | units in Gitea `InfiniteRoomLabs/claude-ai-export` (`systemd/`, `scripts/`) | symlinked from `~/claude-ai-export` |
+| claudesync-indexer | daily `claude -p` reindex + commit into the archive | same repo as claudesync | symlinked from `~/claude-ai-export` |
+| claudesync-embed | daily Cloudflare bge-m3 embed into the local Chroma `.vector-db` (commits nothing) | infra `ansible/files/laptop/` | `~/.config/systemd/user` |
 | knowledge-backup | 6-hourly Tailscale-gated rsync of the archives to the homelab | infra `ansible/files/laptop/` | `~/.local/bin` + `~/.config/systemd/user` |
+| gunio-cookie-refresh | weekly gun.io session cookie -> Vault (write-only AppRole) | infra `ansible/files/laptop/` | `~/.local/bin` + `~/.config/systemd/user` |
+| openmessage_client | NOT a timer: converges the OpenMessage binary, token file and the two Claude MCP registrations onto the cluster daemon | infra `ansible/playbooks/tasks/openmessage_client.yml` | `~/.local/bin`, `~/.config/openmessage`, `~/.config/Claude` |
 | alloy | always-on shipper: tails the four units' journals -> homelab OTel Collector (`100.86.213.22:30418`) -> Loki | infra `ansible/files/laptop/` (mise-installed binary) | `~/.config/alloy/` + `~/.config/systemd/user` |
 | deploy driver | installs + enables all of the above | infra `ansible/playbooks/laptop.yml` | run with `uv run ansible-playbook` |
 
@@ -66,12 +71,16 @@ cd infinite-room-labs-infra/ansible && uv sync && uv run ansible-galaxy install 
 
 ```bash
 cd infinite-room-labs-infra/ansible
-uv run ansible-playbook playbooks/laptop.yml
+# with-secrets.sh supplies $OPENMESSAGE_CONTROL_TOKEN from Bitwarden; without
+# it the openmessage_client item fails on a fresh machine (no token file yet)
+# while everything else still converges.
+../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml
 ```
 
 This clones + pins threadwatch, symlinks the claudesync units (needs `~/claude-ai-export`
-present from step 1), installs knowledge-backup, installs + starts Alloy, and
-enables all three timers.
+present from step 1), installs knowledge-backup and gunio-cookie-refresh, installs +
+starts Alloy, enables all six timers, and converges the OpenMessage client
+(binary, token file, Claude Code + Claude Desktop MCP registrations).
 
 ### 5. Verify
 
@@ -82,6 +91,15 @@ systemctl --user status alloy.service             # log shipper should be active
 systemctl --user start claudesync.service         # one export + commit
 systemctl --user start knowledge-backup.service   # one backup
 journalctl --user -u threadwatch -u claudesync -u knowledge-backup -o cat -e
+```
+
+OpenMessage client (not a timer -- verified by using it):
+
+```bash
+openmessage --help                                # binary on ~/.local/bin
+stat -c '%a' ~/.config/openmessage/token          # -> 600
+claude mcp get openmessage                        # -> mcp-bridge, cluster URL, token file
+# then, from a fresh Claude session: get_status, list_conversations
 ```
 
 Confirm logs reached the homelab (Grafana Explore -> Loki, or via the API):

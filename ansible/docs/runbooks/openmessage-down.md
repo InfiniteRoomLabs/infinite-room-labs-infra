@@ -168,8 +168,11 @@ mise run secrets:sync
 kubectl rollout restart -n irl deploy/openmessage
 ```
 
-Never echo the token. If a client is failing and the Secret is fine, the client
-config is stale -- see "Rotating the control token".
+Never echo the token. If a client is failing and the Secret is fine, the
+client's token FILE is stale, not its Claude config -- clients read the token
+from a file that `openmessage mcp-bridge` opens, so a Claude config never
+contains one. Re-run that machine's converge (see "Rotating the control
+token"), which rewrites the file from the same Bitwarden item.
 
 ### Messages stop syncing, /healthz still 200
 
@@ -281,11 +284,80 @@ Rotation is a three-step, and skipping step 3 locks out every client:
 # 2. Sync it into the cluster and restart the pod.
 mise run secrets:sync
 kubectl rollout restart -n irl deploy/openmessage
-# 3. Update the Authorization: Bearer header in EVERY MCP client config
-#    (Claude Code and Claude Desktop, laptop and desktop).
 ```
 
-There is no grace period: the daemon accepts exactly one token.
+Step 3 is re-running each machine's client converge. Clients read the token from a file rather
+than from a header baked into a Claude config, so rotation is a file rewrite and not an edit of
+four JSON blobs -- but the file still has to be rewritten on every machine, and skipping one
+locks that machine out:
+
+```bash
+# Laptop:
+cd ansible/
+../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml --tags openmessage_client
+```
+
+```powershell
+# Desktop:
+cd <repo>\desktop
+fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1 -Item openmessage-token
+```
+
+Both pull the new value from the same Bitwarden item the cluster Secret is synced from, so the
+two sides cannot drift as long as both ran. There is no grace period: the daemon accepts exactly
+one token, so there is a gap between the pod restart and the last client converge in which that
+client gets 401s.
+
+## Clients: how they connect, and how to fix one
+
+Every client -- Claude Code and Claude Desktop, on the laptop and the desktop
+-- runs the same local stdio process:
+
+```
+openmessage mcp-bridge --url https://openmessage.lab.infiniteroomlabs.cloud/mcp --token-file <path>
+```
+
+The bridge relays MCP over the cluster's streamable-HTTP endpoint and adds the
+`Authorization` header from the token file itself. Two consequences worth
+knowing before you debug one:
+
+- **No Claude config contains a token.** If someone shows you a Claude config
+  with a bearer header in it, that machine has not been converged.
+- **Claude Desktop cannot use a remote connector here.** Its remote connectors
+  run from Anthropic's cloud, which cannot reach a tailnet-only host. The
+  bridge is not belt-and-braces; it is the only way Desktop works at all.
+
+Client config is IaC, not hand-editing:
+
+| Machine | Converge |
+|---|---|
+| Laptop | `cd ansible/ && ../scripts/with-secrets.sh uv run ansible-playbook playbooks/laptop.yml --tags openmessage_client` |
+| Desktop | `cd <repo>\desktop && fnox exec -- pwsh -File .\Invoke-DesktopConverge.ps1` |
+
+Both support a dry run (`--check` / `-WhatIf`). Details: `desktop/README.md`,
+`ansible/playbooks/tasks/openmessage_client.yml`, and the design in
+`docs/superpowers/specs/2026-09-29-desktop-iac-design.md`.
+
+### A client is broken
+
+1. `/healthz` 200 and `/mcp` 401 from that machine? If not, it is not a client
+   problem -- work the gate table above.
+2. Does the token file exist and hold the current value? Re-run that machine's
+   converge; never hand-edit the file.
+3. Is the binary the pinned release? The converge reinstalls it if not. Claude
+   sessions hold the binary open on Windows, so a reinstall there can need
+   Claude closed first.
+4. Claude Desktop needs a restart after any config change.
+
+### The desktop's retired local daemon
+
+The desktop ran a local `OpenMessage` Windows service until the cutover. It is
+stopped and set to Manual (`-Item openmessage-daemon-stop`) and deleted only
+after the cluster endpoint passes its health gate (`-Item
+openmessage-daemon-remove`). Its data directory is left in place as a cold
+backup. **If you are doing cluster recovery and someone reports the desktop
+service running again, that is the one-pod rule being violated** -- stop it
+before bringing the pod back.
 
 ## Full Redeploy
 

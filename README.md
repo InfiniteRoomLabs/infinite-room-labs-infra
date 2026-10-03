@@ -143,6 +143,7 @@ delivers exactly one bootstrap credential (ESO's AppRole login,
 terraform/          Terraform + Terragrunt (cloud resources, domains, DNS, compute)
 ansible/            Ansible (homelab server config, Helm deployments, secrets)
 helm-charts/        Helm charts (git submodule -> InfiniteRoomLabs/helm-charts)
+desktop/            Windows desktop converge (PowerShell 7, run locally on that machine)
 scripts/            Bootstrap, secrets sync, and shared helpers
 docs/               Architecture plans, access guides, research
 tests/              Acceptance test suite (smoke, validate)
