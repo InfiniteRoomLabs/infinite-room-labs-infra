@@ -44,6 +44,16 @@
 #   openmessage_version, openmessage_release_base, openmessage_archive,
 #   openmessage_endpoint, openmessage_mcp_name
 
+- name: Gather the facts this file needs when the play skipped them
+  # The play is tagged `laptop`, and Ansible gives the implicit fact-gathering
+  # task the play's own tags. Running with `--tags openmessage_client` (which
+  # is how this file is documented to be run) therefore skips it, and
+  # ansible_user_dir / ansible_env arrive undefined. Gather the minimal subset
+  # here instead, only when it is actually missing.
+  ansible.builtin.setup:
+    gather_subset: [min]
+  when: ansible_user_dir is not defined
+
 - name: Resolve the OpenMessage client paths
   ansible.builtin.set_fact:
     openmessage_bin: "{{ ansible_user_dir }}/.local/bin/openmessage"

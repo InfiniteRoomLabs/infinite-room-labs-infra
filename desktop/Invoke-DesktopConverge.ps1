@@ -148,12 +148,18 @@ if ($Config.SchemaVersion -ne 1) {
     throw "desktop.psd1 declares SchemaVersion $($Config.SchemaVersion); this script understands 1."
 }
 
-$selected = if ($Item) {
-    $Item
-}
-else {
-    @($ItemRegistry.Keys | Where-Object { $ItemRegistry[$_].Default })
-}
+# The outer @() matters: an `if` expression unrolls a one-element array into
+# a bare string, and under StrictMode a string has no .Count -- so naming a
+# single -Item (which is how the retirement items are always run) used to
+# die here before doing anything.
+$selected = @(
+    if ($Item) {
+        $Item
+    }
+    else {
+        $ItemRegistry.Keys | Where-Object { $ItemRegistry[$_].Default }
+    }
+)
 
 Write-Host ''
 Write-Host "Desktop converge -- $($selected.Count) item(s)$(if ($WhatIfPreference) { ' [WhatIf: nothing will change]' })"
