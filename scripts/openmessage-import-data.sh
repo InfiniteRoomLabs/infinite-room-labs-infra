@@ -158,7 +158,14 @@ note "verifying checksums on $SSH_HOST"
 run ssh "$SSH_HOST" "cd '$staging' && sha256sum -c SHA256SUMS"
 
 note "installing into $DATA_DIR (owner 1000:1000 -- hostPath PVs ignore fsGroup, so the dataset owner is what makes it writable)"
-run ssh "$SSH_HOST" "sudo mkdir -p '$DATA_DIR' && sudo cp -a $(printf "'%s/%s' " "$staging" "${manifest_files[@]}") '$DATA_DIR/' && sudo chown -R 1000:1000 '$DATA_DIR'"
+# Built with a loop on purpose. The previous one-liner used printf with a
+# two-slot format ('%s/%s'), which does NOT repeat its first argument: printf
+# consumes arguments in pairs, so it paired the staging dir with the first
+# file and then paired the remaining file names with each other -- which
+# would have copied messages.db alone, without its -wal.
+staged_sources=""
+for f in "${manifest_files[@]}"; do staged_sources+="'$staging/$f' "; done
+run ssh "$SSH_HOST" "sudo mkdir -p '$DATA_DIR' && sudo cp -a ${staged_sources}'$DATA_DIR/' && sudo chown -R 1000:1000 '$DATA_DIR'"
 
 note "re-verifying checksums in their final location"
 run ssh "$SSH_HOST" "cd '$DATA_DIR' && sudo sha256sum -c '$staging/SHA256SUMS'"
