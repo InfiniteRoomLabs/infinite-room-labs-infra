@@ -84,6 +84,13 @@ GRAFANA_SERVICE_ACCOUNT_TOKEN = { provider = "bitwarden", value = "grafana-mcp-t
 # desktop/Invoke-DesktopConverge.ps1 (Windows desktop).
 OPENMESSAGE_CONTROL_TOKEN = { provider = "bitwarden", value = "openmessage-control-token", description = "OpenMessage MCP bearer token (client side)" }
 
+# ── Karakeep ─────────────────────────────────────────────────
+# Per-user API key (named "mcp", admin account) for the homelab Karakeep.
+# Consumed CLIENT-SIDE by desktop/Invoke-DesktopConverge.ps1, which writes it
+# to an owner-only key file read by the launcher; never in a Claude config.
+# No cluster or Ansible target, so nothing rides the bw-sync lane.
+KARAKEEP_API_KEY = { provider = "bitwarden", value = "karakeep-mcp-api-key", description = "Karakeep API key for @karakeep/mcp (client side)" }
+
 # ── Ansible Vault ────────────────────────────────────────────
 # Consumed by scripts/vault-pass.sh (ansible.cfg vault_password_file).
 # NOTE: value is the Login PASSWORD field (no `/notes`). The item's notes field

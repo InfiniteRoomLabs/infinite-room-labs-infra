@@ -34,7 +34,7 @@ All services are routed by in-cluster Traefik (hostNetwork, Let's Encrypt wildca
 | **OpenViking** (agent memory/RAG) | https://openviking.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
 | **Prometheus** (metrics) | https://metrics.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
 | **Alertmanager** (alerts) | https://alerts.internal.lab.infiniteroomlabs.cloud | Homelab | No auth (internal) |
-| **Karakeep** (bookmarks) | https://bookmarks.lab.infiniteroomlabs.cloud | Homelab | Single admin `wes@infiniteroomlabs.com`, password in BW `IRL/Services/Karakeep` (signups disabled) |
+| **Karakeep** (bookmarks) | https://bookmarks.lab.infiniteroomlabs.cloud | Homelab | Single admin `wes@infiniteroomlabs.com`, password in BW `IRL/Services/Karakeep` (signups disabled). MCP for Claude Code is converged by `desktop/` (items `karakeep-*`); its API key is BW `karakeep-mcp-api-key` in the same folder |
 | **WordPress** (journal) | https://journal.lab.infiniteroomlabs.cloud | Homelab | Admin account created at `/wp-admin/install.php` on first visit; store it in BW `IRL/Services/WordPress` |
 | **OpenMessage** (SMS/RCS MCP server) | https://openmessage.lab.infiniteroomlabs.cloud/mcp | Homelab | `Authorization: Bearer <token>`, token in BW `IRL/Services/OpenMessage` (item `openmessage-control-token`). No web UI -- see below |
 | **CoreDNS** (Split DNS) | N/A (hostNetwork port 53) | Homelab | No UI -- DNS resolver only |
